@@ -1,0 +1,1129 @@
+      :root {
+        --md-primary: #1976d2;
+        --md-primary-hover: #1565c0;
+        --md-secondary: #9c27b0;
+        --md-error: #d32f2f;
+        --md-success: #2e7d32;
+        --md-warning: #ed6c02;
+        --md-bg: #f1f5f9;
+        --md-surface: #ffffff;
+        --md-text: #0f172a;
+        --md-text-secondary: #475569;
+        --md-divider: #e2e8f0;
+        --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.1);
+        --elevation-2: 0 4px 6px rgba(0, 0, 0, 0.1);
+        --elevation-4: 0 10px 15px rgba(0, 0, 0, 0.1);
+        /* כינויים למשתנים ישנים (תאימות לאחור) */
+        --accent: #1976d2;
+        --bg: #f1f5f9;
+        --card-bg: #ffffff;
+        --border-color: #e2e8f0;
+        --text-muted: #475569;
+      }
+      body.dark-mode {
+        --md-primary: #38bdf8;
+        --md-primary-hover: #7dd3fc;
+        --md-error: #ef4444;
+        --md-success: #22c55e;
+        --md-warning: #f59e0b;
+        --md-bg: #0f172a;
+        --md-surface: #1e293b;
+        --md-text: #f8fafc;
+        --md-text-secondary: #94a3b8;
+        --md-divider: #334155;
+        --accent: #38bdf8;
+        --bg: #0f172a;
+        --card-bg: #1e293b;
+        --border-color: #334155;
+        --text-muted: #94a3b8;
+      }
+      body {
+        font-family: "Roboto", sans-serif;
+        background: var(--md-bg);
+        color: var(--md-text);
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+        transition: 0.3s;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-weight: 500;
+        color: var(--md-text);
+        margin-top: 0;
+      }
+      h1 {
+        font-size: 1.8rem;
+      }
+      h3 {
+        font-size: 1.2rem;
+      }
+      p {
+        color: var(--md-text-secondary);
+        line-height: 1.5;
+      }
+
+      nav {
+        background: var(--md-primary);
+        color: white;
+        padding: 0 24px;
+        min-height: 64px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        box-shadow: var(--elevation-2);
+        flex-wrap: wrap;
+        z-index: 100;
+        position: relative;
+      }
+      body.emergency-active nav {
+        background: #d32f2f;
+      }
+      nav div:not(.nav-spacer) {
+        cursor: pointer;
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        transition: 0.2s;
+      }
+      .nav-spacer {
+        cursor: default;
+        pointer-events: none;
+      }
+      nav div.active,
+      nav div:not(.nav-spacer):hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .emergency-hidden {
+        display: none !important;
+      }
+      .worker-only-nav {
+        display: none !important;
+      }
+
+      .layout-wrapper {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .main-content {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .side-panel {
+        width: 320px;
+        min-width: 320px;
+        background: var(--md-surface);
+        border-left: 1px solid var(--md-divider);
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: var(--elevation-1);
+        z-index: 10;
+      }
+
+      .container {
+        display: none;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .container.active {
+        display: flex;
+      }
+      .card-paper {
+        background: var(--md-surface);
+        border-radius: 12px;
+        box-shadow: var(--elevation-1);
+        padding: 24px;
+        border: 1px solid var(--md-divider);
+      }
+
+      input[type="text"],
+      input[type="password"],
+      input[type="number"],
+      input[type="date"],
+      select {
+        background: var(--md-bg);
+        color: var(--md-text);
+        border: 1px solid var(--md-divider);
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 1rem;
+        box-sizing: border-box;
+        transition: 0.2s;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--md-primary);
+        background: var(--md-surface);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        outline: 0;
+        border: 0;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: 500;
+        font-size: 0.9rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        transition: 0.2s;
+        background: transparent;
+        color: var(--md-text);
+      }
+      .btn-contained {
+        background-color: var(--md-primary);
+        color: white;
+        box-shadow: var(--elevation-1);
+      }
+      .btn-contained:hover {
+        background-color: var(--md-primary-hover);
+        transform: translateY(-1px);
+      }
+      .btn-outlined {
+        border: 1px solid var(--md-divider);
+        color: var(--md-text);
+      }
+      .btn-outlined:hover {
+        background: var(--md-bg);
+      }
+      /* חצי מעבר שבועות - שמירה על נראות בכל מצב */
+      .week-arrow {
+        background: #ffffff !important;
+        color: #0c4a6e !important;
+        border: 1px solid #7dd3fc !important;
+        font-weight: bold;
+      }
+      .week-arrow:hover {
+        background: #e0f2fe !important;
+        color: #0c4a6e !important;
+      }
+      .btn-error {
+        background-color: var(--md-error);
+        color: white;
+      }
+      .btn-success {
+        background-color: var(--md-success);
+        color: white;
+      }
+
+      .filter-section {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .filter-btn {
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: 1px solid var(--md-divider);
+        background: var(--md-surface);
+        color: var(--md-text);
+        cursor: pointer;
+        font-size: 0.85em;
+        transition: 0.2s;
+      }
+      .filter-btn.active-filter {
+        background: var(--md-primary);
+        color: white;
+        border-color: var(--md-primary);
+      }
+      .multi-select {
+        width: 100%;
+      }
+      .multi-select-content {
+        display: none;
+        background: var(--md-surface);
+        border: 1px solid var(--md-divider);
+        box-shadow: var(--elevation-2);
+        z-index: 100;
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        border-radius: 6px;
+        margin-top: 5px;
+      }
+      .multi-select-content label {
+        display: block;
+        margin-bottom: 8px;
+        cursor: pointer;
+        font-size: 0.9em;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: var(--md-surface);
+        border-radius: 12px;
+        box-shadow: var(--elevation-1);
+        overflow: hidden;
+        border: 1px solid var(--md-divider);
+      }
+      th,
+      td {
+        border-bottom: 1px solid var(--md-divider);
+        border-left: 1px solid var(--md-divider);
+        padding: 12px;
+        text-align: center;
+        vertical-align: top;
+      }
+      th {
+        color: var(--md-text-secondary);
+        font-weight: 600;
+        background: rgba(0, 0, 0, 0.02);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .time-label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--md-text-secondary);
+        margin-top: 4px;
+      }
+      .loc-box {
+        margin: 4px 0;
+        padding: 10px;
+        background: var(--md-bg);
+        border-radius: 8px;
+        border: 2px dashed transparent;
+        min-height: 50px;
+        transition: 0.2s;
+        position: relative;
+      }
+      .loc-box.drag-over {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: var(--md-primary);
+        border-style: dashed;
+      }
+      .name-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 32px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        margin: 4px;
+        font-weight: 500;
+        border: 1px solid var(--md-divider);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        background: var(--md-surface);
+        color: var(--md-text);
+        transition: 0.2s;
+      }
+      .name-chip:hover {
+        box-shadow: var(--elevation-2);
+      }
+      .name-chip[draggable="true"] {
+        cursor: grab;
+      }
+      .name-chip[draggable="true"]:active {
+        cursor: grabbing;
+        transform: scale(1.05);
+      }
+      .name-chip .remove-btn {
+        margin-right: 8px;
+        margin-left: 0;
+        cursor: pointer;
+        color: #dc2626;
+        background: rgba(220, 38, 38, 0.1);
+        font-weight: bold;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        transition: 0.2s;
+      }
+      .name-chip .remove-btn:hover {
+        background: #ef4444;
+        color: white;
+      }
+
+      .chip-קבינט-בכיר {
+        border-right: 4px solid #0284c7;
+      }
+      .chip-קבע {
+        border-right: 4px solid #ea580c;
+      }
+      .chip-מילואים {
+        border-right: 4px solid #b91c1c;
+      }
+      .chip-טכנאי {
+        border-right: 4px solid #16a34a;
+      }
+      .chip-נחפף {
+        border-right: 4px solid #9333ea;
+      }
+      .name-chip {
+        border-right: 4px solid #64748b;
+      }
+
+      .staff-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      .emp-card {
+        background: var(--md-surface);
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: var(--elevation-1);
+        border: 1px solid var(--md-divider);
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: 0.2s;
+      }
+      .emp-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--elevation-2);
+        border-color: var(--md-primary);
+      }
+      .emp-inactive {
+        opacity: 0.5;
+        filter: grayscale(100%);
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1300;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(2px);
+      }
+      .modal-content {
+        background: var(--md-surface);
+        padding: 32px;
+        border-radius: 16px;
+        width: 750px;
+        max-width: 95vw;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: var(--elevation-24);
+      }
+
+      .tracking-ok {
+        color: var(--md-success);
+        font-weight: bold;
+      }
+      .tracking-after-night {
+        color: var(--md-warning);
+        font-weight: bold;
+      }
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        background: var(--md-bg);
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid var(--md-divider);
+      }
+      .radio-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--md-text);
+      }
+      .task-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: var(--md-surface);
+        box-shadow: var(--elevation-1);
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid var(--md-divider);
+        margin-bottom: 12px;
+      }
+      .task-item.completed {
+        opacity: 0.6;
+        text-decoration: line-through;
+        background: var(--md-bg);
+        box-shadow: none;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+        }
+        70% {
+          transform: scale(1.03);
+          box-shadow: 0 0 0 10px rgba(225, 29, 72, 0);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
+        }
+      }
+
+      .mobile-only {
+        display: none;
+      }
+      .desktop-only {
+        display: block;
+      }
+      .mobile-day-tabs {
+        display: none;
+      }
+
+      .menu-btn {
+        cursor: pointer;
+        font-size: 1.5rem;
+        display: none;
+        font-weight: bold;
+      }
+      .nav-links {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        width: 100%;
+      }
+      .table-responsive {
+        overflow-x: auto;
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+      }
+
+      @media (max-width: 1024px) {
+        .side-panel {
+          display: none !important;
+        }
+        .main-content {
+          padding: 12px;
+          padding-bottom: max(24px, env(safe-area-inset-bottom));
+        }
+        .mobile-only {
+          display: block;
+        }
+        .desktop-only {
+          display: none !important;
+        }
+
+        /* תפריט המבורגר בנייד */
+        .menu-btn {
+          display: block;
+        }
+        nav {
+          padding: 5px 15px;
+          justify-content: space-between;
+          overflow: visible !important;
+          min-height: 50px;
+        }
+        .nav-links {
+          display: none;
+          flex-direction: column;
+          align-items: stretch;
+          background: var(--md-primary);
+          position: absolute;
+          top: 100%;
+          right: 0;
+          width: 250px;
+          padding: 15px;
+          box-shadow: -2px 5px 10px rgba(0, 0, 0, 0.3);
+          z-index: 1000;
+          border-radius: 0 0 8px 8px;
+        }
+        .nav-links.open {
+          display: flex;
+        }
+        .nav-links div,
+        .nav-links button {
+          width: 100%;
+          text-align: right;
+          box-sizing: border-box;
+          margin-bottom: 8px;
+          margin-left: 0 !important;
+        }
+
+        #managerToolbar {
+          flex-wrap: wrap !important;
+          overflow-x: auto;
+          padding-bottom: 5px;
+          width: 100%;
+          justify-content: flex-start !important;
+        }
+        #tableOutput table {
+          min-width: 700px;
+        } /* מונע מטבלת המשמרות להתכווץ ולשבור מילים בנייד — שאר הטבלאות מתאימות לרוחב המסך */
+
+        .mobile-day-tabs {
+          display: block;
+          padding: 10px 0;
+          margin-bottom: 15px;
+        }
+        .mobile-day-select {
+          width: 100%;
+          padding: 12px 16px;
+          border: 1px solid var(--md-primary);
+          border-radius: 12px;
+          background: var(--md-surface);
+          color: var(--md-text);
+          font-weight: bold;
+          font-size: 1.05rem;
+          font-family: inherit;
+          cursor: pointer;
+          box-shadow: var(--elevation-1);
+          -webkit-appearance: menulist;
+          appearance: menulist;
+        }
+        .day-tab {
+          padding: 8px 20px;
+          border: 1px solid var(--md-primary);
+          border-radius: 20px;
+          background: transparent;
+          color: var(--md-primary);
+          font-weight: bold;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .day-tab.active {
+          background: var(--md-primary);
+          color: white;
+          box-shadow: var(--elevation-2);
+        }
+        .mobile-shift-card {
+          background: var(--md-surface);
+          border-right: 5px solid var(--md-primary);
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 12px;
+          box-shadow: var(--elevation-1);
+          border: 1px solid var(--md-divider);
+        }
+        .mobile-shift-header {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          border-bottom: 1px solid var(--md-divider);
+          padding-bottom: 8px;
+          margin-bottom: 10px;
+        }
+        .mobile-emp-chip {
+          display: inline-flex;
+          align-items: center;
+          background: var(--md-bg);
+          padding: 10px 16px;
+          margin: 6px 4px;
+          border-radius: 20px;
+          font-size: 1rem;
+          border: 1px solid var(--md-divider);
+        }
+        .mobile-remove-btn {
+          margin-right: 12px;
+          color: #ef4444;
+          font-weight: bold;
+          cursor: pointer;
+          padding: 2px 6px;
+        }
+      }
+
+      body.worker-view {
+        background: var(--md-bg);
+      }
+      body.worker-view nav {
+        justify-content: space-between;
+      }
+      body.worker-view
+        .nav-container
+        div:not(#nav-schedule):not(#nav-worker-requests):not(#nav-tasks):not(
+          #nav-switch-user
+        ):not(#darkModeBtn):not(.nav-spacer) {
+        display: none !important;
+      }
+      body.worker-view .worker-only-nav {
+        display: block !important;
+      }
+      body.worker-view nav:not(#bottomNav) button:not(.mobile-menu-btn) {
+        display: none !important;
+      }
+      body.worker-view #darkModeBtn {
+        display: block !important;
+      } /* תיקון: הצגת מצב כהה לעובדים */
+      body.worker-view .side-panel {
+        display: none !important;
+      }
+      body.worker-view #managerToolbar,
+      body.worker-view #taskInputsWrapper,
+      body.worker-view .task-action-btn,
+      body.worker-view #holLogInputsWrapper {
+        display: none !important;
+      }
+      body.worker-view .loc-box,
+      body.worker-view .name-chip,
+      body.worker-view .mobile-shift-card {
+        pointer-events: none !important;
+      }
+      body.worker-view .mobile-day-tabs button,
+      body.worker-view .mobile-day-select {
+        pointer-events: auto !important;
+      }
+      body.worker-view #trackingContainer {
+        display: none !important;
+      }
+      body.worker-view .manager-only {
+        display: none !important;
+      }
+      body:not(.worker-view) .worker-only {
+        display: none !important;
+      }
+      body.sub-manager .super-only {
+        display: none !important;
+      }
+      /* הדגשת העובד המחובר בטבלה ובפלאפון */
+      .highlight-me {
+        background-color: #fef08a !important; /* צהוב זוהר */
+        border: 2px solid #eab308 !important;
+        color: #854d0e !important;
+        font-weight: 800 !important;
+        transform: scale(1.05);
+        box-shadow: 0 4px 6px rgba(234, 179, 8, 0.4) !important;
+        z-index: 10;
+      }
+      .highlight-me-mobile {
+        background-color: #fef08a !important;
+        border: 2px solid #eab308 !important;
+        color: #854d0e !important;
+      }
+
+      /* עיצוב לתפריט ההמבורגר במובייל וגלילת טבלאות */
+      .mobile-menu-btn {
+        display: none;
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.6rem;
+        cursor: pointer;
+        padding: 5px 10px;
+        font-weight: bold;
+      }
+      .nav-container {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+        align-items: center;
+        gap: 10px;
+      }
+      .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+      }
+
+      @media (max-width: 1024px) {
+        nav {
+          flex-direction: row;
+          align-items: center !important;
+          padding: 10px;
+        }
+        .mobile-menu-btn {
+          display: block;
+        }
+        .nav-container {
+          display: none;
+          flex-direction: column;
+          align-items: stretch;
+          width: auto;
+          margin-top: 0;
+          position: absolute;
+          top: calc(100% + 4px);
+          right: 10px;
+          left: 10px;
+          background-color: #ffffff !important;
+          background-image: none !important;
+          border: 1px solid #cbd5e1;
+          padding: 8px;
+          border-radius: 10px;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+          max-height: 80vh;
+          overflow-y: auto;
+          z-index: 9999;
+          opacity: 1 !important;
+          backdrop-filter: none;
+        }
+        body.dark-mode .nav-container {
+          background-color: #1e293b !important;
+          border-color: #475569;
+        }
+        .nav-container > div,
+        .nav-container > button {
+          color: #0f172a !important;
+          background: transparent;
+        }
+        body.dark-mode .nav-container > div,
+        body.dark-mode .nav-container > button {
+          color: #f8fafc !important;
+        }
+        .nav-container > div:hover,
+        .nav-container > button:hover {
+          background: rgba(0, 0, 0, 0.06);
+        }
+        body.dark-mode .nav-container > div:hover,
+        body.dark-mode .nav-container > button:hover {
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .nav-container > div.active {
+          background: var(--md-primary);
+          color: #fff !important;
+        }
+        body.emergency-active .nav-container {
+          background-color: #ffffff !important;
+        }
+        body.emergency-active.dark-mode .nav-container {
+          background-color: #1e293b !important;
+        }
+        .nav-container.active {
+          display: flex;
+        }
+        .nav-spacer {
+          display: none;
+        }
+        #navContainer div,
+        #navContainer button {
+          text-align: right;
+          width: 100%;
+          box-sizing: border-box;
+        }
+      }
+      /* ===== תיקוני נראות במצב כהה (טלפון ומחשב) ===== */
+      body.dark-mode [style*="background:#f8fafc"],
+      body.dark-mode [style*="background:#f1f5f9"],
+      body.dark-mode [style*="background:#e0f2fe"],
+      body.dark-mode [style*="background:#cbd5e1"],
+      body.dark-mode [style*="background:#e9d5ff"],
+      body.dark-mode [style*="background:#faf5ff"],
+      body.dark-mode [style*="background:#ffedd5"],
+      body.dark-mode [style*="background: white"],
+      body.dark-mode [style*="background:white"] {
+        color: #0f172a;
+      }
+      body.dark-mode .mobile-emp-chip {
+        background: #334155 !important;
+        border-color: #475569 !important;
+        color: #f8fafc !important;
+      }
+      body.dark-mode .mobile-emp-chip span,
+      body.dark-mode .mobile-emp-chip b {
+        color: #f8fafc;
+      }
+      body.dark-mode .mobile-emp-chip small {
+        color: #cbd5e1 !important;
+      }
+      body.dark-mode [style*="color: #0c4a6e"],
+      body.dark-mode [style*="color:#0c4a6e"],
+      body.dark-mode [style*="color: #0369a1"],
+      body.dark-mode [style*="color:#0369a1"] {
+        color: #0c4a6e;
+      }
+
+      /* ניווט שבועות - מוסתר בדסקטופ למנהל (יש לו sidebar), מוצג בנייד לכולם */
+      .mobile-week-nav {
+        display: none !important;
+      }
+      @media (max-width: 1024px) {
+        .mobile-week-nav {
+          display: flex !important;
+        }
+      }
+
+      /* ===== סטטוס מיוחד - מצב כהה ===== */
+      .chip-special {
+        background: #e9d5ff !important;
+        color: #7e22ce !important;
+        border: 1px solid #d8b4fe !important;
+      }
+      body.dark-mode .chip-special {
+        background: #4c1d95 !important;
+        color: #e9d5ff !important;
+        border-color: #7c3aed !important;
+      }
+      .mobile-chip-special {
+        background: #e9d5ff !important;
+        border-color: #d8b4fe !important;
+        color: #7e22ce !important;
+      }
+      body.dark-mode .mobile-chip-special {
+        background: #4c1d95 !important;
+        border-color: #7c3aed !important;
+        color: #e9d5ff !important;
+      }
+      .td-special-header {
+        background: #f3e8ff;
+        font-weight: 500;
+        color: #9333ea;
+      }
+      body.dark-mode .td-special-header {
+        background: #3b0764 !important;
+        color: #d8b4fe !important;
+      }
+      .td-special-cell {
+        background: #faf5ff;
+      }
+      body.dark-mode .td-special-cell {
+        background: #2e1065 !important;
+      }
+      /* טבלאות - גלילה אופקית במובייל למניעת חריגה מהמסך */
+      @media (max-width: 1024px) {
+        .container table,
+        #closuresList table,
+        #trackingContainer table,
+        #requestsTableContainer table,
+        #pendingRequestsQueue table,
+        #taskStatsContainer table,
+        #tasksList table,
+        #holidaysLogTable table {
+          display: block;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          white-space: nowrap;
+          border-collapse: collapse;
+        }
+      }
+      /* ===== אחידות רוחב לכל העמודים ===== */
+      .container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      .card-paper {
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      /* טבלאות רחבות גוללות בתוך הכרטיס, לא מותחות את העמוד */
+      .card-paper > table,
+      #fullTrackingTableContainer,
+      #trackingTableContainer,
+      #requestsContainer,
+      #pendingRequestsQueue {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* עמוד משימות - מניעת בריחת טבלאות */
+      #taskStatsContainer,
+      #tasksList,
+      #holidaysLogTable,
+      #employeeSummaryContent {
+        overflow-x: auto;
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
+      }
+      #taskStatsContainer table,
+      #tasksList table,
+      #holidaysLogTable table {
+        min-width: 300px;
+        max-width: 100%;
+      }
+
+      /* עמוד בקשות - גלילה במובייל */
+      #pendingRequestsQueue table,
+      #requestsTableContainer table {
+        min-width: 500px;
+      }
+      #page-requests .card-paper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      /* ===== מצב כהה: עמוד הגשת בקשות ===== */
+      body.dark-mode #page-worker-requests .card-paper {
+        background: rgba(30, 41, 59, 0.9) !important;
+        border-color: #334155 !important;
+      }
+      body.dark-mode #page-worker-requests select,
+      body.dark-mode #page-worker-requests input[type="date"],
+      body.dark-mode #page-worker-requests input[type="text"] {
+        background: #1e293b !important;
+        color: #f1f5f9 !important;
+        border-color: #475569 !important;
+      }
+      body.dark-mode #page-worker-requests h1 {
+        color: #fb923c !important;
+      }
+      body.dark-mode #page-worker-requests p,
+      body.dark-mode #page-worker-requests label {
+        color: #cbd5e1 !important;
+      }
+      /* ===== הדגשת היום הנוכחי בלוח ===== */
+      .today-col {
+        background: rgba(25, 118, 210, 0.1) !important;
+        border-bottom: 3px solid var(--md-primary) !important;
+        position: relative;
+      }
+      .today-col::after {
+        content: "● היום";
+        display: block;
+        font-size: 0.7rem;
+        color: var(--md-primary);
+        font-weight: bold;
+        margin-top: 2px;
+      }
+      body.dark-mode .today-col {
+        background: rgba(96, 165, 250, 0.15) !important;
+      }
+
+      /* ─── ניווט תחתון (מובייל בלבד) ─────────────────────────────────────── */
+      #bottomNav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1e3a5f;
+        border-top: 1px solid rgba(255,255,255,0.12);
+        z-index: 1200;
+        padding-bottom: env(safe-area-inset-bottom);
+        justify-content: space-around;
+        align-items: stretch;
+      }
+      .bottom-nav-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 4px 6px;
+        background: transparent;
+        border: none;
+        color: rgba(255,255,255,0.55);
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: color 0.15s;
+        min-height: 56px;
+      }
+      .bottom-nav-item svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+      }
+      .bottom-nav-item.active {
+        color: #fff;
+      }
+      .bottom-nav-item.active svg {
+        filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
+      }
+      /* כפתור שמירה לענן — צף מתחת לנאב העליון בדסקטופ */
+      #cloudSaveWarningBtn {
+        position: fixed;
+        top: 74px;
+        left: 16px;
+        z-index: 2000;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      }
+      body.worker-view #cloudSaveWarningBtn {
+        display: none !important;
+      }
+
+      @media (max-width: 1024px) {
+        #bottomNav {
+          display: flex;
+        }
+        /* תחתית main לא תיחתך מתחת לנאב */
+        .main-content {
+          padding-bottom: max(72px, calc(56px + env(safe-area-inset-bottom))) !important;
+        }
+        /* הסתר המבורגר — מוחלף בנאב תחתון */
+        .mobile-menu-btn {
+          display: none !important;
+        }
+        /* הסתר את כל הפס העליון במובייל — הניווט עבר לנאב התחתון */
+        nav:not(#bottomNav) {
+          display: none !important;
+        }
+        /* כפתור שמירה לענן — צף מעל הנאב התחתון */
+        #cloudSaveWarningBtn {
+          top: auto;
+          bottom: calc(68px + env(safe-area-inset-bottom));
+          left: 12px;
+        }
+        /* מניעת גלישה אופקית בעמודי הגדרות / משימות */
+        #page-rules,
+        #page-tasks {
+          overflow-x: hidden;
+        }
+        #page-rules .card-paper,
+        #page-tasks .card-paper,
+        #page-rules .rule-card {
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        #page-tasks table,
+        #page-rules table {
+          width: 100% !important;
+          table-layout: fixed;
+          word-break: break-word;
+          font-size: 0.82rem;
+        }
+        #page-tasks table th,
+        #page-tasks table td,
+        #page-rules table th,
+        #page-rules table td {
+          padding: 5px !important;
+        }
+      }
+
+      /* ─── כרטיסיות דף "עוד" ──────────────────────────────────────────────── */
+      .more-page-card {
+        background: var(--md-surface);
+        border: 1px solid var(--md-divider);
+        border-radius: 14px;
+        padding: 20px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        box-shadow: var(--elevation-1);
+        transition: box-shadow 0.15s, transform 0.1s;
+        text-align: center;
+      }
+      .more-page-card:active {
+        transform: scale(0.97);
+        box-shadow: none;
+      }
+      .more-page-card-icon {
+        font-size: 2rem;
+        line-height: 1;
+      }
+      .more-page-card-label {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: var(--md-text);
+      }
