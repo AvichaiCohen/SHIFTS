@@ -1015,6 +1015,12 @@
         return merged;
       };
 
+      // תווית תצוגה לסטטוס מיוחד — כשהסטטוס הוא "אחר", מציג את ההערה שנכתבה
+      window.specStatusLabel = function (sp) {
+        if (!sp) return "";
+        return sp.status === "אחר" ? (sp.text || "מיוחדת") : sp.status;
+      };
+
       window.renderTable = function (data, notesLog) {
         if (!window.currentMobileDay) window.currentMobileDay = 1;
         const pubBtn = document.getElementById("publishBtn");
@@ -1198,7 +1204,7 @@
                     : sp._taskId ? ""
                     : `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
                 : "";
-              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${sp.status}</b>${removeBtn}</div>`;
+              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${window.specStatusLabel(sp)}</b>${removeBtn}</div>`;
             });
             html += `</td>`;
           });
@@ -1366,7 +1372,7 @@
                   : sp._taskId ? ""
                   : `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
               : "";
-            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${sp.status}</b></span>${removeBtn}</div>`;
+            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${window.specStatusLabel(sp)}</b></span>${removeBtn}</div>`;
           });
           html += `</div></div>`;
         }
@@ -1397,7 +1403,16 @@
             // בדיקת סטטוס מיוחד — גם לגסי וגם גלובלי
             const allSpecials = window.getSpecialsForDay ? window.getSpecialsForDay(d, window.currentSchedule) : [];
             const special = allSpecials.find((e) => e.id === emp.id || e.id == emp.id);
-            if (special) { shiftVal = special.status; locVal = "-"; }
+            if (special) {
+              if (special.status === "אחר") {
+                // סטטוס "אחר": בעמודת היום נכתב "אחר", ובעמודת "איפה" ההערה שנכתבה
+                shiftVal = "אחר";
+                locVal = special.text || "";
+              } else {
+                shiftVal = special.status;
+                locVal = "-";
+              }
+            }
             if (shiftVal === "מנוחה") {
               // בדיקה בשמרות הנוכחיות (כולל 24ש)
               const shiftsToCheck = [...window.currentShifts];
@@ -1434,7 +1449,12 @@
             }
             row.push(shiftVal, locVal);
           });
-          csvContent += row.join(",") + "\n";
+          // עיטוף שדות עם פסיק/מרכאות/שורה חדשה כדי לא לשבור עמודות (הערות חופשיות)
+          const escapeCsv = (v) => {
+            const s = String(v == null ? "" : v);
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          };
+          csvContent += row.map(escapeCsv).join(",") + "\n";
         });
         const blob = new Blob([csvContent], {
           type: "text/csv;charset=utf-8;",
@@ -1490,7 +1510,7 @@
         let status = document.getElementById("specType").value;
         let text = document.getElementById("specNote").value;
         if (!startDate) return;
-        if (status === "אחר") status = text || "מיוחדת";
+        // שמירה: status נשאר "אחר" (לא נדרס) כדי שהייצוא יבחין בו; ההערה נשמרת ב-text
         if (endDate < startDate) endDate = startDate;
 
         // בנה רשימת עובדים (יחיד או מרובה)
@@ -3333,7 +3353,7 @@
           specs.forEach((sp) => {
             html += `<div style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--md-divider);">
               <span style="font-weight:600;">👤 ${sp.name}</span>
-              <span style="color:var(--md-secondary); font-weight:600; font-size:0.85rem;">${sp.status || ""}</span>
+              <span style="color:var(--md-secondary); font-weight:600; font-size:0.85rem;">${window.specStatusLabel(sp) || ""}</span>
             </div>`;
           });
           html += `</div>`;
@@ -5282,7 +5302,7 @@
                     : sp._taskId ? ""
                     : `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
                 : "";
-              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${sp.status}</b>${removeBtn}</div>`;
+              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${window.specStatusLabel(sp)}</b>${removeBtn}</div>`;
             });
             html += `</td>`;
           });
@@ -5445,7 +5465,7 @@
                   : sp._taskId ? ""
                   : `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
               : "";
-            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${sp.status}</b></span>${removeBtn}</div>`;
+            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${window.specStatusLabel(sp)}</b></span>${removeBtn}</div>`;
           });
           html += `</div></div>`;
         }
@@ -5531,7 +5551,7 @@
         const specLines = [];
         allDays.forEach(function(d) {
           const specs = window.getSpecialsForDay ? window.getSpecialsForDay(d, window.currentSchedule) : [];
-          specs.forEach(function(sp) { specLines.push("  " + d + ": " + sp.name + " — " + sp.status); });
+          specs.forEach(function(sp) { specLines.push("  " + d + ": " + sp.name + " — " + window.specStatusLabel(sp)); });
         });
 
         const mode = window.isEmergencyMode
