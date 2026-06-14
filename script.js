@@ -1021,364 +1021,6 @@
         return sp.status === "אחר" ? (sp.text || "מיוחדת") : sp.status;
       };
 
-      window.renderTable = function (data, notesLog) {
-        if (!window.currentMobileDay) window.currentMobileDay = 1;
-        const pubBtn = document.getElementById("publishBtn");
-        if (pubBtn && data) {
-          pubBtn.innerText = data.isPublished
-            ? "🙈 הסתר לוח מעובדים"
-            : "👁️ פרסם לוח לעובדים";
-          pubBtn.className = data.isPublished
-            ? "btn btn-outlined manager-only"
-            : "btn btn-success manager-only";
-        }
-
-        if (window.isWorkerMode) {
-          document
-            .querySelectorAll(".container")
-            .forEach((c) => c.classList.remove("active"));
-          const schedPage = document.getElementById("page-schedule");
-          if (
-            schedPage &&
-            !document
-              .getElementById("page-worker-requests")
-              .classList.contains("active") &&
-            !document.getElementById("page-tasks").classList.contains("active")
-          ) {
-            schedPage.classList.add("active");
-          }
-        }
-        if (window.isWorkerMode && data && !data.isPublished) {
-          const lockedMsg = `<div style="text-align:center; padding:50px 20px; color:var(--md-text-secondary);"><h2 style="font-size:2rem; margin-bottom:10px;">🔒</h2><h3>המשמרות לשבוע זה טרם פורסמו</h3><p>המנהל עדיין עובד על סידור העבודה. אנא חזור מאוחר יותר.</p></div>`;
-          const desktopContainer = document.getElementById("tableOutput");
-          const mobileContainer = document.getElementById("mobileCardsOutput");
-          if (desktopContainer) desktopContainer.innerHTML = lockedMsg;
-          if (mobileContainer) mobileContainer.innerHTML = lockedMsg;
-          return;
-        }
-        if (!data || Object.keys(data).length <= 1) {
-          const emptyMsg =
-            "<div style='padding:20px; text-align:center;'><em>אין נתונים / לוח ריק.</em></div>";
-          const desktopContainer = document.getElementById("tableOutput");
-          const mobileContainer = document.getElementById("mobileCardsOutput");
-          if (desktopContainer) desktopContainer.innerHTML = emptyMsg;
-          if (mobileContainer) mobileContainer.innerHTML = emptyMsg;
-          return;
-        }
-
-        const _matalUnderstaff = window.currentSchedule && window.currentSchedule.matalUnderstaff === true;
-        const _weekSunForRows = window.getSunday(window.currentWeekOffset || 0);
-        const _dayModes = days.map(function(d, i) {
-          return (typeof window.getDayModeRT === 'function')
-            ? window.getDayModeRT(i, _weekSunForRows, data)
-            : (window.isEmergencyMode ? 'emergency' : _matalUnderstaff ? 'matal' : 'normal');
-        });
-        const _weekHasEmergency = _dayModes.includes('emergency');
-        const _weekHasMatal = _dayModes.includes('matal');
-        const _weekHasNormal = _dayModes.includes('normal');
-
-        let scheduleRows = [];
-        if (_weekHasNormal || _weekHasMatal) {
-          // זירה מוצגת הן במצב רגיל והן במצב מת"ל חוסר
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "בוקר", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "לילה", showForModes: ["normal", "matal"] });
-          // מת"ל רגיל — רק אם אין ימי חוסר בשבוע זה
-          if (_weekHasNormal && !_weekHasMatal) {
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", showForModes: ["normal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "לילה", showForModes: ["normal"] });
-          }
-          // מת"ל חוסר — ראשון–חמישי: 24ש + נוכח; שישי–שבת: משמרות רגילות
-          if (_weekHasMatal) {
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", label: "בוקר (נוכח)", onlyDays: ["ראשון","שני","שלישי","רביעי","חמישי"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "24 שעות", onlyDays: ["ראשון","שני","שלישי","רביעי","חמישי"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", onlyDays: ["שישי","שבת"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "לילה", onlyDays: ["שישי","שבת"], showForModes: ["matal"] });
-          }
-        }
-        if (_weekHasEmergency) {
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "24 שעות", showForModes: ["emergency"] });
-          scheduleRows.push({ loc: LOC_MATAL, shift: "24 שעות", showForModes: ["emergency"] });
-        }
-
-        // הדגשת היום הנוכחי בטבלה
-        const _todayRaw = new Date();
-        const _todayDate = new Date(_todayRaw.getFullYear(), _todayRaw.getMonth(), _todayRaw.getDate());
-        const _weekSun = window.getSunday(window.currentWeekOffset || 0);
-        const _todayIdx = Math.floor((_todayDate - _weekSun) / 86400000);
-        const _todayDay = (_todayIdx >= 0 && _todayIdx < 7) ? days[_todayIdx] : null;
-
-        let html = `<table><tr><th style="width:120px;">מיקום וזמן</th>`;
-        days.forEach((d) => {
-          let note =
-            data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
-          let noteHtml = "";
-          if (!window.isWorkerMode) {
-            noteHtml = `<br><input type="text" value="${note}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
-          } else if (note) {
-            noteHtml = `<br><span style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
-          }
-          const isTodayCol = d === _todayDay;
-          const _dayHL = data.dayHighlights && data.dayHighlights[d];
-          const _hlStyle = _dayHL ? `background:${_dayHL}28; border-bottom:3px solid ${_dayHL};` : '';
-          const _hlBtn = !window.isWorkerMode ? `<span style="cursor:pointer;font-size:0.75rem;opacity:0.7;vertical-align:middle;margin-right:2px;" onclick="window.toggleDayHighlight('${d}')" title="הדגש יום">${_dayHL ? '🔶' : '◻️'}</span>` : '';
-          html += `<th${isTodayCol ? ' class="today-col"' : ''}${_hlStyle ? ` style="${_hlStyle}"` : ''}>${d} ${window.isHoliday && window.isHoliday(d) ? "✨" : ""} ${_hlBtn} ${noteHtml}</th>`;
-        });
-        html += `</tr>`;
-
-        scheduleRows.forEach((r) => {
-          let safeLoc = r.loc.replace(/"/g, "&quot;");
-          html += `<tr><td style="background:var(--md-bg); font-weight:500;"><b style="color:var(--md-primary); font-size:1.1em;">${window.getLocName(r.loc)}</b><br><span style="font-size:0.9em;">${r.label || r.shift}</span><span class="time-label">${window.getShiftTime(r.loc, r.shift)}</span></td>`;
-          days.forEach((d) => {
-            const isTodayTd = d === _todayDay;
-            html += `<td${isTodayTd ? ' class="today-col"' : ''}>`;
-            if (window.isOffDay && window.isOffDay(d) && r.shift === "ערב") {
-              html += `</td>`;
-              return;
-            }
-            if (r.onlyDays && !r.onlyDays.includes(d)) {
-              html += `</td>`;
-              return;
-            }
-            const _dIdx = days.indexOf(d);
-            if (r.showForModes && !r.showForModes.includes(_dayModes[_dIdx])) {
-              html += `<div style="height:40px;background:#f1f5f9;border-radius:4px;opacity:0.35;margin:2px 0;"></div></td>`;
-              return;
-            }
-            const assigned =
-              data[`${d}-${r.shift}`] && data[`${d}-${r.shift}`][r.loc]
-                ? data[`${d}-${r.shift}`][r.loc]
-                : [];
-            let dropEvents = window.isEditMode
-              ? `ondragover="window.allowDrop(event)" ondragleave="window.dragLeave(event)" ondrop="window.drop(event, '${d}', '${r.shift}', '${safeLoc}')"`
-              : "";
-
-            const _shiftLocked = window.isShiftLocked(d, r.shift, r.loc);
-            const _shiftLockBtn = window.isEditMode
-              ? `<span style="float:left; cursor:pointer; font-size:0.85rem; opacity:${_shiftLocked ? 1 : 0.35};" onclick="window.toggleShiftLock('${d}','${r.shift}','${safeLoc}')" title="${_shiftLocked ? 'שחרר נעילת משמרת' : 'נעל משמרת (מונע השלמה אוטומטית)'}">🔒</span>`
-              : "";
-            const _locBoxStyle = _shiftLocked ? ' style="background:rgba(245,158,11,0.08); border:1px dashed #f59e0b;"' : '';
-            html += `<div class="loc-box" data-loc="${r.loc}" data-shift="${r.shift}" ${dropEvents}${_locBoxStyle}>${_shiftLockBtn}`;
-            if (assigned.length > 0) {
-              assigned.forEach((e) => {
-                const lockIcon = (window.isWorkerMode || !window.isEditMode) ? "" : e.isLocked
-                  ? `<span style="cursor:pointer; margin-left:4px;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${e.id})" title="שחרר נעילת עובד">🔒</span>`
-                  : `<span style="cursor:pointer; margin-left:4px; opacity:0.3;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${e.id})" title="נעל עובד זה">🔓</span>`;
-                const removeBtn = window.isEditMode
-                  ? `<a class="remove-btn" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${e.id})">✕</a>`
-                  : "";
-                const dragAttr = window.isEditMode
-                  ? `draggable="true" ondragstart="window.dragStart(event, ${e.id}, '${d}', '${r.shift}', '${safeLoc}')"`
-                  : "";
-                const extraNote = e.note
-                  ? ` <span style="font-size:0.75em; color:var(--md-text-secondary); margin-right:4px;">(${e.note})</span>`
-                  : "";
-                let t = e.type || "";
-
-                let isMe =
-                  window.loggedInUser && window.loggedInUser.id === e.id
-                    ? " highlight-me"
-                    : "";
-
-                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${lockIcon}${e.name}${extraNote}</span>`;
-              });
-            } else {
-              html += `<span style="color:transparent;">.</span>`;
-            }
-            html += `</div></td>`;
-          });
-          html += `</tr>`;
-        });
-
-        let hasSpecial = days.some((d) => window.getSpecialsForDay(d, data).length > 0);
-        if (hasSpecial) {
-          html += `<tr><td class="td-special-header"><b style="font-size:1.1em;">🚩 סטטוס מיוחד</b><br><span style="font-size:0.8em;">(אקסל בלבד)</span></td>`;
-          days.forEach((d) => {
-            html += `<td class="td-special-cell">`;
-            let specs = window.getSpecialsForDay(d, data);
-            specs.forEach((sp) => {
-              let isMe = window.loggedInUser && window.loggedInUser.id === sp.id ? " highlight-me" : "";
-              let removeBtn = !window.isWorkerMode
-                ? (sp._specialId != null
-                    ? `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
-                    : sp._taskId ? ""
-                    : `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
-                : "";
-              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${window.specStatusLabel(sp)}</b>${removeBtn}</div>`;
-            });
-            html += `</td>`;
-          });
-          html += `</tr>`;
-        }
-
-        if (!window.isEmergencyMode) {
-          html += `<tr><td style="background:rgba(245,158,11,0.1); font-weight:bold; color:#d97706;">הערות ומשימות</td>`;
-          days.forEach((d) => {
-            html += `<td style="vertical-align:top; border-top:2px solid var(--md-divider);">`;
-            if (typeof window.systemTasks !== "undefined") {
-              // תאריכי תחילת/סוף השבוע המוצג כעת
-              let weekSun = window.getSunday(window.currentWeekOffset || 0);
-              let dayIdx = days.indexOf(d); // 0=ראשון ... 6=שבת
-              let cellDate = new Date(weekSun);
-              cellDate.setDate(cellDate.getDate() + dayIdx);
-              let cellKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, "0")}-${String(cellDate.getDate()).padStart(2, "0")}`;
-              let dayTasks = window.systemTasks.filter(
-                (t) => t.date === cellKey && !t.completed,
-              );
-              dayTasks.forEach((t) => {
-                let assign = t.assignee ? ` - ${t.assignee}` : "";
-                html += `<div class="note-task">📋 ${t.category}${assign}</div>`;
-              });
-            }
-            if (notesLog && notesLog[d]) {
-              notesLog[d].forEach((n) => {
-                let isVacation = n.reason && n.reason.includes("חופש");
-                let colorClass = isVacation
-                  ? "background:rgba(239,68,68,0.1); color:var(--md-error);"
-                  : "background:rgba(245,158,11,0.1); color:var(--md-warning);";
-                html += `<div class="note-chip" data-name="${n.emp.name}" style="${colorClass} padding:4px 10px; border-radius:12px; font-size:0.8em; margin:2px; display:inline-block; font-weight:bold;">${n.icon || ""} ${n.emp.name} - ${n.reason}</div>`;
-              });
-            }
-            html += `</td>`;
-          });
-          html += `</tr>`;
-        }
-
-        const desktopContainer = document.getElementById("tableOutput");
-        if (desktopContainer) desktopContainer.innerHTML = html + `</table>`;
-        if (typeof window.applyFilters === "function") window.applyFilters();
-
-        if (typeof window.renderMobileCards === "function")
-          window.renderMobileCards(data, notesLog);
-        if (typeof window.selectMobileDay === "function")
-          window.selectMobileDay(window.currentMobileDay);
-        if (typeof window.renderPendingRequestsManager === "function")
-          window.renderPendingRequestsManager();
-      };
-
-      window.renderMobileCards = function (data, notesLog) {
-        const container = document.getElementById("mobileCardsOutput");
-        if (!container) return;
-        if (!data || Object.keys(data).length <= 1) {
-          container.innerHTML = "<em>אין נתונים / לוח ריק</em>";
-          return;
-        }
-
-        let html = "";
-        let mobileDayIdx = window.currentMobileDay || 1;
-        let d = days[mobileDayIdx - 1];
-
-        let note =
-          data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
-        let noteHtml = "";
-        if (!window.isWorkerMode) {
-          noteHtml = `<input type="text" value="${note}" placeholder="📝 הערת יום מיוחד..." onchange="window.updateDailyNote('${d}', this.value)" style="width:100%; margin-top:5px; font-size:0.85rem; padding:6px; border:1px dashed #cbd5e1; background:#f8fafc; border-radius:6px;">`;
-        } else if (note) {
-          noteHtml = `<div style="font-size:0.85rem; color:#ea580c; background:#ffedd5; padding:6px 10px; border-radius:6px; margin-top:6px; font-weight:bold;">📌 ${note}</div>`;
-        }
-
-        html += `<h3 style="margin-top:0; margin-bottom:5px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3>${noteHtml}<div style="margin-bottom:15px;"></div>`;
-
-        const _matalUnderstaff = window.currentSchedule && window.currentSchedule.matalUnderstaff === true;
-        const _weekSunForRows = window.getSunday(window.currentWeekOffset || 0);
-        const _dayModes = days.map(function(d, i) {
-          return (typeof window.getDayModeRT === 'function')
-            ? window.getDayModeRT(i, _weekSunForRows, data)
-            : (window.isEmergencyMode ? 'emergency' : _matalUnderstaff ? 'matal' : 'normal');
-        });
-        const _weekHasEmergency = _dayModes.includes('emergency');
-        const _weekHasMatal = _dayModes.includes('matal');
-        const _weekHasNormal = _dayModes.includes('normal');
-
-        let scheduleRows = [];
-        if (_weekHasNormal || _weekHasMatal) {
-          // זירה מוצגת הן במצב רגיל והן במצב מת"ל חוסר
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "בוקר", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "לילה", showForModes: ["normal", "matal"] });
-          // מת"ל רגיל — רק אם אין ימי חוסר בשבוע זה
-          if (_weekHasNormal && !_weekHasMatal) {
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", showForModes: ["normal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "לילה", showForModes: ["normal"] });
-          }
-          // מת"ל חוסר — ראשון–חמישי: 24ש + נוכח; שישי–שבת: משמרות רגילות
-          if (_weekHasMatal) {
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", label: "בוקר (נוכח)", onlyDays: ["ראשון","שני","שלישי","רביעי","חמישי"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "24 שעות", onlyDays: ["ראשון","שני","שלישי","רביעי","חמישי"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "בוקר", onlyDays: ["שישי","שבת"], showForModes: ["matal"] });
-            scheduleRows.push({ loc: LOC_MATAL, shift: "לילה", onlyDays: ["שישי","שבת"], showForModes: ["matal"] });
-          }
-        }
-        if (_weekHasEmergency) {
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "24 שעות", showForModes: ["emergency"] });
-          scheduleRows.push({ loc: LOC_MATAL, shift: "24 שעות", showForModes: ["emergency"] });
-        }
-
-        scheduleRows.forEach((r) => {
-          if (window.isOffDay && window.isOffDay(d) && r.shift === "ערב") return;
-          if (r.onlyDays && !r.onlyDays.includes(d)) return;
-          let dayKey = `${d}-${r.shift}`;
-          let empsInShift =
-            data[dayKey] && data[dayKey][r.loc] ? data[dayKey][r.loc] : [];
-          let shiftCustomName =
-            data[dayKey] && data[dayKey][r.loc + "_customName"]
-              ? data[dayKey][r.loc + "_customName"]
-              : "";
-
-          let safeLoc = r.loc.replace(/"/g, "&quot;");
-
-          if (window.isWorkerMode && empsInShift.length === 0) return;
-
-          const _mShiftLocked = window.isShiftLocked(d, r.shift, r.loc);
-          const _mShiftLockIcon = _mShiftLocked ? `🔒` : "";
-          const _mShiftLockBtn = window.isEditMode
-            ? `<span style="cursor:pointer; font-size:0.9rem; opacity:${_mShiftLocked ? 1 : 0.35}; margin-right:4px;" onclick="window.toggleShiftLock('${d}','${r.shift}','${safeLoc}')" title="${_mShiftLocked ? 'שחרר' : 'נעל משמרת'}">🔒</span>`
-            : "";
-          const _mCardBorder = _mShiftLocked ? "border-right-color:#f59e0b; background:rgba(245,158,11,0.04);" : "";
-          html += `<div class="mobile-shift-card" style="margin-bottom: 16px; ${_mCardBorder}"><div class="mobile-shift-header" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;"><div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span style="font-size:1.1rem;"><b style="color:var(--md-primary);">${window.getLocName(r.loc)}</b> | ${r.label || r.shift}</span><span style="display:flex;align-items:center;gap:6px;">${_mShiftLockBtn}<span style="font-size:0.85rem; background:#cbd5e1; padding:4px 10px; border-radius:12px; font-weight:bold; color:#0f172a;">${empsInShift.length}</span></span></div>`;
-          if (!window.isWorkerMode) {
-            html += `<input type="text" placeholder="✍️ תן שם/הערה למשמרת זו..." value="${shiftCustomName}" style="width:100%; font-size:0.85rem; padding:8px; margin-top:4px; border:1px dashed #94a3b8; border-radius:6px; background:#f8fafc;" onchange="window.updateShiftCustomName('${d}','${r.shift}','${safeLoc}', this.value)">`;
-          } else if (shiftCustomName) {
-            html += `<span style="font-size:0.85rem; color:var(--md-primary); font-weight:700; background:rgba(25,118,210,0.08); padding:4px 8px; border-radius:4px; width:100%;">📌 ${shiftCustomName}</span>`;
-          }
-          html += `</div><div class="mobile-shift-body" style="margin-top:10px;">`;
-
-          if (empsInShift.length === 0) {
-            html += `<div style="color:#94a3b8; font-size:0.9rem; padding:8px 4px; font-style:italic;">אין עובדים משובצים</div>`;
-          } else {
-            empsInShift.forEach((emp) => {
-              let isMe =
-                window.loggedInUser && window.loggedInUser.id === emp.id
-                  ? " highlight-me-mobile"
-                  : "";
-              const lockIcon = (window.isWorkerMode || !window.isEditMode) ? "" : emp.isLocked
-                ? `<span style="cursor:pointer; margin-left:4px;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${emp.id})">🔒</span>`
-                : `<span style="cursor:pointer; margin-left:4px; opacity:0.3;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${emp.id})">🔓</span>`;
-
-              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}</div>`;
-            });
-          }
-          html += `</div></div>`;
-        });
-
-        let specs = window.getSpecialsForDay(d, data);
-        if (specs.length > 0) {
-          html += `<div class="mobile-shift-card" style="border-right-color:#9333ea; background:#faf5ff;"><div class="mobile-shift-header"><span style="color:#9333ea; font-weight:bold;">🚩 סטטוסים מיוחדים</span></div><div class="mobile-shift-body">`;
-          specs.forEach((sp) => {
-            let isMe = window.loggedInUser && window.loggedInUser.id === sp.id ? " highlight-me-mobile" : "";
-            let removeBtn = !window.isWorkerMode
-              ? (sp._specialId != null
-                  ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
-                  : sp._taskId ? ""
-                  : `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
-              : "";
-            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${window.specStatusLabel(sp)}</b></span>${removeBtn}</div>`;
-          });
-          html += `</div></div>`;
-        }
-        container.innerHTML = html;
-      };
-
       window.exportToExcel = function () {
         let csvContent = "\uFEFF";
         csvContent +=
@@ -5714,142 +5356,6 @@
         reader.readAsText(file, "UTF-8");
       };
 
-      window.parseScheduleCSV = function (raw) {
-        // Remove BOM if present
-        const text = raw.replace(/^﻿/, "").trim();
-        const lines = text.split(/\r?\n/).filter(function(l) { return l.trim(); });
-        if (lines.length < 2) throw new Error("הקובץ ריק או חסר שורות נתונים");
-
-        const header = lines[0].split(",");
-        // Expected: שם,ראשון,איפה,שני,איפה,...
-        const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-        const validShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
-        const locs = ["זירה", 'מת"ל'];
-
-        const assignments = []; // { empName, day, shift, loc }
-        const warnings = [];
-        const unknownEmps = new Set();
-
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(",");
-          const empName = (cols[0] || "").trim();
-          if (!empName) continue;
-
-          const emp = (window.staff || []).find(function(e) { return e.name === empName && e.isActive !== false; });
-          if (!emp) { unknownEmps.add(empName); continue; }
-
-          days.forEach(function(day, dIdx) {
-            const shiftCol = dIdx * 2 + 1;
-            const locCol = dIdx * 2 + 2;
-            const shiftVal = (cols[shiftCol] || "").trim();
-            const locVal = (cols[locCol] || "").trim();
-
-            if (!shiftVal || shiftVal === "מנוחה" || shiftVal === "-") return;
-
-            // Check if it's a real shift (not a status like חופש, מחלה, etc.)
-            const matchedShift = validShifts.find(function(s) { return shiftVal.startsWith(s); });
-            if (!matchedShift) return; // special status — skip
-
-            // Normalize location
-            let normalizedLoc = null;
-            if (locVal === "זירה") normalizedLoc = "זירה";
-            else if (locVal === 'מת"ל' || locVal === "מתל" || locVal === "מת'ל") normalizedLoc = 'מת"ל';
-
-            if (!normalizedLoc) {
-              warnings.push(empName + " / " + day + " / " + shiftVal + " — מיקום לא מוכר: '" + locVal + "'");
-              return;
-            }
-
-            assignments.push({ emp: emp, day: day, shift: matchedShift, loc: normalizedLoc });
-          });
-        }
-
-        if (unknownEmps.size > 0) {
-          unknownEmps.forEach(function(n) { warnings.push("עובד לא נמצא ברשימה: " + n); });
-        }
-
-        return { assignments: assignments, warnings: warnings };
-      };
-
-      window.renderCSVPreview = function (parsed) {
-        const statsEl = document.getElementById("csvImportStats");
-        const warnEl = document.getElementById("csvImportWarnings");
-        const previewEl = document.getElementById("csvImportPreviewText");
-        const previewContainer = document.getElementById("csvImportPreview");
-
-        statsEl.textContent = "זוהו " + parsed.assignments.length + " שיבוצים מתוך הקובץ.";
-
-        if (parsed.warnings.length > 0) {
-          warnEl.style.display = "block";
-          warnEl.innerHTML = "<b>⚠️ אזהרות:</b><br>" + parsed.warnings.join("<br>");
-        } else {
-          warnEl.style.display = "none";
-        }
-
-        // Group by day for preview
-        const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-        const byDay = {};
-        parsed.assignments.forEach(function(a) {
-          if (!byDay[a.day]) byDay[a.day] = [];
-          byDay[a.day].push(a.shift + " / " + a.loc + ": " + a.emp.name);
-        });
-
-        let preview = "";
-        days.forEach(function(d) {
-          if (byDay[d] && byDay[d].length) {
-            preview += d + ":\n  " + byDay[d].join("\n  ") + "\n";
-          }
-        });
-        previewEl.textContent = preview || "(אין שיבוצים לייבא)";
-        previewContainer.style.display = "block";
-      };
-
-      window.applyCSVImport = function (overwrite) {
-        const parsed = window._parsedCSVData;
-        if (!parsed || !parsed.assignments.length) { alert("אין נתונים לייבוא"); return; }
-
-        const LOC_ZIRA = "זירה";
-        const LOC_MATAL = 'מת"ל';
-
-        if (overwrite) {
-          // Clear all existing shift slots first
-          const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-          const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
-          days.forEach(function(d) {
-            allShifts.forEach(function(s) {
-              const key = d + "-" + s;
-              if (window.currentSchedule[key]) {
-                window.currentSchedule[key][LOC_ZIRA] = [];
-                window.currentSchedule[key][LOC_MATAL] = [];
-              }
-            });
-          });
-        }
-
-        parsed.assignments.forEach(function(a) {
-          const key = a.day + "-" + a.shift;
-          if (!window.currentSchedule[key]) {
-            window.currentSchedule[key] = {};
-            window.currentSchedule[key][LOC_ZIRA] = [];
-            window.currentSchedule[key][LOC_MATAL] = [];
-          }
-          if (!window.currentSchedule[key][a.loc]) window.currentSchedule[key][a.loc] = [];
-          // Don't add duplicates
-          if (!window.currentSchedule[key][a.loc].find(function(e) { return e.id === a.emp.id; })) {
-            window.currentSchedule[key][a.loc].push(Object.assign({}, a.emp, { auto: true }));
-          }
-        });
-
-        window.recomputeNotesFromSchedule();
-        window.triggerUnsavedChanges();
-        window.renderTable(window.currentSchedule, window.currentNotesLog);
-        document.getElementById("csvImportModal").style.display = "none";
-        window._parsedCSVData = null;
-
-        const msg = overwrite ? "הלוח הוחלף בהצלחה." : (parsed.assignments.length + " שיבוצים נוספו ללוח.");
-        setTimeout(function() { alert("✅ " + msg); }, 100);
-      };
-
       // ─── Mode Settings (Emergency / Matal start+end dates) ─────────────────
 
       window._modeSettingsType = null;
@@ -6146,15 +5652,43 @@
         setTimeout(function() { alert("✅ " + msg); }, 100);
       };
 
-      // Also update renderCSVPreview to show specials count
-      var _origRenderPreview = window.renderCSVPreview;
       window.renderCSVPreview = function (parsed) {
-        _origRenderPreview(parsed);
-        var statsEl = document.getElementById("csvImportStats");
-        var specCount = (parsed.specials || []).length;
-        if (statsEl && specCount > 0) {
+        const statsEl = document.getElementById("csvImportStats");
+        const warnEl = document.getElementById("csvImportWarnings");
+        const previewEl = document.getElementById("csvImportPreviewText");
+        const previewContainer = document.getElementById("csvImportPreview");
+
+        statsEl.textContent =
+          "זוהו " + parsed.assignments.length + " שיבוצים מתוך הקובץ.";
+        // הצגת מספר הסטטוסים המיוחדים שזוהו
+        const specCount = (parsed.specials || []).length;
+        if (specCount > 0)
           statsEl.textContent += " + " + specCount + " סטטוסים מיוחדים";
+
+        if (parsed.warnings.length > 0) {
+          warnEl.style.display = "block";
+          warnEl.innerHTML =
+            "<b>⚠️ אזהרות:</b><br>" + parsed.warnings.join("<br>");
+        } else {
+          warnEl.style.display = "none";
         }
+
+        // קיבוץ לפי יום לתצוגה מקדימה
+        const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+        const byDay = {};
+        parsed.assignments.forEach(function (a) {
+          if (!byDay[a.day]) byDay[a.day] = [];
+          byDay[a.day].push(a.shift + " / " + a.loc + ": " + a.emp.name);
+        });
+
+        let preview = "";
+        days.forEach(function (d) {
+          if (byDay[d] && byDay[d].length) {
+            preview += d + ":\n  " + byDay[d].join("\n  ") + "\n";
+          }
+        });
+        previewEl.textContent = preview || "(אין שיבוצים לייבא)";
+        previewContainer.style.display = "block";
       };
 
       window.setEmergencyShiftHours = function (h) {
