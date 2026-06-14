@@ -24,6 +24,11 @@
       import {
         getAuth,
         signInAnonymously,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        updatePassword,
+        onAuthStateChanged,
+        signOut,
       } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
       const firebaseConfig = {
@@ -40,21 +45,57 @@
       const app = initializeApp(firebaseConfig);
       const db = getDatabase(app);
 
-      // התחברות אנונימית — מאפשרת לנעול את מסד הנתונים (Rules: auth != null)
-      // כך שרק מי שפותח את האפליקציה ניגש לנתונים, ולא כל מי שמכיר את ה-URL.
-      // אם Anonymous Auth טרם הופעל בקונסולת Firebase — האפליקציה ממשיכה לעבוד כרגיל.
+      // ───────────── הזדהות Firebase ─────────────
+      // המנהל הראשי מזדהה עם חשבון אמיתי (אימייל+סיסמה) שמקבל הרשאת כתיבה.
+      // כל השאר (עובדים / מנהלי משנה) — אנונימיים, קריאה בלבד.
+      // החוקים: כתיבה רק ל-auth.token.email של המנהל; קריאה לכל auth != null.
       const auth = getAuth(app);
-      const authReady = signInAnonymously(auth)
-        .then(() => {
-          window._fbAuthOk = true;
-        })
-        .catch((e) => {
-          console.warn(
-            "התחברות אנונימית ל-Firebase נכשלה (ייתכן שטרם הופעלה בקונסולה):",
-            e && e.code,
-          );
-          window._fbAuthOk = false;
+      window.ADMIN_EMAIL = "admin@shifts-ta26.com";
+
+      // אם קיים חיבור שמור (מנהל) — שומרים אותו; אחרת מתחברים אנונימית.
+      const authReady = new Promise((resolve) => {
+        let settled = false;
+        onAuthStateChanged(auth, (user) => {
+          window._fbUser = user || null;
+          window._fbAuthOk = !!user;
+          window._fbIsAdmin = !!(user && user.email === window.ADMIN_EMAIL);
+          if (settled) return;
+          if (user) {
+            settled = true;
+            resolve();
+          } else {
+            signInAnonymously(auth)
+              .catch((e) =>
+                console.warn(
+                  "התחברות אנונימית נכשלה (ייתכן שטרם הופעלה בקונסולה):",
+                  e && e.code,
+                ),
+              )
+              .finally(() => {
+                if (!settled) {
+                  settled = true;
+                  resolve();
+                }
+              });
+          }
         });
+      });
+
+      // התחברות מנהל ראשי מול Firebase (נקרא מ-script.js בעת התחברות מנהל)
+      window.fbAdminSignIn = (password) =>
+        signInWithEmailAndPassword(auth, window.ADMIN_EMAIL, password);
+      // חזרה למצב אנונימי (קריאה בלבד) — בעת התנתקות / כניסת עובד
+      window.fbGoAnonymous = () =>
+        signInAnonymously(auth).catch((e) =>
+          console.warn("מעבר לאנונימי נכשל:", e && e.code),
+        );
+      // יצירת חשבון המנהל (הקמה חד-פעמית) + עדכון סיסמה
+      window.fbCreateAdmin = (password) =>
+        createUserWithEmailAndPassword(auth, window.ADMIN_EMAIL, password);
+      window.fbUpdateAdminPassword = (password) => {
+        if (!auth.currentUser) return Promise.reject(new Error("no-current-user"));
+        return updatePassword(auth.currentUser, password);
+      };
 
       // Expose Firebase db and imports for use in script.js (drafts feature)
       window._firebaseDb = db;
@@ -66,7 +107,17 @@
         const clean = JSON.parse(JSON.stringify(data));
         set(ref(db, path), clean).catch((err) => {
           console.error("שגיאה בשמירה:", err);
-          alert("⚠️ שגיאה בשמירה לענן:\n" + (err.message || err));
+          const isPerm =
+            err &&
+            (err.code === "PERMISSION_DENIED" ||
+              /permission_denied/i.test(err.message || ""));
+          if (isPerm) {
+            alert(
+              "⛔ אין לך הרשאת כתיבה.\nרק המנהל הראשי יכול לשמור שינויים לענן.",
+            );
+          } else {
+            alert("⚠️ שגיאה בשמירה לענן:\n" + (err.message || err));
+          }
         });
       };
 
@@ -1707,6 +1758,29 @@
                 </button>
                 <small style="color: var(--md-text-secondary)"
                   >הסיסמה נשמרת כטביעת אצבע מוצפנת בענן — לא בקוד</small
+                >
+              </div>
+              <div
+                class="super-only"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                  flex-wrap: wrap;
+                "
+              >
+                <label style="font-size: 0.9rem"
+                  ><strong>🛡️ הרשאת כתיבה למנהל:</strong></label
+                >
+                <button
+                  class="btn btn-contained"
+                  style="padding: 6px 14px; font-size: 0.85rem; background: #15803d"
+                  onclick="window.setupManagerWriteAccess()"
+                >
+                  הקם הרשאת כתיבה
+                </button>
+                <small style="color: var(--md-text-secondary)"
+                  >הקמה חד-פעמית — רק המנהל הראשי יוכל לשמור שינויים לענן</small
                 >
               </div>
             </div>

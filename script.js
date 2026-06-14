@@ -761,10 +761,83 @@
         const nextHash = await window._sha256Hex(
           `${ADMIN_UID}:${next.trim()}:${ADMIN_SALT}`,
         );
+        // עדכון סיסמת חשבון ה-Firebase (כדי שהרשאת הכתיבה תמשיך לעבוד)
+        let fbMsg = "";
+        if (typeof window.fbAdminSignIn === "function") {
+          try {
+            await window.fbAdminSignIn(cur.trim()); // אימות מחדש לפני שינוי סיסמה
+            await window.fbUpdateAdminPassword(next.trim());
+          } catch (e) {
+            if (e && e.code === "auth/user-not-found")
+              fbMsg =
+                "\n(חשבון המנהל ב-Firebase טרם הוקם — הפעל 'הקם הרשאת כתיבה' בהגדרות)";
+            else
+              fbMsg = "\n(שים לב: עדכון סיסמת ההרשאה ב-Firebase נכשל: " + (e && e.code) + ")";
+          }
+        }
         window.adminHashOverride = nextHash;
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("settings/adminHash", nextHash);
-        alert("✅ סיסמת המנהל הוחלפה ונשמרה בענן.");
+        alert("✅ סיסמת המנהל הוחלפה ונשמרה בענן." + fbMsg);
+      };
+
+      // הקמה חד-פעמית של חשבון המנהל ב-Firebase (מקנה הרשאת כתיבה לענן)
+      window.setupManagerWriteAccess = async function () {
+        if (window.currentUserRole !== "superAdmin") {
+          alert("רק מנהל ראשי יכול להקים הרשאת כתיבה.");
+          return;
+        }
+        if (typeof window.fbCreateAdmin !== "function") {
+          alert("שגיאה: רכיב ההזדהות לא נטען.");
+          return;
+        }
+        const pw = prompt(
+          "בחר סיסמה חזקה וחדשה למנהל הראשי (לפחות 8 תווים).\n" +
+            "זו תהיה הסיסמה שלך לכניסה למערכת מעכשיו:",
+        );
+        if (!pw || pw.trim().length < 8) {
+          alert("הסיסמה קצרה מדי — נדרשים לפחות 8 תווים.");
+          return;
+        }
+        const pass = pw.trim();
+        try {
+          await window.fbCreateAdmin(pass);
+          // החשבון נוצר — כעת מחוברים אליו (הרשאת כתיבה פעילה)
+        } catch (e) {
+          if (e && e.code === "auth/email-already-in-use") {
+            // החשבון כבר קיים — ננסה להתחבר עם הסיסמה שהוזנה
+            try {
+              await window.fbAdminSignIn(pass);
+            } catch (e2) {
+              alert(
+                "חשבון המנהל כבר קיים אך הסיסמה שהוזנה אינה תואמת.\n" +
+                  "הזן את הסיסמה הקיימת של החשבון, או אפס אותה בקונסולת Firebase.",
+              );
+              return;
+            }
+          } else if (e && e.code === "auth/operation-not-allowed") {
+            alert(
+              "יש להפעיל קודם את שיטת ההתחברות 'Email/Password' בקונסולת Firebase\n" +
+                "(Authentication → Sign-in method → Email/Password → Enable).",
+            );
+            return;
+          } else {
+            alert("שגיאה בהקמת חשבון המנהל: " + (e && (e.code || e.message)));
+            return;
+          }
+        }
+        // סנכרון ה-hash המקומי לסיסמה החדשה
+        const nextHash = await window._sha256Hex(
+          `${ADMIN_UID}:${pass}:${ADMIN_SALT}`,
+        );
+        window.adminHashOverride = nextHash;
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("settings/adminHash", nextHash);
+        alert(
+          "✅ הרשאת הכתיבה הוקמה!\n\n" +
+            "מעכשיו תיכנס עם המספר האישי והסיסמה החדשה.\n" +
+            "השלב האחרון: הדבק את חוקי האבטחה המעודכנים בקונסולה (database.rules.json).",
+        );
       };
 
       window.processLogin = async function () {
@@ -777,11 +850,21 @@
 
         // 1. התחברות מנהל ראשי — השוואת טביעת אצבע, ללא סיסמה גלויה בקוד
         if (uid === ADMIN_UID) {
+          // ניסיון התחברות מנהל מול Firebase — מקנה הרשאת כתיבה לענן
+          let fbOk = false;
+          if (typeof window.fbAdminSignIn === "function") {
+            try {
+              await window.fbAdminSignIn(pass);
+              fbOk = true;
+            } catch (e) {
+              fbOk = false; // חשבון המנהל טרם הוקם / סיסמה שונה — נופלים לבדיקת ה-hash
+            }
+          }
           const tryHash = await window._sha256Hex(
             `${uid}:${pass}:${ADMIN_SALT}`,
           );
           const effective = window.adminHashOverride || ADMIN_HASH_FALLBACK;
-          if (tryHash === effective) {
+          if (fbOk || tryHash === effective) {
             window.currentUserRole = "superAdmin";
             // חיבור הפרופיל הראשי לכרטיסיה האמיתית במסד הנתונים
             let realEmp = window.globalStaff.find((e) => e.personalId === uid);
@@ -793,6 +876,10 @@
                   systemRole: "superAdmin",
                 };
             window.saveSession({ kind: "manager", uid });
+            if (!fbOk)
+              console.warn(
+                "מנהל מחובר ללא הרשאת כתיבה ב-Firebase — יש להקים את חשבון המנהל.",
+              );
             finishLogin();
             return;
           }
@@ -830,6 +917,8 @@
           window.loggedInWorker = emp;
           window.loggedInUser = emp;
           window.currentUserRole = "worker";
+          // עובד תמיד אנונימי מול Firebase — קריאה בלבד (גם אם לפניו היה מנהל באותו דפדפן)
+          if (typeof window.fbGoAnonymous === "function") window.fbGoAnonymous();
           window.saveSession({ kind: "worker", empId: emp.id });
 
           document.body.classList.add("worker-view");
@@ -906,6 +995,8 @@
         window.isWorkerMode = false;
         window.loggedInWorker = null;
         if (typeof window.clearSession === "function") window.clearSession();
+        // ביטול הרשאת כתיבה של המנהל בעת התנתקות — חזרה לאנונימי
+        if (typeof window.fbGoAnonymous === "function") window.fbGoAnonymous();
         document.body.classList.remove("worker-view", "sub-manager");
         document.getElementById("loginOverlay").style.display = "flex";
       };
