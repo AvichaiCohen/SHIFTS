@@ -429,6 +429,13 @@
             window.currentSchedule,
           );
 
+          // גיבוי אוטומטי — תמונת מצב של השבוע עם חותמת זמן (היסטוריית גרסאות)
+          if (typeof window.saveScheduleBackup === "function")
+            window.saveScheduleBackup(
+              window.currentSelectedWeek,
+              window.currentSchedule,
+            );
+
           // התראות שינוי משמרת — רק לשבוע שפורסם לעובדים
           if (
             window.currentSchedule.isPublished &&
@@ -615,6 +622,143 @@
           "shiftChangeNotifs/" + id + "/" + weekKey + "/seen",
           true,
         );
+      };
+
+      // ===== גיבוי אוטומטי ושחזור =====
+      window.BACKUPS_TO_KEEP = 10; // כמה גרסאות לשמור לכל שבוע
+
+      // שמירת תמונת מצב של השבוע עם חותמת זמן + גיזום ישנות
+      window.saveScheduleBackup = function (weekKey, sched) {
+        if (!weekKey || !sched || typeof window.saveToCloud !== "function")
+          return;
+        try {
+          const ts = Date.now();
+          const snap = JSON.parse(JSON.stringify(sched));
+          snap._backupMeta = {
+            ts,
+            label: new Date(ts).toLocaleString("he-IL"),
+          };
+          window.saveToCloud(`backups/${weekKey}/${ts}`, snap);
+          window.pruneBackups(weekKey);
+        } catch (e) {
+          console.warn("גיבוי נכשל:", e);
+        }
+      };
+
+      // השארת BACKUPS_TO_KEEP הגרסאות האחרונות בלבד
+      window.pruneBackups = function (weekKey) {
+        if (!window._fbImports || !window._firebaseDb) return;
+        const { ref, get, remove } = window._fbImports;
+        get(ref(window._firebaseDb, `backups/${weekKey}`))
+          .then((snap) => {
+            if (!snap.exists()) return;
+            const keys = Object.keys(snap.val())
+              .map(Number)
+              .sort((a, b) => a - b);
+            const extra = keys.length - window.BACKUPS_TO_KEEP;
+            for (let i = 0; i < extra; i++)
+              remove(ref(window._firebaseDb, `backups/${weekKey}/${keys[i]}`));
+          })
+          .catch(() => {});
+      };
+
+      // הצגת רשימת הגיבויים לשבוע הנבחר
+      window.renderBackupsList = function () {
+        const cont = document.getElementById("backupsListContainer");
+        if (!cont) return;
+        if (!window._fbImports || !window._firebaseDb) {
+          cont.innerHTML = "<i>רכיב הענן לא נטען.</i>";
+          return;
+        }
+        const weekKey = window.currentSelectedWeek;
+        const weekLabel = window.formatWeekString(
+          window.getSunday(window.currentWeekOffset || 0),
+        );
+        const { ref, get } = window._fbImports;
+        cont.innerHTML = "<i>טוען...</i>";
+        get(ref(window._firebaseDb, `backups/${weekKey}`))
+          .then((snap) => {
+            if (!snap.exists()) {
+              cont.innerHTML = `<i style="color:var(--md-text-secondary);">אין גיבויים לשבוע ${weekLabel}. גיבוי נוצר אוטומטית בכל שמירה לענן.</i>`;
+              return;
+            }
+            const val = snap.val();
+            const keys = Object.keys(val)
+              .map(Number)
+              .sort((a, b) => b - a);
+            let html = `<div style="font-size:0.85rem; color:var(--md-text-secondary); margin-bottom:8px;">שבוע ${weekLabel} — ${keys.length} גרסאות שמורות:</div>`;
+            keys.forEach((k) => {
+              const meta = (val[k] && val[k]._backupMeta) || {};
+              const label = meta.label || new Date(k).toLocaleString("he-IL");
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; border-bottom:1px solid var(--md-divider);">
+                <span style="font-size:0.9rem;">🕒 ${label}</span>
+                <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem; border-color:var(--md-primary); color:var(--md-primary);" onclick="window.restoreBackup('${weekKey}', ${k})">שחזר</button>
+              </div>`;
+            });
+            cont.innerHTML = html;
+          })
+          .catch((e) => {
+            cont.innerHTML = "<i>שגיאה בטעינת הגיבויים.</i>";
+            console.warn(e);
+          });
+      };
+
+      // שחזור גרסה — טוען למסך (לא נשמר עד שהמנהל לוחץ שמור)
+      window.restoreBackup = function (weekKey, ts) {
+        if (
+          !confirm(
+            "לשחזר את הגרסה הזו?\nהלוח שעל המסך יוחלף בגרסה השמורה — אך זה לא יישמר עד שתלחץ 'שמור לענן'.",
+          )
+        )
+          return;
+        const { ref, get } = window._fbImports;
+        get(ref(window._firebaseDb, `backups/${weekKey}/${ts}`))
+          .then((snap) => {
+            if (!snap.exists()) {
+              alert("הגיבוי לא נמצא.");
+              return;
+            }
+            const data = snap.val();
+            delete data._backupMeta;
+            window.currentSchedule = data;
+            if (Array.isArray(data.staff)) window.staff = data.staff;
+            if (typeof window.recomputeNotesFromSchedule === "function")
+              window.recomputeNotesFromSchedule();
+            if (typeof window.renderStaff === "function") window.renderStaff();
+            window.triggerUnsavedChanges();
+            if (typeof window.renderTable === "function")
+              window.renderTable(window.currentSchedule, window.currentNotesLog);
+            window.showPage("schedule");
+            alert(
+              "✅ הגרסה שוחזרה למסך.\nבדוק שהכל תקין ולחץ 'שמור לענן' כדי להחיל.",
+            );
+          })
+          .catch((e) => alert("שגיאה בשחזור: " + (e.message || e)));
+      };
+
+      // הורדת גיבוי מלא של כל הנתונים לקובץ JSON (גיבוי חיצוני)
+      window.downloadFullBackup = function () {
+        if (!window._fbImports || !window._firebaseDb) {
+          alert("רכיב הענן לא נטען.");
+          return;
+        }
+        const { ref, get } = window._fbImports;
+        get(ref(window._firebaseDb, "/"))
+          .then((snap) => {
+            const data = snap.exists() ? snap.val() : {};
+            // ללא תיקיית הגיבויים עצמה — כדי לא לנפח את הקובץ
+            if (data.backups) delete data.backups;
+            const blob = new Blob([JSON.stringify(data, null, 2)], {
+              type: "application/json",
+            });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `shifts_backup_${new Date().toISOString().split("T")[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          })
+          .catch((e) => alert("שגיאה בהורדת הגיבוי: " + (e.message || e)));
       };
 
       window.loggedInUser = null;
@@ -2131,6 +2275,8 @@
             else if (Notification.permission === "denied") notifEl.textContent = "❌ חסום";
             else notifEl.textContent = "⚠️ לא הופעל";
           }
+          if (typeof window.renderBackupsList === "function")
+            window.renderBackupsList();
         }
         if (p === "staff" && typeof window.renderStaff === "function")
           window.renderStaff();

@@ -1788,6 +1788,40 @@
 
           <div
             class="card-paper manager-only"
+            style="border-left: 4px solid #0d9488; margin-top: 20px"
+          >
+            <h3 style="color: #0d9488; margin-top: 0">💾 גיבויים ושחזור</h3>
+            <p
+              style="
+                font-size: 0.85rem;
+                margin-top: 0;
+                color: var(--md-text-secondary);
+              "
+            >
+              גיבוי של הלוח נשמר אוטומטית בכל שמירה לענן (נשמרות 10 הגרסאות
+              האחרונות לכל שבוע). ניתן לשחזר גרסה קודמת של השבוע שמוצג כעת.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px">
+              <button
+                class="btn btn-outlined"
+                style="border-color: #0d9488; color: #0d9488"
+                onclick="window.renderBackupsList()"
+              >
+                🔄 רענן רשימת גרסאות
+              </button>
+              <button
+                class="btn btn-contained"
+                style="background: #0d9488"
+                onclick="window.downloadFullBackup()"
+              >
+                📥 הורד גיבוי מלא (JSON)
+              </button>
+            </div>
+            <div id="backupsListContainer" style="overflow-x: auto"></div>
+          </div>
+
+          <div
+            class="card-paper manager-only"
             style="border-left: 4px solid #0284c7; margin-top: 20px"
           >
             <h3 style="color: #0284c7; margin-top: 0">
