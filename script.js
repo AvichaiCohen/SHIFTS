@@ -429,6 +429,25 @@
             window.currentSchedule,
           );
 
+          // התראות שינוי משמרת — רק לשבוע שפורסם לעובדים
+          if (
+            window.currentSchedule.isPublished &&
+            typeof window.computeAssignmentMap === "function"
+          ) {
+            const newMap = window.computeAssignmentMap(window.currentSchedule);
+            const oldMap = window._scheduleBaseline || {};
+            const weekLabel = window.formatWeekString(
+              window.getSunday(window.currentWeekOffset || 0),
+            );
+            window._generateShiftChangeNotifs(
+              oldMap,
+              newMap,
+              window.currentSelectedWeek,
+              weekLabel,
+            );
+            window._scheduleBaseline = newMap;
+          }
+
           let weekendWorkers = new Set();
           // חמישי-לילה נחשב סופ"ש רק במת"ל (לא בזירה)
           const locWeekendMap = [
@@ -470,6 +489,132 @@
         window.currentSchedule.isPublished =
           !window.currentSchedule.isPublished;
         window.triggerUnsavedChanges();
+      };
+
+      // ===== מערכת התראות שינוי משמרות =====
+
+      // מפת שיבוצים: לכל מזהה עובד — רשימת "יום|משמרת|מיקום" שהוא משובץ בהם
+      window.computeAssignmentMap = function (sched) {
+        const map = {};
+        if (!sched) return map;
+        const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
+        days.forEach((day) => {
+          allShifts.forEach((shift) => {
+            const slot = sched[`${day}-${shift}`];
+            if (!slot) return;
+            baseLocs.forEach((loc) => {
+              const arr = slot[loc];
+              if (!Array.isArray(arr)) return;
+              arr.forEach((emp) => {
+                if (emp == null || emp.id == null) return;
+                (map[emp.id] = map[emp.id] || []).push(
+                  `${day}|${shift}|${loc}`,
+                );
+              });
+            });
+          });
+        });
+        return map;
+      };
+
+      // השוואת מצב ישן לחדש — כתיבת התראה לכל עובד שהשתנו לו המשמרות
+      window._generateShiftChangeNotifs = function (
+        oldMap,
+        newMap,
+        weekKey,
+        weekLabel,
+      ) {
+        const ids = new Set([
+          ...Object.keys(oldMap || {}),
+          ...Object.keys(newMap || {}),
+        ]);
+        const fmt = (s) => s.split("|").join(" ");
+        ids.forEach((id) => {
+          const oldSet = new Set((oldMap && oldMap[id]) || []);
+          const newSet = new Set((newMap && newMap[id]) || []);
+          const added = [...newSet].filter((x) => !oldSet.has(x));
+          const removed = [...oldSet].filter((x) => !newSet.has(x));
+          if (added.length === 0 && removed.length === 0) return;
+          const record = {
+            weekKey,
+            weekLabel: weekLabel || "",
+            ts: Date.now(),
+            added: added.map(fmt),
+            removed: removed.map(fmt),
+            seen: false,
+          };
+          // נשמר לפי שבוע — שמירה חוזרת מעדכנת ולא מצברת התראות כפולות
+          window.saveToCloud(
+            "shiftChangeNotifs/" + id + "/" + weekKey,
+            record,
+          );
+        });
+      };
+
+      // האזנה להתראות של העובד המחובר
+      window._shiftNotifUnsub = null;
+      window.subscribeShiftNotifs = function (empId) {
+        if (empId == null || !window._fbImports || !window._firebaseDb) return;
+        const { ref, onValue } = window._fbImports;
+        if (window._shiftNotifUnsub) {
+          try {
+            window._shiftNotifUnsub();
+          } catch (e) {}
+        }
+        window._shiftNotifUnsub = onValue(
+          ref(window._firebaseDb, "shiftChangeNotifs/" + empId),
+          (snap) => {
+            window._myShiftNotifs = snap.exists() ? snap.val() || {} : {};
+            window.renderShiftChangeBanner();
+          },
+        );
+      };
+
+      window.renderShiftChangeBanner = function () {
+        const el = document.getElementById("shiftChangeBanner");
+        if (!el) return;
+        const notifs = window._myShiftNotifs || {};
+        const unseen = Object.keys(notifs)
+          .map((k) => Object.assign({ key: k }, notifs[k]))
+          .filter((n) => n && !n.seen);
+        if (unseen.length === 0) {
+          el.style.display = "none";
+          el.innerHTML = "";
+          return;
+        }
+        let html = "";
+        unseen
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+          .forEach((n) => {
+            let lines = "";
+            if (n.added && n.added.length)
+              lines += `<div style="color:#15803d; font-size:0.88rem; margin-top:3px;">➕ נוסף: ${n.added.join(" · ")}</div>`;
+            if (n.removed && n.removed.length)
+              lines += `<div style="color:#b91c1c; font-size:0.88rem; margin-top:3px;">➖ הוסר: ${n.removed.join(" · ")}</div>`;
+            html += `<div style="background:#fff; border-right:4px solid #f59e0b; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div><b style="color:#b45309;">🔔 עודכנו לך המשמרות</b> <span style="color:#64748b; font-size:0.8rem;">${n.weekLabel || ""}</span>${lines}</div>
+                <button onclick="window.dismissShiftNotif('${n.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+              </div>
+            </div>`;
+          });
+        el.innerHTML = html;
+        el.style.display = "block";
+      };
+
+      window.dismissShiftNotif = function (weekKey) {
+        const id =
+          (window.loggedInWorker && window.loggedInWorker.id) ||
+          (window.loggedInUser && window.loggedInUser.id);
+        if (id == null) return;
+        if (window._myShiftNotifs && window._myShiftNotifs[weekKey]) {
+          window._myShiftNotifs[weekKey].seen = true; // הסתרה מיידית
+          window.renderShiftChangeBanner();
+        }
+        window.saveToCloud(
+          "shiftChangeNotifs/" + id + "/" + weekKey + "/seen",
+          true,
+        );
       };
 
       window.loggedInUser = null;
@@ -564,6 +709,8 @@
               reqSelector.setAttribute("disabled", "true");
               reqSelector.style.background = "#e2e8f0";
             }
+            if (typeof window.subscribeShiftNotifs === "function")
+              window.subscribeShiftNotifs(emp.id);
             window.showPage("schedule");
             if (typeof window.renderTable === "function")
               window.renderTable(
@@ -694,6 +841,9 @@
           if (typeof window.populateWorkerRequestNames === "function")
             window.populateWorkerRequestNames();
 
+          if (typeof window.subscribeShiftNotifs === "function")
+            window.subscribeShiftNotifs(emp.id);
+
           window.showPage("schedule");
           if (typeof window.renderTable === "function")
             window.renderTable(window.currentSchedule, window.currentNotesLog);
@@ -731,6 +881,13 @@
 
         if (typeof window.populateWorkerRequestNames === "function")
           window.populateWorkerRequestNames();
+
+        // הרשמה להתראות שינוי משמרות עבור המשתמש המחובר
+        const _notifId =
+          (window.loggedInWorker && window.loggedInWorker.id) ||
+          (window.loggedInUser && window.loggedInUser.id);
+        if (_notifId != null && typeof window.subscribeShiftNotifs === "function")
+          window.subscribeShiftNotifs(_notifId);
 
         window.showPage("schedule");
         if (typeof window.renderTable === "function")

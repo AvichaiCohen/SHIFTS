@@ -269,6 +269,11 @@
               window.renderTrackingPage();
             if (typeof window.populateWorkerRequestNames === "function")
               window.populateWorkerRequestNames();
+            // בסיס להשוואת שינויי משמרות — מצב הלוח כפי שנטען (לפני עריכות)
+            if (typeof window.computeAssignmentMap === "function")
+              window._scheduleBaseline = window.computeAssignmentMap(
+                window.currentSchedule,
+              );
           },
         );
       };
@@ -754,6 +759,8 @@
 
       <main class="main-content">
         <div id="page-schedule" class="container active">
+          <!-- באנר התראות שינוי משמרות (לעובד) -->
+          <div id="shiftChangeBanner" style="display: none"></div>
           <div
             style="
               display: flex;
