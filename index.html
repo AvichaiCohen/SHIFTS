@@ -320,11 +320,6 @@
               window.renderTrackingPage();
             if (typeof window.populateWorkerRequestNames === "function")
               window.populateWorkerRequestNames();
-            // בסיס להשוואת שינויי משמרות — מצב הלוח כפי שנטען (לפני עריכות)
-            if (typeof window.computeAssignmentMap === "function")
-              window._scheduleBaseline = window.computeAssignmentMap(
-                window.currentSchedule,
-              );
           },
         );
       };

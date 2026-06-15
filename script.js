@@ -417,43 +417,22 @@
       };
 
       window.commitChangesToCloud = function () {
-        if (typeof window.saveToCloud === "function") {
-          window.currentSchedule.staff = window.staff;
+        if (typeof window.saveToCloud !== "function") return;
+        window.currentSchedule.staff = window.staff;
+        const wk = window.currentSelectedWeek;
+
+        // שלב השמירה בפועל (מופעל אחרי שקראנו את המצב הישן לצורך ההתראות)
+        const finishSave = () => {
           // שמור עותק מדויק של מה שנשלח לענן — ה-onValue יקרא אותו ולא יחליף בנתוני Firebase
           window._pendingCloudData = {
-            weekKey: window.currentSelectedWeek,
+            weekKey: wk,
             data: JSON.parse(JSON.stringify(window.currentSchedule)),
           };
-          window.saveToCloud(
-            "schedules/" + window.currentSelectedWeek,
-            window.currentSchedule,
-          );
+          window.saveToCloud("schedules/" + wk, window.currentSchedule);
 
           // גיבוי אוטומטי — תמונת מצב של השבוע עם חותמת זמן (היסטוריית גרסאות)
           if (typeof window.saveScheduleBackup === "function")
-            window.saveScheduleBackup(
-              window.currentSelectedWeek,
-              window.currentSchedule,
-            );
-
-          // התראות שינוי משמרת — רק לשבוע שפורסם לעובדים
-          if (
-            window.currentSchedule.isPublished &&
-            typeof window.computeAssignmentMap === "function"
-          ) {
-            const newMap = window.computeAssignmentMap(window.currentSchedule);
-            const oldMap = window._scheduleBaseline || {};
-            const weekLabel = window.formatWeekString(
-              window.getSunday(window.currentWeekOffset || 0),
-            );
-            window._generateShiftChangeNotifs(
-              oldMap,
-              newMap,
-              window.currentSelectedWeek,
-              weekLabel,
-            );
-            window._scheduleBaseline = newMap;
-          }
+            window.saveScheduleBackup(wk, window.currentSchedule);
 
           let weekendWorkers = new Set();
           // חמישי-לילה נחשב סופ"ש רק במת"ל (לא בזירה)
@@ -488,6 +467,31 @@
           const saveBtn = document.getElementById("cloudSaveWarningBtn");
           if (saveBtn) saveBtn.style.display = "none";
           alert('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
+        };
+
+        // התראות שינוי משמרת — משווים מול המצב ששמור בענן (אמין), לפני הדריסה
+        if (
+          window.currentSchedule.isPublished &&
+          window._fbImports &&
+          window._firebaseDb &&
+          typeof window.computeAssignmentMap === "function"
+        ) {
+          const { ref, get } = window._fbImports;
+          const newMap = window.computeAssignmentMap(window.currentSchedule);
+          const weekLabel = window.formatWeekString(
+            window.getSunday(window.currentWeekOffset || 0),
+          );
+          get(ref(window._firebaseDb, "schedules/" + wk))
+            .then((snap) => {
+              const oldMap = window.computeAssignmentMap(
+                snap.exists() ? snap.val() : {},
+              );
+              window._generateShiftChangeNotifs(oldMap, newMap, wk, weekLabel);
+            })
+            .catch((e) => console.warn("חישוב התראות נכשל:", e))
+            .finally(finishSave);
+        } else {
+          finishSave();
         }
       };
 
@@ -548,7 +552,6 @@
             ts: Date.now(),
             added: added.map(fmt),
             removed: removed.map(fmt),
-            seen: false,
           };
           // נשמר לפי שבוע — שמירה חוזרת מעדכנת ולא מצברת התראות כפולות
           window.saveToCloud(
@@ -577,20 +580,37 @@
         );
       };
 
+      // עובדים הם קריאה-בלבד, לכן ה"נקרא" נשמר מקומית (localStorage) ולא בענן
+      window._dismissedNotifKey = function () {
+        const id =
+          (window.loggedInWorker && window.loggedInWorker.id) ||
+          (window.loggedInUser && window.loggedInUser.id);
+        return "shift_dismissed_notifs_" + (id == null ? "x" : id);
+      };
+      window._getDismissedNotifs = function () {
+        try {
+          return JSON.parse(localStorage.getItem(window._dismissedNotifKey())) || {};
+        } catch (e) {
+          return {};
+        }
+      };
+
       window.renderShiftChangeBanner = function () {
         const el = document.getElementById("shiftChangeBanner");
         if (!el) return;
         const notifs = window._myShiftNotifs || {};
-        const unseen = Object.keys(notifs)
+        const dismissed = window._getDismissedNotifs();
+        // מציגים התראה רק אם חותמת-הזמן שלה לא נסגרה מקומית
+        const active = Object.keys(notifs)
           .map((k) => Object.assign({ key: k }, notifs[k]))
-          .filter((n) => n && !n.seen);
-        if (unseen.length === 0) {
+          .filter((n) => n && n.ts && dismissed[n.key] !== n.ts);
+        if (active.length === 0) {
           el.style.display = "none";
           el.innerHTML = "";
           return;
         }
         let html = "";
-        unseen
+        active
           .sort((a, b) => (b.ts || 0) - (a.ts || 0))
           .forEach((n) => {
             let lines = "";
@@ -610,18 +630,18 @@
       };
 
       window.dismissShiftNotif = function (weekKey) {
-        const id =
-          (window.loggedInWorker && window.loggedInWorker.id) ||
-          (window.loggedInUser && window.loggedInUser.id);
-        if (id == null) return;
-        if (window._myShiftNotifs && window._myShiftNotifs[weekKey]) {
-          window._myShiftNotifs[weekKey].seen = true; // הסתרה מיידית
-          window.renderShiftChangeBanner();
-        }
-        window.saveToCloud(
-          "shiftChangeNotifs/" + id + "/" + weekKey + "/seen",
-          true,
-        );
+        const notifs = window._myShiftNotifs || {};
+        const n = notifs[weekKey];
+        if (!n) return;
+        const dismissed = window._getDismissedNotifs();
+        dismissed[weekKey] = n.ts; // נסגר לגרסה הספציפית הזו; שינוי חדש יציג שוב
+        try {
+          localStorage.setItem(
+            window._dismissedNotifKey(),
+            JSON.stringify(dismissed),
+          );
+        } catch (e) {}
+        window.renderShiftChangeBanner();
       };
 
       // ===== גיבוי אוטומטי ושחזור =====
