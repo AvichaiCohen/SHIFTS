@@ -3655,21 +3655,17 @@
 
         // שמירה לשבוע הנכון לפי התאריך שנבחר
         if (typeof window.saveToCloud === "function") {
+          // עדכון מטמון מקומי לתצוגה מיידית (רק לשבוע המוצג)
           if (targetWeekKey === window.currentSelectedWeek) {
             if (!window.currentSchedule.pendingRequests)
               window.currentSchedule.pendingRequests = {};
             window.currentSchedule.pendingRequests[reqId] = newRequest;
-            window.saveToCloud(
-              "schedules/" + targetWeekKey + "/pendingRequests",
-              window.currentSchedule.pendingRequests,
-            );
-          } else {
-            // בקשה לשבוע עתידי — שמירה ישירה ל-Firebase ללא עדכון מטמון מקומי
-            window.saveToCloud(
-              "schedules/" + targetWeekKey + "/pendingRequests/" + reqId,
-              newRequest,
-            );
           }
+          // כתיבה של הבקשה הבודדת לפי מזהה — מאפשר חוק הרשאה מוקשח (עובד מוסיף בלבד)
+          window.saveToCloud(
+            "schedules/" + targetWeekKey + "/pendingRequests/" + reqId,
+            newRequest,
+          );
 
           // הודעת הצלחה + איפוס הטופס
           const fDate = dateVal.split("-").reverse().join(".");

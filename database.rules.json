@@ -1,6 +1,15 @@
 {
   "rules": {
     ".read": "auth != null",
-    ".write": "auth.token.email === 'admin@shifts-ta26.com'"
+    ".write": "auth.token.email === 'admin@shifts-ta26.com'",
+    "schedules": {
+      "$week": {
+        "pendingRequests": {
+          "$reqId": {
+            ".write": "auth != null && !data.exists()"
+          }
+        }
+      }
+    }
   }
 }
