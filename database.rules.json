@@ -10,6 +10,13 @@
           }
         }
       }
+    },
+    "myRequests": {
+      "$empId": {
+        "$reqId": {
+          ".write": "auth != null && !data.exists()"
+        }
+      }
     }
   }
 }

@@ -561,8 +561,9 @@
         });
       };
 
-      // האזנה להתראות של העובד המחובר
+      // האזנה להתראות של העובד המחובר (שינויי משמרת + סטטוס בקשות)
       window._shiftNotifUnsub = null;
+      window._myReqUnsub = null;
       window.subscribeShiftNotifs = function (empId) {
         if (empId == null || !window._fbImports || !window._firebaseDb) return;
         const { ref, onValue } = window._fbImports;
@@ -578,39 +579,74 @@
             window.renderShiftChangeBanner();
           },
         );
+        // האזנה לבקשות העובד וסטטוסן
+        if (window._myReqUnsub) {
+          try {
+            window._myReqUnsub();
+          } catch (e) {}
+        }
+        window._myReqUnsub = onValue(
+          ref(window._firebaseDb, "myRequests/" + empId),
+          (snap) => {
+            window._myRequests = snap.exists() ? snap.val() || {} : {};
+            window.renderShiftChangeBanner();
+            if (typeof window.renderMyRequestsList === "function")
+              window.renderMyRequestsList();
+          },
+        );
       };
 
-      // עובדים הם קריאה-בלבד, לכן ה"נקרא" נשמר מקומית (localStorage) ולא בענן
-      window._dismissedNotifKey = function () {
+      // עובדים הם קריאה-בלבד — סימון "נקרא" נשמר מקומית (localStorage) לפי תחום
+      window._dismissStore = function (ns) {
         const id =
           (window.loggedInWorker && window.loggedInWorker.id) ||
           (window.loggedInUser && window.loggedInUser.id);
-        return "shift_dismissed_notifs_" + (id == null ? "x" : id);
+        return "dismiss_" + ns + "_" + (id == null ? "x" : id);
       };
-      window._getDismissedNotifs = function () {
+      window._getDismissed = function (ns) {
         try {
-          return JSON.parse(localStorage.getItem(window._dismissedNotifKey())) || {};
+          return JSON.parse(localStorage.getItem(window._dismissStore(ns))) || {};
         } catch (e) {
           return {};
         }
       };
+      window._setDismissedItem = function (ns, key, val) {
+        const d = window._getDismissed(ns);
+        d[key] = val;
+        try {
+          localStorage.setItem(window._dismissStore(ns), JSON.stringify(d));
+        } catch (e) {}
+      };
 
+      // תיאור קריא של בקשה
+      window._reqDesc = function (r) {
+        const dateStr = r.date ? r.date.split("-").reverse().join(".") : "";
+        const typeStr =
+          r.type === "vacation"
+            ? "יום חופש"
+            : r.type === "constraint"
+              ? "אילוץ"
+              : "בקשת שיבוץ";
+        let s = `${typeStr} — ${dateStr}`;
+        if (r.day) s += ` (${r.day})`;
+        if (r.type !== "vacation" && r.shift) s += ` · ${r.shift}`;
+        if (r.type === "shift" && r.loc && typeof window.getLocName === "function")
+          s += ` · ${window.getLocName(r.loc)}`;
+        return s;
+      };
+
+      // באנר התראות לעובד — שינויי משמרת + החלטות על בקשות
       window.renderShiftChangeBanner = function () {
         const el = document.getElementById("shiftChangeBanner");
         if (!el) return;
-        const notifs = window._myShiftNotifs || {};
-        const dismissed = window._getDismissedNotifs();
-        // מציגים התראה רק אם חותמת-הזמן שלה לא נסגרה מקומית
-        const active = Object.keys(notifs)
-          .map((k) => Object.assign({ key: k }, notifs[k]))
-          .filter((n) => n && n.ts && dismissed[n.key] !== n.ts);
-        if (active.length === 0) {
-          el.style.display = "none";
-          el.innerHTML = "";
-          return;
-        }
         let html = "";
-        active
+
+        // 1. שינויי משמרת
+        const notifs = window._myShiftNotifs || {};
+        const dShift = window._getDismissed("shift");
+        Object.keys(notifs)
+          .map((k) => Object.assign({ key: k }, notifs[k]))
+          .filter((n) => n && n.ts && dShift[n.key] !== n.ts)
           .sort((a, b) => (b.ts || 0) - (a.ts || 0))
           .forEach((n) => {
             let lines = "";
@@ -625,23 +661,83 @@
               </div>
             </div>`;
           });
+
+        // 2. החלטות על בקשות (אושרו / נדחו)
+        const reqs = window._myRequests || {};
+        const dReq = window._getDismissed("req");
+        Object.keys(reqs)
+          .map((k) => Object.assign({ key: k }, reqs[k]))
+          .filter(
+            (r) =>
+              r &&
+              (r.status === "approved" || r.status === "rejected") &&
+              r.statusTs &&
+              dReq[r.key] !== r.statusTs,
+          )
+          .sort((a, b) => (b.statusTs || 0) - (a.statusTs || 0))
+          .forEach((r) => {
+            const ok = r.status === "approved";
+            const color = ok ? "#15803d" : "#b91c1c";
+            const title = ok ? "✅ בקשתך אושרה" : "❌ בקשתך נדחתה";
+            html += `<div style="background:#fff; border-right:4px solid ${color}; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${window._reqDesc(r)}</div></div>
+                <button onclick="window.dismissRequestNotif('${r.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+              </div>
+            </div>`;
+          });
+
+        if (!html) {
+          el.style.display = "none";
+          el.innerHTML = "";
+          return;
+        }
         el.innerHTML = html;
         el.style.display = "block";
       };
 
       window.dismissShiftNotif = function (weekKey) {
-        const notifs = window._myShiftNotifs || {};
-        const n = notifs[weekKey];
+        const n = (window._myShiftNotifs || {})[weekKey];
         if (!n) return;
-        const dismissed = window._getDismissedNotifs();
-        dismissed[weekKey] = n.ts; // נסגר לגרסה הספציפית הזו; שינוי חדש יציג שוב
-        try {
-          localStorage.setItem(
-            window._dismissedNotifKey(),
-            JSON.stringify(dismissed),
-          );
-        } catch (e) {}
+        window._setDismissedItem("shift", weekKey, n.ts);
         window.renderShiftChangeBanner();
+      };
+
+      window.dismissRequestNotif = function (reqId) {
+        const r = (window._myRequests || {})[reqId];
+        if (!r) return;
+        window._setDismissedItem("req", reqId, r.statusTs);
+        window.renderShiftChangeBanner();
+      };
+
+      // רשימת הבקשות של העובד וסטטוסן (בעמוד הגשת הבקשות)
+      window.renderMyRequestsList = function () {
+        const cont = document.getElementById("myRequestsList");
+        if (!cont) return;
+        const reqs = window._myRequests || {};
+        const arr = Object.keys(reqs)
+          .map((k) => reqs[k])
+          .filter(Boolean)
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        if (arr.length === 0) {
+          cont.innerHTML =
+            "<i style='color:var(--md-text-secondary)'>עדיין לא הגשת בקשות.</i>";
+          return;
+        }
+        let html = "";
+        arr.forEach((r) => {
+          const badge =
+            r.status === "approved"
+              ? `<span style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">✅ אושרה</span>`
+              : r.status === "rejected"
+                ? `<span style="background:#fee2e2; color:#b91c1c; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">❌ נדחתה</span>`
+                : `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">⏳ ממתינה</span>`;
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--md-divider);">
+            <div><div style="font-weight:500;">${window._reqDesc(r)}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${r.note}</div>` : ""}</div>
+            ${badge}
+          </div>`;
+        });
+        cont.innerHTML = html;
       };
 
       // ===== גיבוי אוטומטי ושחזור =====
@@ -2309,6 +2405,11 @@
           if (typeof window.renderWeekendJusticeTable === "function")
             window.renderWeekendJusticeTable();
         }
+        if (
+          p === "worker-requests" &&
+          typeof window.renderMyRequestsList === "function"
+        )
+          window.renderMyRequestsList();
       };
 
       window.setLocFilter = function (loc) {
@@ -3666,6 +3767,20 @@
             "schedules/" + targetWeekKey + "/pendingRequests/" + reqId,
             newRequest,
           );
+          // מראה אישית לעובד — רשימת בקשות וסטטוס (שורדת גם אחרי טיפול המנהל)
+          window.saveToCloud("myRequests/" + emp.id + "/" + reqId, {
+            id: reqId,
+            empId: emp.id,
+            date: dateVal,
+            day,
+            type,
+            shift,
+            loc,
+            note,
+            weekKey: targetWeekKey,
+            status: "pending",
+            ts: reqId,
+          });
 
           // הודעת הצלחה + איפוס הטופס
           const fDate = dateVal.split("-").reverse().join(".");
@@ -3774,6 +3889,17 @@
             "schedules/" + window.currentSelectedWeek,
             window.currentSchedule,
           );
+          // עדכון הסטטוס במראה האישית של העובד → מפעיל התראה אצלו
+          if (r.empId != null) {
+            window.saveToCloud(
+              "myRequests/" + r.empId + "/" + reqId + "/status",
+              isApproved ? "approved" : "rejected",
+            );
+            window.saveToCloud(
+              "myRequests/" + r.empId + "/" + reqId + "/statusTs",
+              Date.now(),
+            );
+          }
           alert(
             isApproved
               ? "הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
