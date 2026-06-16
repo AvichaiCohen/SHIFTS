@@ -3768,19 +3768,24 @@
             newRequest,
           );
           // מראה אישית לעובד — רשימת בקשות וסטטוס (שורדת גם אחרי טיפול המנהל)
-          window.saveToCloud("myRequests/" + emp.id + "/" + reqId, {
-            id: reqId,
-            empId: emp.id,
-            date: dateVal,
-            day,
-            type,
-            shift,
-            loc,
-            note,
-            weekKey: targetWeekKey,
-            status: "pending",
-            ts: reqId,
-          });
+          // כתיבה שקטה: גם אם תיכשל, הבקשה האמיתית כבר נשלחה למנהל
+          window.saveToCloud(
+            "myRequests/" + emp.id + "/" + reqId,
+            {
+              id: reqId,
+              empId: emp.id,
+              date: dateVal,
+              day,
+              type,
+              shift,
+              loc,
+              note,
+              weekKey: targetWeekKey,
+              status: "pending",
+              ts: reqId,
+            },
+            { silent: true },
+          );
 
           // הודעת הצלחה + איפוס הטופס
           const fDate = dateVal.split("-").reverse().join(".");

@@ -101,12 +101,14 @@
       window._firebaseDb = db;
       window._fbImports = { ref, onValue, off, get, set, remove };
 
-      window.saveToCloud = (path, data) => {
+      // opts.silent = true → כתיבת רקע, לא מציגים שגיאה למשתמש (למשל מראה אישית של בקשות)
+      window.saveToCloud = (path, data, opts) => {
         if (data === undefined) return;
         // Firebase rejects undefined values — strip via JSON round-trip
         const clean = JSON.parse(JSON.stringify(data));
         set(ref(db, path), clean).catch((err) => {
           console.error("שגיאה בשמירה:", err);
+          if (opts && opts.silent) return;
           const isPerm =
             err &&
             (err.code === "PERMISSION_DENIED" ||
