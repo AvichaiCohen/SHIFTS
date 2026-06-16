@@ -5801,79 +5801,197 @@
         document.getElementById("aiRunSection").style.display = "none";
       };
 
-      window.buildAIPrompt = function () {
+      window.buildAIPrompt = async function () {
         const LOC_ZIRA = "זירה";
         const LOC_MATAL = 'מת"ל';
         const allDays = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
         const shifts = window.isEmergencyMode ? ["24 שעות"] : ["בוקר", "ערב", "לילה"];
 
+        // עובדים — הגדרות מלאות (זמינות משמרות, מיקום, אילוצים, בקשות)
         const staffLines = (window.staff || [])
-          .filter(e => e.isActive !== false)
-          .map(e => {
-            let line = "- " + e.name + " | סוג: " + e.type;
-            if (e.fixedLoc) line += " | מיקום קבוע: " + e.fixedLoc;
-            if (e.noNights) line += " | לא לילות";
-            if (e.constraints && e.constraints.length) line += " | אסור: " + e.constraints.join(", ");
-            return line;
+          .filter((e) => e.isActive !== false)
+          .map((e) => {
+            let parts = ["סוג: " + e.type];
+            if (e.fixedLoc) parts.push("מיקום קבוע: " + e.fixedLoc);
+            const avail = [];
+            if (e.canMorning !== false) avail.push("בוקר");
+            if (e.canEvening !== false) avail.push("ערב");
+            if (e.canNight !== false && !e.noNights) avail.push("לילה");
+            parts.push("זמין ל: " + (avail.length ? avail.join("/") : "—"));
+            if (e.type === "טכנאי")
+              parts.push(e.canZiraEvening ? "מותר ערב זירה" : "ללא ערב זירה");
+            if (e.type === "נחפף")
+              parts.push(e.ziraWeekendAllowed ? "מותר שבת זירה" : 'מת"ל בלבד');
+            if (e.constraints && e.constraints.length)
+              parts.push("אסור: " + e.constraints.join(", "));
+            if (e.prefs && e.prefs.length)
+              parts.push(
+                "ביקש: " +
+                  e.prefs
+                    .map((p) => `${p.day}-${p.shift}-${p.loc}`)
+                    .join(", "),
+              );
+            return "- " + e.name + " | " + parts.join(" | ");
           })
           .join("\n");
 
+        // חוקי כמויות מדויקים מתוך ההגדרות
+        const ruleStr = (loc, key) => {
+          const r = window.rules && window.rules[loc] && window.rules[loc][key];
+          if (!r || !r.count) return null;
+          let s = `בדיוק ${r.count} אנשים`;
+          if (r.roles && r.roles.length) s += ` (תפקידים: ${r.roles.join("/")})`;
+          return s;
+        };
+        const ruleLines = [];
+        [LOC_ZIRA, LOC_MATAL].forEach((loc) => {
+          [
+            ["weekday_בוקר", "בוקר"],
+            ["weekday_ערב", "ערב"],
+            ["weekday_לילה", "לילה"],
+            ["weekend", 'סופ"ש 24ש'],
+          ].forEach(([k, label]) => {
+            const s = ruleStr(loc, k);
+            if (s) ruleLines.push(`- ${loc} / ${label}: ${s}`);
+          });
+        });
+
+        // דפוסי עבר — 6 שבועות אחרונים (כדי לשבץ לפי נטיות והרגלים)
+        const pastDist = {};
+        if (window._fbImports && window._firebaseDb) {
+          const { ref, get } = window._fbImports;
+          for (let off = -6; off <= -1; off++) {
+            try {
+              const sun = window.getSunday(
+                (window.currentWeekOffset || 0) + off,
+              );
+              const wk = window.getWeekDbKey(sun);
+              const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
+              if (!snap.exists()) continue;
+              const sched = snap.val();
+              allDays.forEach((d) => {
+                ["בוקר", "ערב", "לילה", "24 שעות"].forEach((s) => {
+                  [LOC_ZIRA, LOC_MATAL].forEach((loc) => {
+                    const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
+                    if (!Array.isArray(arr)) return;
+                    arr.forEach((e) => {
+                      if (!e || !e.name) return;
+                      const dd = (pastDist[e.name] = pastDist[e.name] || {
+                        בוקר: 0,
+                        ערב: 0,
+                        לילה: 0,
+                        זירה: 0,
+                        'מת"ל': 0,
+                      });
+                      if (s !== "24 שעות") dd[s] = (dd[s] || 0) + 1;
+                      dd[loc] = (dd[loc] || 0) + 1;
+                    });
+                  });
+                });
+              });
+            } catch (e) {}
+          }
+        }
+        const pastLines = Object.keys(pastDist).map((name) => {
+          const d = pastDist[name];
+          return `- ${name}: בוקר×${d.בוקר || 0} ערב×${d.ערב || 0} לילה×${d.לילה || 0} | זירה×${d.זירה || 0} מת"ל×${d['מת"ל'] || 0}`;
+        });
+
+        // הוגנות סופ"ש — מי סגר הכי מעט (להעדיף לסופ"ש הקרוב)
+        const wh = window.weekendHistory || {};
+        const fairness = (window.staff || [])
+          .filter(
+            (e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"),
+          )
+          .map((e) => ({ name: e.name, count: (wh[e.name] || []).length }))
+          .sort((a, b) => a.count - b.count);
+        const fairnessLines = fairness.map(
+          (f) => `- ${f.name}: ${f.count} סופ"שים בהיסטוריה`,
+        );
+
+        // לוח נוכחי + סטטוסים מיוחדים
         const currentLines = [];
-        allDays.forEach(function(d) {
-          shifts.forEach(function(s) {
-            [LOC_ZIRA, LOC_MATAL].forEach(function(loc) {
+        allDays.forEach((d) => {
+          ["בוקר", "ערב", "לילה", "24 שעות"].forEach((s) => {
+            [LOC_ZIRA, LOC_MATAL].forEach((loc) => {
               const slot = window.currentSchedule[d + "-" + s];
-              const people = slot && slot[loc] ? slot[loc].filter(function(e){ return e.name; }).map(function(e){ return e.name; }) : [];
-              if (people.length) currentLines.push("  " + d + " / " + s + " / " + loc + ": " + people.join(", "));
+              const people =
+                slot && slot[loc]
+                  ? slot[loc].filter((e) => e.name).map((e) => e.name)
+                  : [];
+              if (people.length)
+                currentLines.push(
+                  "  " + d + " / " + s + " / " + loc + ": " + people.join(", "),
+                );
             });
           });
-          const w24 = window.currentSchedule[d + "-24 שעות"];
-          if (w24) {
-            [LOC_ZIRA, LOC_MATAL].forEach(function(loc) {
-              const people = w24[loc] ? w24[loc].filter(function(e){ return e.name; }).map(function(e){ return e.name; }) : [];
-              if (people.length) currentLines.push("  " + d + " / 24 שעות / " + loc + ": " + people.join(", "));
-            });
-          }
         });
 
         const specLines = [];
-        allDays.forEach(function(d) {
-          const specs = window.getSpecialsForDay ? window.getSpecialsForDay(d, window.currentSchedule) : [];
-          specs.forEach(function(sp) { specLines.push("  " + d + ": " + sp.name + " — " + window.specStatusLabel(sp)); });
+        allDays.forEach((d) => {
+          const specs = window.getSpecialsForDay
+            ? window.getSpecialsForDay(d, window.currentSchedule)
+            : [];
+          specs.forEach((sp) =>
+            specLines.push(
+              "  " + d + ": " + sp.name + " — " + window.specStatusLabel(sp),
+            ),
+          );
         });
 
         const mode = window.isEmergencyMode
           ? "חירום (24 שעות בשתי המיקומות)"
-          : (window.currentSchedule.matalUnderstaff ? 'חוסר מת"ל (מת"ל ב-24ש, זירה רגיל)' : "רגיל");
+          : window.currentSchedule.matalUnderstaff
+            ? 'חוסר מת"ל (מת"ל ב-24ש, זירה רגיל)'
+            : "רגיל";
 
-        const exampleJson = '{\n'
-          + '  "ראשון-בוקר": { "זירה": ["שם1","שם2"], "מת\\"ל": ["שם3"] },\n'
-          + '  "ראשון-ערב":  { "זירה": ["שם4"], "מת\\"ל": ["שם5"] },\n'
-          + '  "ראשון-לילה": { "זירה": ["שם6"], "מת\\"ל": ["שם7"] },\n'
-          + '  "שישי-24 שעות": { "זירה": ["..."], "מת\\"ל": ["..."] },\n'
-          + '  "שבת-24 שעות":  { "זירה": ["..."], "מת\\"ל": ["..."] }\n'
-          + '}';
+        const exampleJson =
+          "{\n" +
+          '  "ראשון-בוקר": { "זירה": ["שם1","שם2"], "מת\\"ל": ["שם3"] },\n' +
+          '  "ראשון-ערב":  { "זירה": ["שם4"], "מת\\"ל": ["שם5"] },\n' +
+          '  "ראשון-לילה": { "זירה": ["שם6"], "מת\\"ל": ["שם7"] },\n' +
+          '  "שישי-24 שעות": { "זירה": ["..."], "מת\\"ל": ["..."] },\n' +
+          '  "שבת-24 שעות":  { "זירה": ["..."], "מת\\"ל": ["..."] }\n' +
+          "}";
 
-        return "אתה עוזר לתזמון משמרות ביחידה צבאית. בנה לוח משמרות שבועי מאוזן.\n\n"
-          + "## מצב שבוע: " + mode + "\n\n"
-          + "## עובדים פעילים:\n" + staffLines + "\n\n"
-          + "## כללים למשמרות (מצב רגיל):\n"
-          + "- זירה בוקר: 3-4 אנשים | זירה ערב: 2-3 | זירה לילה: 2-3 (לא שישי/שבת)\n"
-          + '- מת"ל בוקר: 2-3 אנשים | מת"ל לילה: 2-3 (לא שישי/שבת)\n'
-          + "- סופש: 2 אנשים (לפחות אחד טכנאי) ב-24ש ברציפות מחמישי-לילה עד ראשון-בוקר, בכל מיקום\n"
-          + "- אחרי לילה — מנוחה ביום למחרת\n"
-          + "- אחרי 24ש — מנוחה ביום למחרת\n"
-          + "- מי שמוגדר 'לא לילות' — אל תשבץ ללילה\n\n"
-          + "## לוח נוכחי:\n" + (currentLines.length ? currentLines.join("\n") : "  (ריק)") + "\n\n"
-          + "## סטטוסים מיוחדים השבוע:\n" + (specLines.length ? specLines.join("\n") : "  אין") + "\n\n"
-          + "## הנחיות:\n"
-          + "1. אזן עומסים — אל תשים אותם אנשים בכל המשמרות\n"
-          + "2. נחפף עם מיקום קבוע — שלח לשם בדרך כלל\n"
-          + "3. אל תשים אף אחד בשתי משמרות באותו יום\n"
-          + "4. עובדים בסטטוס מיוחד — אל תשבץ אותם\n\n"
-          + "## פורמט תשובה — JSON בלבד בתוך code block:\n"
-          + "```json\n" + exampleJson + "\n```\n"
-          + "כלול רק מפתחות עם עובדים. השתמש בדיוק בשמות מהרשימה.";
+        return (
+          "אתה מתזמן משמרות מקצועי ביחידה צבאית. בנה לוח שבועי **מלא** ומאוזן.\n\n" +
+          "## מצב שבוע: " +
+          mode +
+          "\n\n" +
+          "## עובדים פעילים והגדרותיהם:\n" +
+          staffLines +
+          "\n\n" +
+          "## כמות נדרשת בכל משמרת (חובה למלא בדיוק):\n" +
+          (ruleLines.length
+            ? ruleLines.join("\n")
+            : "  (לא הוגדרו חוקים — השתמש ב-2-3 אנשים למשמרת)") +
+          "\n- משמרות לילה ו-24ש לא קיימות בשישי/שבת בזירה.\n\n" +
+          "## דפוסי עבר (6 שבועות אחרונים) — שבץ לפי הנטיות האלה:\n" +
+          (pastLines.length ? pastLines.join("\n") : "  (אין נתוני עבר)") +
+          "\nמי שהיה הרבה בערב — נוח לו בערב; מי שהיה הרבה במיקום מסוים — השאר אותו שם.\n\n" +
+          '## הוגנות סופ"ש (העדף את מי שסגר הכי מעט לסופ"ש הקרוב):\n' +
+          (fairnessLines.length ? fairnessLines.join("\n") : "  (אין נתונים)") +
+          "\n\n" +
+          "## לוח נוכחי (שיבוצים נעולים — אל תשנה אותם):\n" +
+          (currentLines.length ? currentLines.join("\n") : "  (ריק)") +
+          "\n\n" +
+          "## סטטוסים מיוחדים השבוע (אל תשבץ אותם):\n" +
+          (specLines.length ? specLines.join("\n") : "  אין") +
+          "\n\n" +
+          "## חוקים מחייבים:\n" +
+          "1. **מלא כל משמרת בדיוק לכמות הנדרשת** — אל תשאיר משמרת חסרה או חלקית.\n" +
+          "2. שבץ אדם רק למשמרת שהוא **זמין** לה (לפי 'זמין ל:') ולפי האילוצים שלו.\n" +
+          "3. אחרי לילה / אחרי 24ש — מנוחה למחרת (אל תשבץ).\n" +
+          "4. אל תשים אדם בשתי משמרות באותו יום.\n" +
+          '5. נחפף עם מיקום קבוע — לשם. טכנאי בלי "מותר ערב זירה" — לא לערב זירה.\n' +
+          "6. אזן עומסים בין כל העובדים — לא אותם אנשים בכל המשמרות.\n\n" +
+          "## פורמט תשובה — JSON בלבד בתוך code block:\n" +
+          "```json\n" +
+          exampleJson +
+          "\n```\n" +
+          "השתמש בדיוק בשמות מהרשימה. כלול את כל המשמרות הנדרשות, גם אם חלקן זהות."
+        );
       };
 
       window.generateAI = async function () {
@@ -5889,7 +6007,9 @@
         applyBar.style.display = "none";
         window._aiSuggestedSchedule = null;
 
-        const prompt = window.buildAIPrompt();
+        statusEl.textContent = "⏳ אוסף נתוני עבר ובונה בקשה...";
+        const prompt = await window.buildAIPrompt();
+        statusEl.textContent = "⏳ שולח בקשה ל-Claude...";
 
         try {
           const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -5902,7 +6022,7 @@
             },
             body: JSON.stringify({
               model: "claude-opus-4-8",
-              max_tokens: 4096,
+              max_tokens: 8192,
               messages: [{ role: "user", content: prompt }],
             }),
           });
