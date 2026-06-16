@@ -1312,6 +1312,16 @@
         document.getElementById("loginOverlay").style.display = "flex";
       };
 
+      // זמינות משמרת — האם אסור לשבץ עובד למשמרת זו לפי הגדרות בוקר/ערב/לילה
+      window._empCantDoShift = function (emp, shift) {
+        if (!emp) return false;
+        if (shift === "בוקר") return emp.canMorning === false;
+        if (shift === "ערב") return emp.canEvening === false;
+        if (shift === "לילה")
+          return emp.canNight === false || emp.noNights === true;
+        return false;
+      };
+
       window.isAllowedInLoc = function (emp, day, shift, targetLoc) {
         let pref =
           emp.prefs &&
@@ -1864,7 +1874,7 @@
               return `<div class="emp-card chip-${(e.type || "").replace(/\s+/g, "-")} ${isInactive}" onclick="window.openModal(${e.id})">
                         <div style="width:100%;">
                             <div style="font-size:1.1em; font-weight:bold; color:var(--md-primary); margin-bottom:8px; border-bottom:1px solid var(--md-divider); padding-bottom:5px;">
-                                ${e.name} ${e.noNights ? "☀️" : ""} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
+                                ${e.name} ${(() => { const off = []; if (e.canMorning === false) off.push("בוקר"); if (e.canEvening === false) off.push("ערב"); if (e.canNight === false || e.noNights) off.push("לילה"); return off.length ? `<span style="font-size:0.65em; color:var(--md-error); font-weight:normal;">⛔${off.join("/")}</span>` : ""; })()} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
                             </div>
                             <div style="font-size:0.85em; color:var(--text-muted); display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
                                 <span>דרג: <b>${e.type}</b></span>
@@ -2235,7 +2245,7 @@
           let empConst = e.constraints || [];
           if (empConst.includes(`${day}-${shift}`)) return false;
           if (e.type === "קבינט בכיר" && shift !== "בוקר") return false;
-          if (e.noNights && shift === "לילה") return false;
+          if (window._empCantDoShift(e, shift)) return false; // זמינות בוקר/ערב/לילה
           if (e.type === "טכנאי" && shift === "ערב" && loc === LOC_ZIRA && !e.canZiraEvening) return false;
           if (
             shift === "לילה" &&
@@ -4111,7 +4121,13 @@
         }
         sysRoleSelect.value = emp.systemRole || "worker";
 
-        document.getElementById("editNoNights").checked = emp.noNights || false;
+        // זמינות משמרות — ברירת מחדל: עושה הכל. noNights הישן = לא עושה לילה
+        document.getElementById("editCanMorning").checked =
+          emp.canMorning !== false;
+        document.getElementById("editCanEvening").checked =
+          emp.canEvening !== false;
+        document.getElementById("editCanNight").checked =
+          emp.canNight !== false && emp.noNights !== true;
         if (emp.isNextWeekend)
           document.getElementById("editNextWeekend").checked = true;
         else if (emp.workedLastWeekend)
@@ -4216,7 +4232,12 @@
         emp.fixedLoc = document.getElementById("editFixedLoc").value;
         emp.vacationQuota =
           parseInt(document.getElementById("editVacation").value) || 0;
-        emp.noNights = document.getElementById("editNoNights").checked;
+        // זמינות משמרות
+        emp.canMorning = document.getElementById("editCanMorning").checked;
+        emp.canEvening = document.getElementById("editCanEvening").checked;
+        emp.canNight = document.getElementById("editCanNight").checked;
+        // תאימות לאחור: noNights הישן נגזר מ-canNight (משמש בבדיקות לילה קיימות)
+        emp.noNights = !emp.canNight;
         emp.canManNightAlone =
           document.getElementById("editManagerBAlone").checked;
         emp.ziraWeekendAllowed =
@@ -4298,6 +4319,9 @@
           globalEmp.fixedLoc = emp.fixedLoc;
           globalEmp.vacationQuota = emp.vacationQuota;
           globalEmp.noNights = emp.noNights;
+          globalEmp.canMorning = emp.canMorning;
+          globalEmp.canEvening = emp.canEvening;
+          globalEmp.canNight = emp.canNight;
           globalEmp.canManNightAlone = emp.canManNightAlone;
           globalEmp.ziraWeekendAllowed = emp.ziraWeekendAllowed;
           globalEmp.canZiraEvening = emp.canZiraEvening;
@@ -4330,6 +4354,9 @@
             fixedLoc: "",
             isActive: true,
             noNights: false,
+            canMorning: true,
+            canEvening: true,
+            canNight: true,
             canManNightAlone: true,
             ziraWeekendAllowed: false,
             canZiraEvening: false,
@@ -4824,6 +4851,13 @@
                   restingToday.push({ emp, reason: "חופש ערב", icon: "🌴" });
                 if (empConst.includes(`${day}-לילה`))
                   restingToday.push({ emp, reason: "חופש לילה", icon: "🌴" });
+                // זמינות משמרות לפי הגדרת העובד — מסומן כ"חופש" לאותה משמרת כדי שלא ישובץ
+                if (emp.canMorning === false)
+                  restingToday.push({ emp, reason: "חופש בוקר", icon: "☀️" });
+                if (emp.canEvening === false)
+                  restingToday.push({ emp, reason: "חופש ערב", icon: "🌇" });
+                if (emp.canNight === false || emp.noNights === true)
+                  restingToday.push({ emp, reason: "חופש לילה", icon: "🌙" });
               }
             });
             // אילוצים חלקיים (חופש בוקר/ערב) משמשים לשיבוץ בלבד — לא מוצגים כסטטוס
@@ -4880,8 +4914,7 @@
                 let candidates = activeStaff
                   .filter((e) => {
                     let empConst = e.constraints || [];
-                    // חוקים ידועים: שגיא לא עושה לילות
-                    if (e.name === "שגיא") return false;
+                    // (הוסר כלל מקודד בשם — כעת נשלט ע"י מתג "🌙 לילה" בהגדרות העובד)
 
                     return (
                       e.type !== "נחפף" &&
@@ -5131,8 +5164,7 @@
               let morningPool = activeStaff
                 .filter((e) => {
                   let empConst = e.constraints || [];
-                  // חוקים ידועים: דייב עושה בעיקר לילות/ערבים אז לא נשבץ אותו בבוקר
-                  if (e.name === "דייב") return false;
+                  // (הוסר כלל מקודד בשם — כעת נשלט ע"י מתג "☀️ בוקר" בהגדרות העובד)
 
                   return (
                     e.type !== "קבינט בכיר" &&

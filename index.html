@@ -223,6 +223,9 @@
               "fixedLoc",
               "vacationQuota",
               "noNights",
+              "canMorning",
+              "canEvening",
+              "canNight",
               "canManNightAlone",
               "ziraWeekendAllowed",
               "canZiraEvening",
@@ -2096,21 +2099,47 @@
               <option value="זירה">זירה</option>
               <option value="משרד">משרד</option>
             </select>
-            <label
-              style="
-                cursor: pointer;
-                color: var(--md-error);
-                font-size: 0.875rem;
-                display: block;
-                margin-top: 16px;
-              "
-              ><input
-                type="checkbox"
-                id="editNoNights"
-                style="vertical-align: middle"
-              />
-              פטור מלילות (בוקר/ערב בלבד)</label
-            >
+            <div style="margin-top: 16px">
+              <label
+                style="
+                  font-size: 0.875rem;
+                  font-weight: bold;
+                  display: block;
+                  margin-bottom: 6px;
+                  color: var(--md-text-secondary);
+                "
+                >משמרות שהעובד עושה (המערכת תשבץ רק לאלו):</label
+              >
+              <div style="display: flex; gap: 18px; flex-wrap: wrap">
+                <label style="cursor: pointer; font-size: 0.9rem"
+                  ><input
+                    type="checkbox"
+                    id="editCanMorning"
+                    checked
+                    style="vertical-align: middle"
+                  />
+                  ☀️ בוקר</label
+                >
+                <label style="cursor: pointer; font-size: 0.9rem"
+                  ><input
+                    type="checkbox"
+                    id="editCanEvening"
+                    checked
+                    style="vertical-align: middle"
+                  />
+                  🌇 ערב</label
+                >
+                <label style="cursor: pointer; font-size: 0.9rem"
+                  ><input
+                    type="checkbox"
+                    id="editCanNight"
+                    checked
+                    style="vertical-align: middle"
+                  />
+                  🌙 לילה</label
+                >
+              </div>
+            </div>
             <label
               id="lblManagerBAlone"
               style="
