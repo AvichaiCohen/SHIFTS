@@ -618,43 +618,60 @@
         } catch (e) {}
       };
 
-      // תיאור קריא של בקשה
+      // תיאור מפורט של בקשה (סוג, תאריך, יום, משמרת, מיקום)
       window._reqDesc = function (r) {
         const dateStr = r.date ? r.date.split("-").reverse().join(".") : "";
         const typeStr =
           r.type === "vacation"
-            ? "יום חופש"
+            ? "🌴 יום חופש מלא"
             : r.type === "constraint"
-              ? "אילוץ"
-              : "בקשת שיבוץ";
-        let s = `${typeStr} — ${dateStr}`;
-        if (r.day) s += ` (${r.day})`;
-        if (r.type !== "vacation" && r.shift) s += ` · ${r.shift}`;
-        if (r.type === "shift" && r.loc && typeof window.getLocName === "function")
-          s += ` · ${window.getLocName(r.loc)}`;
-        return s;
+              ? "⏳ אילוץ"
+              : "🎯 העדפת שיבוץ";
+        let parts = [typeStr];
+        if (dateStr)
+          parts.push(`📅 ${dateStr}${r.day ? " (" + r.day + ")" : ""}`);
+        if (r.type !== "vacation" && r.shift) parts.push(`משמרת: ${r.shift}`);
+        if (
+          r.type === "shift" &&
+          r.loc &&
+          typeof window.getLocName === "function"
+        )
+          parts.push(`מיקום: ${window.getLocName(r.loc)}`);
+        return parts.join(" · ");
       };
 
       // באנר התראות לעובד — שינויי משמרת + החלטות על בקשות
+      // התראות מוצגות עד שסוגרים אותן, ולכל היותר 14 יום (ואז נעלמות אוטומטית)
+      window.NOTIF_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
+
       window.renderShiftChangeBanner = function () {
         const el = document.getElementById("shiftChangeBanner");
         if (!el) return;
-        let html = "";
+        const now = Date.now();
+        let cards = "";
+        let count = 0;
 
         // 1. שינויי משמרת
         const notifs = window._myShiftNotifs || {};
         const dShift = window._getDismissed("shift");
         Object.keys(notifs)
           .map((k) => Object.assign({ key: k }, notifs[k]))
-          .filter((n) => n && n.ts && dShift[n.key] !== n.ts)
+          .filter(
+            (n) =>
+              n &&
+              n.ts &&
+              dShift[n.key] !== n.ts &&
+              now - n.ts < window.NOTIF_EXPIRY_MS,
+          )
           .sort((a, b) => (b.ts || 0) - (a.ts || 0))
           .forEach((n) => {
+            count++;
             let lines = "";
             if (n.added && n.added.length)
               lines += `<div style="color:#15803d; font-size:0.88rem; margin-top:3px;">➕ נוסף: ${n.added.join(" · ")}</div>`;
             if (n.removed && n.removed.length)
               lines += `<div style="color:#b91c1c; font-size:0.88rem; margin-top:3px;">➖ הוסר: ${n.removed.join(" · ")}</div>`;
-            html += `<div style="background:#fff; border-right:4px solid #f59e0b; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+            cards += `<div style="background:#fff; border-right:4px solid #f59e0b; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div><b style="color:#b45309;">🔔 עודכנו לך המשמרות</b> <span style="color:#64748b; font-size:0.8rem;">${n.weekLabel || ""}</span>${lines}</div>
                 <button onclick="window.dismissShiftNotif('${n.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
@@ -662,7 +679,7 @@
             </div>`;
           });
 
-        // 2. החלטות על בקשות (אושרו / נדחו)
+        // 2. החלטות על בקשות (אושרו / נדחו) — עם פירוט מלא
         const reqs = window._myRequests || {};
         const dReq = window._getDismissed("req");
         Object.keys(reqs)
@@ -672,27 +689,39 @@
               r &&
               (r.status === "approved" || r.status === "rejected") &&
               r.statusTs &&
-              dReq[r.key] !== r.statusTs,
+              dReq[r.key] !== r.statusTs &&
+              now - r.statusTs < window.NOTIF_EXPIRY_MS,
           )
           .sort((a, b) => (b.statusTs || 0) - (a.statusTs || 0))
           .forEach((r) => {
+            count++;
             const ok = r.status === "approved";
             const color = ok ? "#15803d" : "#b91c1c";
-            const title = ok ? "✅ בקשתך אושרה" : "❌ בקשתך נדחתה";
-            html += `<div style="background:#fff; border-right:4px solid ${color}; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+            const title = ok ? "✅ הבקשה שלך אושרה" : "❌ הבקשה שלך נדחתה";
+            const noteLine = r.note
+              ? `<div style="font-size:0.82rem; margin-top:3px; color:#64748b;">📝 ${r.note}</div>`
+              : "";
+            cards += `<div style="background:#fff; border-right:4px solid ${color}; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${window._reqDesc(r)}</div></div>
+                <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${window._reqDesc(r)}</div>${noteLine}</div>
                 <button onclick="window.dismissRequestNotif('${r.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
               </div>
             </div>`;
           });
 
-        if (!html) {
+        if (count === 0) {
           el.style.display = "none";
           el.innerHTML = "";
           return;
         }
-        el.innerHTML = html;
+        // כותרת עם "נקה הכל" כשיש יותר מהתראה אחת
+        const header =
+          count > 1
+            ? `<div style="display:flex; justify-content:flex-end; margin-bottom:6px;">
+                 <button onclick="window.dismissAllNotifs()" style="background:#475569; color:#fff; border:none; border-radius:14px; padding:4px 14px; font-size:0.8rem; font-weight:bold; cursor:pointer;">נקה הכל (${count}) ✕</button>
+               </div>`
+            : "";
+        el.innerHTML = header + cards;
         el.style.display = "block";
       };
 
@@ -707,6 +736,26 @@
         const r = (window._myRequests || {})[reqId];
         if (!r) return;
         window._setDismissedItem("req", reqId, r.statusTs);
+        window.renderShiftChangeBanner();
+      };
+
+      // סגירת כל ההתראות המוצגות בבת אחת
+      window.dismissAllNotifs = function () {
+        const notifs = window._myShiftNotifs || {};
+        Object.keys(notifs).forEach((k) => {
+          if (notifs[k] && notifs[k].ts)
+            window._setDismissedItem("shift", k, notifs[k].ts);
+        });
+        const reqs = window._myRequests || {};
+        Object.keys(reqs).forEach((k) => {
+          const r = reqs[k];
+          if (
+            r &&
+            (r.status === "approved" || r.status === "rejected") &&
+            r.statusTs
+          )
+            window._setDismissedItem("req", k, r.statusTs);
+        });
         window.renderShiftChangeBanner();
       };
 
