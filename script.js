@@ -641,8 +641,8 @@
       };
 
       // באנר התראות לעובד — שינויי משמרת + החלטות על בקשות
-      // התראות מוצגות עד שסוגרים אותן, ולכל היותר 14 יום (ואז נעלמות אוטומטית)
-      window.NOTIF_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
+      // התראות מוצגות עד שסוגרים אותן, ולכל היותר 24 שעות (ואז נעלמות אוטומטית)
+      window.NOTIF_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
       window.renderShiftChangeBanner = function () {
         const el = document.getElementById("shiftChangeBanner");
@@ -687,6 +687,8 @@
           .filter(
             (r) =>
               r &&
+              r.date &&
+              r.type &&
               (r.status === "approved" || r.status === "rejected") &&
               r.statusTs &&
               dReq[r.key] !== r.statusTs &&
@@ -766,7 +768,7 @@
         const reqs = window._myRequests || {};
         const arr = Object.keys(reqs)
           .map((k) => reqs[k])
-          .filter(Boolean)
+          .filter((r) => r && r.date && r.type) // התעלם מרשומות לא תקינות
           .sort((a, b) => (b.ts || 0) - (a.ts || 0));
         if (arr.length === 0) {
           cont.innerHTML =
@@ -2678,6 +2680,60 @@
         });
         html += `</table>`;
         cont.innerHTML = html;
+      };
+
+      // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)
+      window.rebuildWeekendHistory = async function () {
+        const cont = document.getElementById("weekendJusticeTableContainer");
+        if (!window._fbImports || !window._firebaseDb) {
+          window.renderWeekendJusticeTable();
+          return;
+        }
+        const { ref, get } = window._fbImports;
+        if (cont)
+          cont.innerHTML =
+            "<i style='color:var(--text-muted);'>מחשב מחדש מהענן...</i>";
+        const WEEKS_BACK = 16;
+        const history = {};
+        for (let off = -WEEKS_BACK; off <= 0; off++) {
+          const sun = window.getSunday((window.currentWeekOffset || 0) + off);
+          const wk = window.getWeekDbKey(sun);
+          const label = window.formatWeekString(sun);
+          let sched;
+          try {
+            const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
+            if (!snap.exists()) continue;
+            sched = snap.val();
+          } catch (e) {
+            continue;
+          }
+          const workers = new Set();
+          [
+            { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
+            { loc: LOC_ZIRA, shifts: weekendShiftsZira },
+          ].forEach(({ loc, shifts }) => {
+            shifts.forEach((sk) => {
+              const [d, s] = sk.split("-");
+              const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
+              if (arr)
+                arr.forEach((e) => {
+                  if (e && e.name) workers.add(e.name);
+                });
+            });
+          });
+          workers.forEach((name) => {
+            if (!history[name]) history[name] = [];
+            history[name].push(label); // מסודר כרונולוגית (ישן → חדש)
+          });
+        }
+        window.weekendHistory = history;
+        try {
+          localStorage.setItem(
+            "shift_weekend_history_v1",
+            JSON.stringify(history),
+          );
+        } catch (e) {}
+        window.renderWeekendJusticeTable();
       };
 
       window.showCommanderSelectForWA = function () {

@@ -1477,15 +1477,15 @@
                   ⚖️ טבלת הוגנות — מי סגר סופ"ש
                 </h3>
                 <p style="font-size: 0.85rem; margin-top: 0; color: var(--md-text-secondary);">
-                  מעקב היסטורי — טכנאים ונחפפים שסגרו סופ"שים (מתעדכן בעת שמירה לענן).
+                  מעקב היסטורי — טכנאים ונחפפים שסגרו סופ"שים. הרענון מחשב מחדש מהלוחות השמורים בענן (16 שבועות אחורה).
                 </p>
                 <div style="margin-bottom: 12px;">
                   <button
                     class="btn btn-outlined manager-only"
                     style="border-color: var(--md-warning); color: var(--md-warning);"
-                    onclick="window.renderWeekendJusticeTable()"
+                    onclick="window.rebuildWeekendHistory()"
                   >
-                    🔄 רענן טבלה
+                    🔄 רענן וחשב מחדש מהענן
                   </button>
                 </div>
                 <div id="weekendJusticeTableContainer" style="overflow-x: auto"></div>
