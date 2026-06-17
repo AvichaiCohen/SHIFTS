@@ -856,6 +856,10 @@
           display: flex !important;
         }
       }
+      /* לעובד אין sidebar בדסקטופ — מציגים לו את ניווט השבועות בכל גודל מסך */
+      body.worker-view .mobile-week-nav {
+        display: flex !important;
+      }
 
       /* ===== סטטוס מיוחד - מצב כהה ===== */
       .chip-special {
