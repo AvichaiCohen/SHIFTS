@@ -17,6 +17,11 @@
           ".write": "auth != null && !data.exists()"
         }
       }
+    },
+    "pendingRequestsIndex": {
+      "$reqId": {
+        ".write": "auth != null && !data.exists()"
+      }
     }
   }
 }

@@ -1289,6 +1289,10 @@
         if (_notifId != null && typeof window.subscribeShiftNotifs === "function")
           window.subscribeShiftNotifs(_notifId);
 
+        // מנהל — איסוף בקשות ממתינות קיימות לאינדקס הגלובלי (פעם אחת בכניסה)
+        if (!window.isWorkerMode && typeof window.backfillPendingIndex === "function")
+          window.backfillPendingIndex();
+
         window.showPage("schedule");
         if (typeof window.renderTable === "function")
           window.renderTable(window.currentSchedule, window.currentNotesLog);
@@ -3933,6 +3937,11 @@
             "schedules/" + targetWeekKey + "/pendingRequests/" + reqId,
             newRequest,
           );
+          // אינדקס גלובלי של בקשות ממתינות — מאפשר למנהל לראות בקשות מכל השבועות, בזמן אמת
+          window.saveToCloud(
+            "pendingRequestsIndex/" + reqId,
+            Object.assign({}, newRequest, { weekKey: targetWeekKey, ts: reqId }),
+          );
           // מראה אישית לעובד — רשימת בקשות וסטטוס (שורדת גם אחרי טיפול המנהל)
           // כתיבה שקטה: גם אם תיכשל, הבקשה האמיתית כבר נשלחה למנהל
           window.saveToCloud(
@@ -3983,14 +3992,58 @@
         }
       };
 
+      // איסוף בקשות ממתינות קיימות (שנשמרו לפני האינדקס) → לאינדקס הגלובלי
+      window.backfillPendingIndex = async function () {
+        if (!window._fbImports || !window._firebaseDb) return;
+        const { ref, get } = window._fbImports;
+        for (let off = -2; off <= 10; off++) {
+          try {
+            const sun = window.getSunday((window.currentWeekOffset || 0) + off);
+            const wk = window.getWeekDbKey(sun);
+            const snap = await get(
+              ref(window._firebaseDb, "schedules/" + wk + "/pendingRequests"),
+            );
+            if (!snap.exists()) continue;
+            const pr = snap.val();
+            Object.keys(pr).forEach((id) => {
+              if (pr[id] && !(window._allPending && window._allPending[id]))
+                window.saveToCloud(
+                  "pendingRequestsIndex/" + id,
+                  Object.assign({}, pr[id], {
+                    weekKey: wk,
+                    ts: pr[id].id || Number(id),
+                  }),
+                );
+            });
+          } catch (e) {}
+        }
+      };
+
       window.renderPendingRequestsManager = function () {
         const queueContainer = document.getElementById("pendingRequestsQueue");
         if (!queueContainer) return;
-        const pending =
+        // מיזוג: אינדקס גלובלי (כל השבועות) + בקשות השבוע הנוכחי (תאימות לאחור)
+        const pending = {};
+        const idx = window._allPending || {};
+        Object.keys(idx).forEach((id) => {
+          if (idx[id]) pending[id] = idx[id];
+        });
+        const cur =
           window.currentSchedule && window.currentSchedule.pendingRequests
             ? window.currentSchedule.pendingRequests
             : {};
-        const keys = Object.keys(pending);
+        Object.keys(cur).forEach((id) => {
+          if (cur[id] && !pending[id])
+            pending[id] = Object.assign({}, cur[id], {
+              weekKey: window.currentSelectedWeek,
+            });
+        });
+        const keys = Object.keys(pending).sort((a, b) => {
+          // מיון לפי תאריך הבקשה
+          const da = pending[a].date || "";
+          const db = pending[b].date || "";
+          return da.localeCompare(db);
+        });
 
         // זיהוי בקשות חדשות → התראה לאביחי
         if (
@@ -4031,54 +4084,105 @@
         queueContainer.innerHTML = html;
       };
 
-      window.processRequest = function (reqId, isApproved) {
-        const r = window.currentSchedule.pendingRequests[reqId];
-        if (!r) return;
-        if (isApproved) {
-          let emp = window.staff.find((e) => e.id == r.empId);
-          if (emp) {
-            if (r.type === "vacation") {
-              if (!emp.constraints) emp.constraints = [];
-              emp.constraints.push(
-                `${r.day}-בוקר`,
-                `${r.day}-ערב`,
-                `${r.day}-לילה`,
-              );
-            } else if (r.type === "constraint") {
-              if (!emp.constraints) emp.constraints = [];
-              emp.constraints.push(`${r.day}-${r.shift}`);
-            } else if (r.type === "shift") {
-              if (!emp.prefs) emp.prefs = [];
-              emp.prefs.push({ day: r.day, shift: r.shift, loc: r.loc });
-            }
+      // החלת אישור בקשה על אובייקט לוח (constraint/pref) — משותף לשבוע נוכחי ועתידי
+      window._applyRequestToSchedule = function (sched, r) {
+        if (!sched.staff) sched.staff = [];
+        let emp = sched.staff.find((e) => e.id == r.empId);
+        if (!emp) {
+          // העובד טרם קיים בעותק השבועי — מוסיפים מהמאגר
+          const g = (window.globalStaff || []).find((e) => e.id == r.empId);
+          if (g) {
+            emp = JSON.parse(JSON.stringify(g));
+            emp.constraints = emp.constraints || [];
+            emp.prefs = emp.prefs || [];
+            sched.staff.push(emp);
           }
         }
-        delete window.currentSchedule.pendingRequests[reqId];
-        if (typeof window.saveToCloud === "function") {
+        if (!emp) return;
+        emp.constraints = emp.constraints || [];
+        emp.prefs = emp.prefs || [];
+        if (r.type === "vacation")
+          emp.constraints.push(`${r.day}-בוקר`, `${r.day}-ערב`, `${r.day}-לילה`);
+        else if (r.type === "constraint")
+          emp.constraints.push(`${r.day}-${r.shift}`);
+        else if (r.type === "shift")
+          emp.prefs.push({ day: r.day, shift: r.shift, loc: r.loc });
+      };
+
+      window.processRequest = async function (reqId, isApproved) {
+        // מקור הבקשה: אינדקס גלובלי (כל השבועות) או השבוע הנוכחי
+        const r =
+          (window._allPending && window._allPending[reqId]) ||
+          (window.currentSchedule.pendingRequests &&
+            window.currentSchedule.pendingRequests[reqId]);
+        if (!r) {
+          alert("הבקשה לא נמצאה (ייתכן שכבר טופלה).");
+          return;
+        }
+        const weekKey = r.weekKey || window.currentSelectedWeek;
+        const fb = window._fbImports;
+
+        if (weekKey === window.currentSelectedWeek) {
+          // שבוע מוצג — עדכון מקומי ושמירה כרגיל
+          if (isApproved)
+            window._applyRequestToSchedule(
+              { staff: window.staff },
+              r,
+            );
+          if (
+            window.currentSchedule.pendingRequests &&
+            window.currentSchedule.pendingRequests[reqId]
+          )
+            delete window.currentSchedule.pendingRequests[reqId];
           window.currentSchedule.staff = window.staff;
           window.saveToCloud(
             "schedules/" + window.currentSelectedWeek,
             window.currentSchedule,
           );
-          // עדכון הסטטוס במראה האישית של העובד → מפעיל התראה אצלו
-          if (r.empId != null) {
-            window.saveToCloud(
-              "myRequests/" + r.empId + "/" + reqId + "/status",
-              isApproved ? "approved" : "rejected",
+        } else if (fb && window._firebaseDb) {
+          // שבוע אחר — קריאה, עדכון וכתיבה ישירה לאותו שבוע (בלי לשנות את התצוגה)
+          try {
+            const snap = await fb.get(
+              fb.ref(window._firebaseDb, "schedules/" + weekKey),
             );
-            window.saveToCloud(
-              "myRequests/" + r.empId + "/" + reqId + "/statusTs",
-              Date.now(),
-            );
+            const sched = snap.exists()
+              ? snap.val()
+              : { isPublished: false, special: {}, dailyNotes: {} };
+            if (isApproved) window._applyRequestToSchedule(sched, r);
+            if (sched.pendingRequests) delete sched.pendingRequests[reqId];
+            window.saveToCloud("schedules/" + weekKey, sched);
+          } catch (e) {
+            alert("שגיאה בטיפול בבקשה: " + (e.message || e));
+            return;
           }
-          alert(
-            isApproved
-              ? "הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
-              : "הבקשה נדחתה ונמחקה מהתור.",
-          );
-          window.renderRequestsPage();
-          window.triggerUnsavedChanges();
         }
+
+        // הסרה מהאינדקס הגלובלי
+        if (fb && window._firebaseDb)
+          fb.remove(fb.ref(window._firebaseDb, "pendingRequestsIndex/" + reqId));
+
+        // עדכון הסטטוס במראה האישית של העובד → מפעיל התראה אצלו
+        if (r.empId != null) {
+          window.saveToCloud(
+            "myRequests/" + r.empId + "/" + reqId + "/status",
+            isApproved ? "approved" : "rejected",
+          );
+          window.saveToCloud(
+            "myRequests/" + r.empId + "/" + reqId + "/statusTs",
+            Date.now(),
+          );
+        }
+        alert(
+          isApproved
+            ? "✅ הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
+            : "❌ הבקשה נדחתה ונמחקה מהתור.",
+        );
+        if (typeof window.renderPendingRequestsManager === "function")
+          window.renderPendingRequestsManager();
+        if (typeof window.renderRequestsPage === "function")
+          window.renderRequestsPage();
+        if (weekKey === window.currentSelectedWeek)
+          window.triggerUnsavedChanges();
       };
 
       window.addPrefRow = function (day = "", shift = "", loc = "") {

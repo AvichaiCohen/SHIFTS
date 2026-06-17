@@ -347,6 +347,15 @@
             window.renderHolidaysLog();
         });
 
+        // אינדקס בקשות ממתינות גלובלי — עדכון חי של תור הבקשות אצל המנהל (כל השבועות)
+        onValue(ref(db, "pendingRequestsIndex"), (snapshot) => {
+          window._allPending = snapshot.exists() ? snapshot.val() : {};
+          if (typeof window.renderPendingRequestsManager === "function")
+            window.renderPendingRequestsManager();
+          if (typeof window.renderRequestsPage === "function")
+            window.renderRequestsPage();
+        });
+
         // האזנה להגדרות גלובליות של משמרות
         onValue(ref(db, "globalRules"), (snapshot) => {
           if (snapshot.exists()) {
