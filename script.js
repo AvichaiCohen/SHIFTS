@@ -2692,6 +2692,57 @@
         cont.innerHTML = html;
       };
 
+      // הצעת סוגרי סופ"ש — מדרג טכנאים/נחפפים לפי מי שסגר הכי מעט, ומציע לסמן
+      window.suggestWeekendClosers = async function () {
+        if (typeof window.rebuildWeekendHistory === "function")
+          await window.rebuildWeekendHistory(); // רענון מהענן לדיוק
+        const wh = window.weekendHistory || {};
+        const techs = (window.staff || []).filter(
+          (e) =>
+            e.isActive !== false &&
+            (e.type === "טכנאי" || e.type === "נחפף") &&
+            !e.workedLastWeekend,
+        );
+        if (techs.length === 0) {
+          alert("אין טכנאים/נחפפים זמינים לסופ\"ש (כולם עבדו שבת שעברה?).");
+          return;
+        }
+        const ranked = techs
+          .map((e) => ({
+            emp: e,
+            count: (wh[e.name] || []).length,
+            last: (wh[e.name] || []).slice(-1)[0] || "—",
+          }))
+          .sort(
+            (a, b) =>
+              a.count - b.count || a.emp.name.localeCompare(b.emp.name),
+          );
+        const topN = 2; // לרוב סוגרים 2; אפשר לסמן עוד ידנית בכרטיס העובד
+        let msg = 'מועמדים לסגירת הסופ"ש הקרוב (לפי מי שסגר הכי מעט):\n\n';
+        ranked.slice(0, 6).forEach((r, i) => {
+          msg += `${i + 1}. ${r.emp.name} — ${r.count} סופ"שים (אחרון: ${r.last})\n`;
+        });
+        msg += `\nלסמן את ${topN} הראשונים (${ranked
+          .slice(0, topN)
+          .map((r) => r.emp.name)
+          .join(", ")}) כסוגרי הסופ"ש הקרוב?`;
+        if (!confirm(msg)) return;
+        ranked.slice(0, topN).forEach((r) => {
+          r.emp.isNextWeekend = true;
+          r.emp.workedLastWeekend = false;
+        });
+        if (typeof window.renderStaff === "function") window.renderStaff();
+        if (typeof window.renderWeekendJusticeTable === "function")
+          window.renderWeekendJusticeTable();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        if (typeof window.triggerUnsavedChanges === "function")
+          window.triggerUnsavedChanges();
+        alert(
+          "✅ סומנו כסוגרי הסופ\"ש הקרוב.\nכעת לחץ 'צור מחדש' כדי לשבץ אותם, ואל תשכח לשמור.",
+        );
+      };
+
       // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)
       window.rebuildWeekendHistory = async function () {
         const cont = document.getElementById("weekendJusticeTableContainer");
