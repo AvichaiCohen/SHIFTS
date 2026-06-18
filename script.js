@@ -624,13 +624,16 @@
         const typeStr =
           r.type === "vacation"
             ? "🌴 יום חופש מלא"
-            : r.type === "constraint"
-              ? "⏳ אילוץ"
-              : "🎯 העדפת שיבוץ";
+            : r.type === "study"
+              ? "📚 יום לימודים"
+              : r.type === "constraint"
+                ? "⏳ אילוץ"
+                : "🎯 העדפת שיבוץ";
         let parts = [typeStr];
         if (dateStr)
           parts.push(`📅 ${dateStr}${r.day ? " (" + r.day + ")" : ""}`);
-        if (r.type !== "vacation" && r.shift) parts.push(`משמרת: ${r.shift}`);
+        if (r.type !== "vacation" && r.type !== "study" && r.shift)
+          parts.push(`משמרת: ${r.shift}`);
         if (
           r.type === "shift" &&
           r.loc &&
@@ -1676,7 +1679,15 @@
         });
         const link = document.createElement("a");
         link.setAttribute("href", URL.createObjectURL(blob));
-        link.setAttribute("download", "סידור_עבודה.csv");
+        // שם הקובץ לפי תאריכי השבוע
+        const _sun = window.getSunday(window.currentWeekOffset || 0);
+        const _sat = new Date(_sun);
+        _sat.setDate(_sat.getDate() + 6);
+        const _fmt = (d) => `${d.getDate()}-${d.getMonth() + 1}`;
+        link.setAttribute(
+          "download",
+          `${_fmt(_sun)}_עד_${_fmt(_sat)}-${_sat.getFullYear()}.csv`,
+        );
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -2694,6 +2705,94 @@
         });
         html += `</table>`;
         cont.innerHTML = html;
+      };
+
+      // מצב "מסך נקי" לצילום הלוח — מסתיר תפריט/צד
+      window.toggleScreenshotMode = function () {
+        document.body.classList.toggle("screenshot-mode");
+      };
+
+      // סיכום שבועי אישי לעובד המחובר — תצוגת "מי אני השבוע" יום-יום
+      window.showMyWeekSummary = function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) {
+          alert("לא מזוהה עובד מחובר.");
+          return;
+        }
+        const data = window.currentSchedule || {};
+        const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        const shiftsToCheck = [...(window.currentShifts || ["בוקר", "ערב", "לילה"])];
+        if (
+          (data.matalUnderstaff || window.isEmergencyMode) &&
+          !shiftsToCheck.includes("24 שעות")
+        )
+          shiftsToCheck.push("24 שעות");
+        let rows = "";
+        days.forEach((d, i) => {
+          const cd = new Date(weekSun);
+          cd.setDate(cd.getDate() + i);
+          const dateStr = `${cd.getDate()}/${cd.getMonth() + 1}`;
+          let val = "מנוחה";
+          let color = "#94a3b8";
+          let foundLoc = null,
+            foundShift = null;
+          shiftsToCheck.forEach((s) => {
+            baseLocs.forEach((loc) => {
+              const arr = data[`${d}-${s}`] && data[`${d}-${s}`][loc];
+              if (arr && arr.find((e) => String(e.id) === String(me.id))) {
+                foundLoc = loc;
+                foundShift = s;
+              }
+            });
+          });
+          if (foundShift) {
+            val = `${foundShift} · ${window.getLocName(foundLoc)}`;
+            color = "#15803d";
+          } else {
+            const specs = window.getSpecialsForDay
+              ? window.getSpecialsForDay(d, data)
+              : [];
+            const sp = specs.find((s) => String(s.id) === String(me.id));
+            if (sp) {
+              val = window.specStatusLabel
+                ? window.specStatusLabel(sp)
+                : sp.status;
+              color = "#9333ea";
+            } else {
+              const note =
+                window.currentNotesLog &&
+                window.currentNotesLog[d] &&
+                window.currentNotesLog[d].find(
+                  (n) => String(n.emp.id) === String(me.id),
+                );
+              if (note) {
+                val = `${note.icon || ""} ${note.reason}`;
+                color = "#b45309";
+              }
+            }
+          }
+          const isTodayRow =
+            new Date().toDateString() === cd.toDateString()
+              ? "background:rgba(25,118,210,0.08);"
+              : "";
+          rows += `<tr style="border-bottom:1px solid var(--md-divider); ${isTodayRow}">
+            <td style="padding:10px;"><b style="font-size:1.05rem;">${d}</b> <small style="color:var(--md-text-secondary);">${dateStr}</small></td>
+            <td style="padding:10px; color:${color}; font-weight:bold;">${val}</td>
+          </tr>`;
+        });
+        const weekLabel = window.formatWeekString(weekSun);
+        document.getElementById("myWeekSummaryTitle").innerHTML =
+          `📋 הסיכום השבועי שלי — ${me.name}<br><small style="font-weight:normal; color:var(--md-text-secondary); font-size:0.85rem;">${weekLabel}</small>`;
+        document.getElementById("myWeekSummaryContent").innerHTML =
+          `<table style="width:100%; text-align:right; border-collapse:collapse;">
+            <tr style="background:var(--md-bg);"><th style="padding:8px;">יום</th><th style="padding:8px;">שיבוץ / סטטוס</th></tr>
+            ${rows}
+          </table>`;
+        document.getElementById("myWeekModal").style.display = "flex";
+      };
+      window.closeMyWeekModal = function () {
+        const m = document.getElementById("myWeekModal");
+        if (m) m.style.display = "none";
       };
 
       // הצעת סוגרי סופ"ש — מדרג טכנאים/נחפפים לפי מי שסגר הכי מעט, ומציע לסמן
@@ -3813,17 +3912,24 @@
 
       window.toggleReqType = function () {
         let type = document.getElementById("reqType").value;
-        document.getElementById("reqShift").style.display =
-          type === "vacation" ? "none" : "block";
+        // יום לימודים וחופש = יום שלם, ללא בחירת משמרת/מיקום
+        const fullDay = type === "vacation" || type === "study";
+        document.getElementById("reqShift").style.display = fullDay
+          ? "none"
+          : "block";
         document.getElementById("reqLoc").style.display =
           type === "shift" ? "block" : "none";
         let reqNote = document.getElementById("reqNote");
         reqNote.style.display =
-          type === "constraint" || type === "vacation" ? "block" : "none";
+          type === "constraint" || type === "vacation" || type === "study"
+            ? "block"
+            : "none";
         if (type === "constraint")
           reqNote.placeholder = "פירוט האילוץ (למשל: רופא שיניים 12:00)...";
         if (type === "vacation")
           reqNote.placeholder = "סיבת החופשה (אופציונלי)...";
+        if (type === "study")
+          reqNote.placeholder = "הערה ליום הלימודים (אופציונלי)...";
       };
 
       window.populateWorkerRequestNames = function () {
@@ -3879,10 +3985,47 @@
         reqSunday.setDate(reqDateObj.getDate() - reqDayOfWeek);
         const targetWeekKey = window.getWeekDbKey(reqSunday);
 
-        // בדיקת מכסה (2 בקשות לשבוע) — רק עבור השבוע הנוכחי המוצג
+        // קבע ומילואים — ללא מגבלת בקשות (אילוצים/חופשים)
+        const _noLimit = emp.type === "קבע" || emp.type === "מילואים";
+
+        // יום לימודים — רק לקבע, ופעם אחת בשבוע
+        if (type === "study") {
+          if (emp.type !== "קבע") {
+            alert("יום לימודים ניתן לבקשה רק עבור אנשי קבע.");
+            return;
+          }
+          let studyThisWeek = 0;
+          if (targetWeekKey === window.currentSelectedWeek) {
+            (emp.constraints || []).forEach(() => {});
+            const specs =
+              (window.currentSchedule &&
+                window.currentSchedule.special &&
+                Object.values(window.currentSchedule.special).flat()) ||
+              [];
+            specs.forEach((sp) => {
+              if (sp && String(sp.id) === String(empId) && (sp.status || "").includes("לימודים"))
+                studyThisWeek++;
+            });
+            if (window.currentSchedule && window.currentSchedule.pendingRequests) {
+              Object.values(window.currentSchedule.pendingRequests).forEach((r) => {
+                if (r.empId == empId && r.type === "study") studyThisWeek++;
+              });
+            }
+          }
+          if (studyThisWeek >= 1) {
+            alert("🚨 ניתן לבקש יום לימודים אחד בלבד בשבוע.");
+            return;
+          }
+        }
+
+        // בדיקת מכסה (2 בקשות לשבוע) — רק עבור השבוע הנוכחי המוצג, ולא לקבע/מילואים/לימודים
         let existingCount = 0;
         let locationCount = 0;
-        if (targetWeekKey === window.currentSelectedWeek) {
+        if (
+          targetWeekKey === window.currentSelectedWeek &&
+          !_noLimit &&
+          type !== "study"
+        ) {
           if (emp.prefs) {
             existingCount += emp.prefs.length;
             locationCount += emp.prefs.filter(
@@ -3964,7 +4107,7 @@
 
           // הודעת הצלחה + איפוס הטופס
           const fDate = dateVal.split("-").reverse().join(".");
-          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 תאריך: ${fDate} (${day})\n📋 סוג: ${type === 'vacation' ? 'יום חופש' : type === 'constraint' ? 'אילוץ' : 'בקשת שיבוץ'}\nהמנהל יטפל בבקשתך בהקדם.`);
+          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 תאריך: ${fDate} (${day})\n📋 סוג: ${type === 'vacation' ? 'יום חופש' : type === 'study' ? 'יום לימודים' : type === 'constraint' ? 'אילוץ' : 'בקשת שיבוץ'}\nהמנהל יטפל בבקשתך בהקדם.`);
           document.getElementById("reqDate").value = "";
           document.getElementById("reqDay").value = "";
           document.getElementById("reqNote").value = "";
@@ -3978,10 +4121,12 @@
               let typeStr =
                 type === "vacation"
                   ? "יום חופש מלא 🌴"
-                  : type === "constraint"
-                    ? "אילוץ נקודתי ⏳"
-                    : `העדפת משמרת (${window.getLocName(loc)}) 🎯`;
-              let shiftStr = type === "vacation" ? "כל היום" : shift;
+                  : type === "study"
+                    ? "יום לימודים 📚"
+                    : type === "constraint"
+                      ? "אילוץ נקודתי ⏳"
+                      : `העדפת משמרת (${window.getLocName(loc)}) 🎯`;
+              let shiftStr = type === "vacation" || type === "study" ? "כל היום" : shift;
               let msg = `שלום המפקד 🫡\nהגשתי בקשה חדשה במערכת המשמרות:\n\n*שם:* ${emp.name}\n*תאריך:* ${fDate} (יום ${day})\n*סוג בקשה:* ${typeStr}\n*משמרת:* ${shiftStr}`;
               if (note) msg += `\n*הערה:* ${note}`;
               msg += `\n\n(נשלח אוטומטית דרך מערכת השיבוץ)`;
@@ -4074,10 +4219,12 @@
           let typeStr = "";
           if (r.type === "vacation")
             typeStr = `🌴 חופש מלא<br><small>${r.note || ""}</small>`;
+          else if (r.type === "study")
+            typeStr = `📚 יום לימודים<br><small>${r.note || ""}</small>`;
           else if (r.type === "constraint")
             typeStr = `⏳ אילוץ: <b>${r.note}</b>`;
           else typeStr = `📍 העדפת שיבוץ (${window.getLocName(r.loc)})`;
-          let shiftStr = r.type === "vacation" ? "-" : r.shift;
+          let shiftStr = r.type === "vacation" || r.type === "study" ? "-" : r.shift;
           html += `<tr style="border-bottom: 1px solid var(--md-divider);"><td><b>${r.empName}</b></td><td>${fDate}<br><small>${r.day}</small></td><td>${shiftStr}</td><td>${typeStr}</td><td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
         });
         html += `</table>`;
@@ -4107,6 +4254,21 @@
           emp.constraints.push(`${r.day}-${r.shift}`);
         else if (r.type === "shift")
           emp.prefs.push({ day: r.day, shift: r.shift, loc: r.loc });
+        else if (r.type === "study") {
+          // יום לימודים — סטטוס מיוחד (לא נספר כחופשה), מוציא מהשיבוץ באותו יום
+          if (!sched.special) sched.special = {};
+          if (!sched.special[r.day]) sched.special[r.day] = [];
+          if (
+            !sched.special[r.day].find(
+              (s) => String(s.id) === String(r.empId),
+            )
+          )
+            sched.special[r.day].push({
+              id: r.empId,
+              name: r.empName || emp.name || "",
+              status: "יום לימודים",
+            });
+        }
       };
 
       window.processRequest = async function (reqId, isApproved) {
@@ -4124,11 +4286,9 @@
 
         if (weekKey === window.currentSelectedWeek) {
           // שבוע מוצג — עדכון מקומי ושמירה כרגיל
+          window.currentSchedule.staff = window.staff;
           if (isApproved)
-            window._applyRequestToSchedule(
-              { staff: window.staff },
-              r,
-            );
+            window._applyRequestToSchedule(window.currentSchedule, r);
           if (
             window.currentSchedule.pendingRequests &&
             window.currentSchedule.pendingRequests[reqId]

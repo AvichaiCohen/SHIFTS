@@ -861,6 +861,24 @@
         display: flex !important;
       }
 
+      /* ===== מצב "מסך נקי" לצילום מסך של הלוח ===== */
+      body.screenshot-mode nav:not(#bottomNav),
+      body.screenshot-mode #bottomNav,
+      body.screenshot-mode .side-panel,
+      body.screenshot-mode #staffSidebar,
+      body.screenshot-mode #managerToolbar,
+      body.screenshot-mode #weekNavBar,
+      body.screenshot-mode #cloudSaveWarningBtn,
+      body.screenshot-mode #scheduleTip {
+        display: none !important;
+      }
+      body.screenshot-mode #screenshotExitBtn {
+        display: inline-flex !important;
+      }
+      body.screenshot-mode .main-content {
+        padding: 12px !important;
+      }
+
       /* ===== סטטוס מיוחד - מצב כהה ===== */
       .chip-special {
         background: #e9d5ff !important;

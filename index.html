@@ -443,7 +443,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260618a" />
+    <link rel="stylesheet" href="style.css?v=20260618b" />
   </head>
   <body>
     <div
@@ -640,6 +640,29 @@
         >⚙️</button>
       </div>
     </nav>
+
+    <!-- יציאה ממסך נקי (מוצג רק במצב צילום) -->
+    <button
+      id="screenshotExitBtn"
+      onclick="window.toggleScreenshotMode()"
+      style="
+        display: none;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 3000;
+        background: #475569;
+        color: #fff;
+        border: none;
+        border-radius: 20px;
+        padding: 8px 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+      "
+    >
+      ✕ צא ממסך נקי
+    </button>
 
     <!-- כפתור שמירה לענן — צף, נגיש גם במובייל וגם בדסקטופ -->
     <button
@@ -908,6 +931,14 @@
                 🏖️ הצע סוגרי סופ"ש
               </button>
               <button
+                class="btn btn-outlined"
+                style="border-color: #475569; color: #475569"
+                onclick="window.toggleScreenshotMode()"
+                title="מסתיר את התפריט והצד לצילום מסך נקי של הלוח"
+              >
+                📷 מסך נקי
+              </button>
+              <button
                 id="matalUnderstaffBtn"
                 class="btn btn-outlined"
                 style="border-color: #b45309; color: #b45309"
@@ -1001,6 +1032,16 @@
                 onchange="window.navigateToDate(this.value)"
               />
             </div>
+          </div>
+
+          <div style="margin-bottom: 12px">
+            <button
+              class="btn btn-contained worker-only"
+              style="background: #c2410c; width: 100%; max-width: 320px"
+              onclick="window.showMyWeekSummary()"
+            >
+              📋 הסיכום השבועי שלי
+            </button>
           </div>
 
           <div id="mobileDayTabs" class="mobile-day-tabs">
@@ -1170,6 +1211,7 @@
                 <option value="constraint">
                   ⏳ אילוץ נקודתי (לא יכול משמרת ספציפית)
                 </option>
+                <option value="study">📚 יום לימודים (קבע בלבד — לא מהחופשים)</option>
               </select>
 
               <select
@@ -2494,6 +2536,22 @@
       </div>
     </div>
 
+    <div
+      id="myWeekModal"
+      class="modal"
+      onclick="if(event.target===this) window.closeMyWeekModal()"
+    >
+      <div class="modal-content" style="max-width: 460px">
+        <h3 id="myWeekSummaryTitle" style="color: #c2410c; margin-top: 0"></h3>
+        <div id="myWeekSummaryContent" style="overflow-x: auto"></div>
+        <div style="text-align: left; margin-top: 16px">
+          <button class="btn btn-outlined" onclick="window.closeMyWeekModal()">
+            סגור
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="commanderSelectModal" class="modal">
       <div class="modal-content" style="max-width: 420px">
         <h3 style="color: #0284c7; margin-top: 0">
@@ -2661,6 +2719,6 @@
       </div>
     </div>
 
-    <script src="script.js?v=20260618a"></script>
+    <script src="script.js?v=20260618b"></script>
   </body>
 </html>
