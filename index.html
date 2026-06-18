@@ -443,7 +443,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260618b" />
+    <link rel="stylesheet" href="style.css?v=20260618c" />
   </head>
   <body>
     <div
@@ -937,6 +937,14 @@
                 title="מסתיר את התפריט והצד לצילום מסך נקי של הלוח"
               >
                 📷 מסך נקי
+              </button>
+              <button
+                class="btn btn-contained"
+                style="background: #7c3aed"
+                onclick="window.exportScheduleImage()"
+                title="מוריד את הלוח כתמונת PNG חדה לשיתוף בוואטסאפ"
+              >
+                🖼️ ייצא לתמונה
               </button>
               <button
                 id="matalUnderstaffBtn"
@@ -2719,6 +2727,7 @@
       </div>
     </div>
 
-    <script src="script.js?v=20260618b"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="script.js?v=20260618c"></script>
   </body>
 </html>

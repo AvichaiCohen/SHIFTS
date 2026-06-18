@@ -2712,6 +2712,51 @@
         document.body.classList.toggle("screenshot-mode");
       };
 
+      // ייצוא הלוח כתמונת PNG באיכות גבוהה (חד לשיתוף בוואטסאפ)
+      window.exportScheduleImage = async function () {
+        if (typeof html2canvas === "undefined") {
+          alert("רכיב ייצוא התמונה עדיין נטען — נסה שוב בעוד רגע.");
+          return;
+        }
+        const el = document.getElementById("tableOutput");
+        if (!el || !el.firstChild) {
+          alert("אין לוח להציג. ודא שיש שיבוצים.");
+          return;
+        }
+        // ודא שטבלת הדסקטופ גלויה ללכידה (גם בנייד) — בלי הבהוב למשתמש
+        const container = document.getElementById("desktopTableContainer");
+        let restore = null;
+        if (container) {
+          const prev = container.getAttribute("style") || "";
+          container.style.cssText =
+            "display:block; position:fixed; top:0; left:-99999px; background:#fff; padding:16px;";
+          restore = () =>
+            prev ? container.setAttribute("style", prev) : container.removeAttribute("style");
+        }
+        try {
+          const canvas = await html2canvas(el, {
+            scale: 3,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            logging: false,
+          });
+          const sun = window.getSunday(window.currentWeekOffset || 0);
+          const sat = new Date(sun);
+          sat.setDate(sat.getDate() + 6);
+          const fmt = (d) => `${d.getDate()}-${d.getMonth() + 1}`;
+          const link = document.createElement("a");
+          link.download = `לוח_${fmt(sun)}_עד_${fmt(sat)}-${sat.getFullYear()}.png`;
+          link.href = canvas.toDataURL("image/png");
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          alert("שגיאה בייצוא התמונה: " + (e.message || e));
+        } finally {
+          if (restore) restore();
+        }
+      };
+
       // סיכום שבועי אישי לעובד המחובר — תצוגת "מי אני השבוע" יום-יום
       window.showMyWeekSummary = function () {
         const me = window.loggedInWorker || window.loggedInUser;
