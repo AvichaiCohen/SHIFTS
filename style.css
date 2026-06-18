@@ -879,6 +879,27 @@
         padding: 12px !important;
       }
 
+      /* גופן גדול יותר במסך נקי ובייצוא לתמונה — לקריאות בשיתוף */
+      body.screenshot-mode #tableOutput .name-chip,
+      #tableOutput.export-capture .name-chip {
+        font-size: 1.05rem !important;
+        height: auto !important;
+        min-height: 34px;
+        padding: 7px 13px !important;
+      }
+      body.screenshot-mode #tableOutput th,
+      #tableOutput.export-capture th {
+        font-size: 1.2rem !important;
+      }
+      body.screenshot-mode #tableOutput td,
+      #tableOutput.export-capture td {
+        font-size: 1.05rem !important;
+      }
+      body.screenshot-mode #tableOutput .time-label,
+      #tableOutput.export-capture .time-label {
+        font-size: 0.95rem !important;
+      }
+
       /* ===== סטטוס מיוחד - מצב כהה ===== */
       .chip-special {
         background: #e9d5ff !important;

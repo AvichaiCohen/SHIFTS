@@ -2733,6 +2733,7 @@
           restore = () =>
             prev ? container.setAttribute("style", prev) : container.removeAttribute("style");
         }
+        el.classList.add("export-capture"); // גופן גדול יותר בתמונה
         try {
           const canvas = await html2canvas(el, {
             scale: 3,
@@ -2753,6 +2754,7 @@
         } catch (e) {
           alert("שגיאה בייצוא התמונה: " + (e.message || e));
         } finally {
+          el.classList.remove("export-capture");
           if (restore) restore();
         }
       };
