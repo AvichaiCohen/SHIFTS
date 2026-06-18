@@ -883,9 +883,14 @@
       body.screenshot-mode #tableOutput .name-chip,
       #tableOutput.export-capture .name-chip {
         font-size: 1.05rem !important;
+        /* inline-block + גובה אוטומטי — מתקן היעלמות טקסט דו-שורתי (סטטוס מיוחד) בייצוא */
+        display: inline-block !important;
         height: auto !important;
         min-height: 34px;
+        line-height: 1.5 !important;
         padding: 7px 13px !important;
+        text-align: center;
+        vertical-align: top;
       }
       body.screenshot-mode #tableOutput th,
       #tableOutput.export-capture th {
