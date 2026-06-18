@@ -5684,7 +5684,7 @@
         window._mobileDayInitialized = true;
 
         let html = `<table><tr><th style="width:120px;">מיקום וזמן</th>`;
-        days.forEach((d) => {
+        days.forEach((d, dIdx) => {
           let note =
             data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
           let noteHtml = "";
@@ -5693,11 +5693,16 @@
           } else if (note) {
             noteHtml = `<br><span style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
           }
+          // תאריך היום — מתחת לשם היום, מעל ההערה
+          const _cellDate = new Date(_weekSun);
+          _cellDate.setDate(_cellDate.getDate() + dIdx);
+          const _dateStr = `${_cellDate.getDate()}/${_cellDate.getMonth() + 1}`;
+          const dateHtml = `<br><span style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>`;
           const isTodayCol = d === _todayDay;
           const _dayHL = data.dayHighlights && data.dayHighlights[d];
           const _hlStyle = _dayHL ? `background:${_dayHL}28; border-bottom:3px solid ${_dayHL};` : '';
           const _hlBtn = !window.isWorkerMode ? `<span style="cursor:pointer;font-size:0.75rem;opacity:0.7;vertical-align:middle;margin-right:2px;" onclick="window.toggleDayHighlight('${d}')" title="הדגש יום">${_dayHL ? '🔶' : '◻️'}</span>` : '';
-          html += `<th${isTodayCol ? ' class="today-col"' : ''}${_hlStyle ? ` style="${_hlStyle}"` : ''}>${d} ${window.isHoliday && window.isHoliday(d) ? "✨" : ""} ${_hlBtn} ${noteHtml}</th>`;
+          html += `<th${isTodayCol ? ' class="today-col"' : ''}${_hlStyle ? ` style="${_hlStyle}"` : ''}>${d} ${window.isHoliday && window.isHoliday(d) ? "✨" : ""} ${_hlBtn}${dateHtml}${noteHtml}</th>`;
         });
         html += `</tr>`;
 
@@ -5847,7 +5852,12 @@
         } else if (note) {
           noteHtml = `<div style="font-size:0.85rem; color:#ea580c; background:#ffedd5; padding:6px 10px; border-radius:6px; margin-top:6px; font-weight:bold;">📌 ${note}</div>`;
         }
-        html += `<h3 style="margin-top:0; margin-bottom:5px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3>${noteHtml}<div style="margin-bottom:15px;"></div>`;
+        // תאריך היום הנבחר
+        const _mWeekSun = window.getSunday(window.currentWeekOffset || 0);
+        const _mCellDate = new Date(_mWeekSun);
+        _mCellDate.setDate(_mCellDate.getDate() + (mobileDayIdx - 1));
+        const _mDateStr = `${_mCellDate.getDate()}/${_mCellDate.getMonth() + 1}/${_mCellDate.getFullYear()}`;
+        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${noteHtml}<div style="margin-bottom:15px;"></div>`;
 
         const _matalUnderstaff = window.currentSchedule && window.currentSchedule.matalUnderstaff === true;
         const _weekSunForRows = window.getSunday(window.currentWeekOffset || 0);
