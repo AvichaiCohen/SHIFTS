@@ -2934,19 +2934,25 @@
         const cont = document.getElementById("demandsListContainer");
         if (!cont) return;
         const demands = window._forceDemands || {};
-        const arr = Object.keys(demands)
+        const all = Object.keys(demands)
           .map((k) => demands[k])
           .filter(Boolean)
           .sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        if (arr.length === 0) {
+        if (all.length === 0) {
           cont.innerHTML =
-            "<i style='color:var(--md-text-secondary)'>אין דרישות פעילות.</i>";
+            "<i style='color:var(--md-text-secondary)'>אין דרישות.</i>";
           return;
         }
         const fmtD = (s) => (s ? s.split("-").reverse().join(".") : "");
         const canDelete = window.currentUserRole === "superAdmin";
-        let html = "";
-        arr.forEach((d) => {
+        // תאריך היום (YYYY-MM-DD) לסינון דרישות שחלפו
+        const _t = new Date();
+        const todayKey = `${_t.getFullYear()}-${String(_t.getMonth() + 1).padStart(2, "0")}-${String(_t.getDate()).padStart(2, "0")}`;
+        const isActive = (d) => {
+          const last = d.dateMode === "single" ? d.day : d.endDate || d.startDate;
+          return !last || last >= todayKey;
+        };
+        const card = (d) => {
           const isInc = d.type === "increase";
           const color = isInc ? "#15803d" : "#b91c1c";
           const title = isInc ? "⬆️ הגברת כוח" : "⬇️ צמצום כוח";
@@ -2971,7 +2977,7 @@
             const e = fmtD(d.endDate);
             when = `📅 ${s}${e && e !== s ? " – " + e : ""}`;
           }
-          html += `<div style="border-right:4px solid ${color}; background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+          return `<div style="border-right:4px solid ${color}; background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
               <b style="color:${color};">${title}</b>
               ${canDelete ? `<button onclick="window.deleteDemand(${d.id})" title="מחק" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1rem;">🗑️</button>` : ""}
@@ -2981,7 +2987,16 @@
             ${d.note ? `<div style="font-size:0.85rem; margin-top:3px;">📝 ${d.note}</div>` : ""}
             <div style="font-size:0.75rem; color:var(--md-text-secondary); margin-top:3px;">— ${d.createdBy || ""}</div>
           </div>`;
-        });
+        };
+        const active = all.filter(isActive);
+        const past = all.filter((d) => !isActive(d));
+        let html =
+          active.length > 0
+            ? active.map(card).join("")
+            : "<i style='color:var(--md-text-secondary)'>אין דרישות פעילות.</i>";
+        if (past.length > 0) {
+          html += `<details style="margin-top:10px;"><summary style="cursor:pointer; color:var(--md-text-secondary); font-size:0.85rem;">דרישות שחלפו (${past.length})</summary><div style="opacity:0.6; margin-top:8px;">${past.map(card).join("")}</div></details>`;
+        }
         cont.innerHTML = html;
       };
 
