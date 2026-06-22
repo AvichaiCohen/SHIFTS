@@ -356,6 +356,13 @@
             window.renderRequestsPage();
         });
 
+        // דרישות כוח (מנהל משני) — עדכון חי
+        onValue(ref(db, "forceDemands"), (snapshot) => {
+          window._forceDemands = snapshot.exists() ? snapshot.val() : {};
+          if (typeof window.renderDemandsList === "function")
+            window.renderDemandsList();
+        });
+
         // האזנה להגדרות גלובליות של משמרות
         onValue(ref(db, "globalRules"), (snapshot) => {
           if (snapshot.exists()) {
@@ -443,7 +450,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260618e" />
+    <link rel="stylesheet" href="style.css?v=20260618f" />
   </head>
   <body>
     <div
@@ -575,6 +582,9 @@
         </div>
         <div onclick="window.showPage('requests')" id="nav-requests">
           📝 אישור בקשות
+        </div>
+        <div onclick="window.showPage('demands')" id="nav-demands">
+          📊 דרישות כוח
         </div>
         <div onclick="window.showPage('rules')" id="nav-rules">⚙️ הגדרות</div>
 
@@ -1939,6 +1949,167 @@
 
         </div>
 
+        <!-- דף דרישות כוח -->
+        <div id="page-demands" class="container">
+          <h1>📊 דרישות כוח — צמצום / הגברה</h1>
+          <p style="color: var(--md-text-secondary); margin-top: -8px">
+            מנהל משני מגיש דרישה לשינוי כוח לפי אירוע/עבודה. המנהל הראשי רואה
+            את הדרישות ומתחשב בהן בבניית הסידור.
+          </p>
+          <div style="display: flex; gap: 20px; flex-wrap: wrap">
+            <div style="flex: 1; min-width: 320px">
+              <div class="card-paper" style="border-top: 4px solid #0d9488">
+                <h3 style="margin-top: 0; color: #0d9488">📝 הגשת דרישה חדשה</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <div>
+                    <label style="font-weight: bold; font-size: 0.9rem"
+                      >סוג הדרישה:</label
+                    >
+                    <select
+                      id="demandType"
+                      style="width: 100%"
+                      onchange="window.toggleDemandUI()"
+                    >
+                      <option value="increase">⬆️ הגברת כוח</option>
+                      <option value="reduce">⬇️ צמצום כוח</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-weight: bold; font-size: 0.9rem"
+                      >מיקום:</label
+                    >
+                    <select id="demandLoc" style="width: 100%">
+                      <option value='מת"ל'>מת"ל</option>
+                      <option value="זירה">זירה</option>
+                    </select>
+                  </div>
+
+                  <!-- שדות הגברה -->
+                  <div
+                    id="demandIncreaseFields"
+                    style="display: flex; flex-direction: column; gap: 12px"
+                  >
+                    <div>
+                      <label style="font-weight: bold; font-size: 0.9rem"
+                        >כמות אנשים מבוקשת (אופציונלי):</label
+                      >
+                      <input
+                        type="number"
+                        id="demandCount"
+                        min="1"
+                        placeholder="השאר ריק לדרישה כללית"
+                        style="width: 100%"
+                      />
+                    </div>
+                    <label
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        font-size: 0.9rem;
+                        cursor: pointer;
+                      "
+                    >
+                      <input type="checkbox" id="demandEscort" /> 🛡️ דרוש ליווי?
+                    </label>
+                  </div>
+
+                  <!-- שדות צמצום -->
+                  <div id="demandReduceFields" style="display: none">
+                    <label style="font-weight: bold; font-size: 0.9rem"
+                      >כמה אנשים להשאיר:</label
+                    >
+                    <input
+                      type="number"
+                      id="demandKeep"
+                      min="0"
+                      placeholder="מספר אנשים שיישארו"
+                      style="width: 100%"
+                    />
+                  </div>
+
+                  <!-- משך -->
+                  <div>
+                    <label style="font-weight: bold; font-size: 0.9rem"
+                      >משך הדרישה:</label
+                    >
+                    <select
+                      id="demandDateMode"
+                      style="width: 100%"
+                      onchange="window.toggleDemandUI()"
+                    >
+                      <option value="range">📅 טווח תאריכים</option>
+                      <option value="single">🕐 יום אחד (לפי שעות)</option>
+                    </select>
+                  </div>
+                  <div
+                    id="demandRangeFields"
+                    style="display: flex; gap: 10px; flex-wrap: wrap"
+                  >
+                    <div style="flex: 1; min-width: 130px">
+                      <label style="font-size: 0.8rem">מתאריך</label>
+                      <input type="date" id="demandStart" style="width: 100%" />
+                    </div>
+                    <div style="flex: 1; min-width: 130px">
+                      <label style="font-size: 0.8rem">עד תאריך</label>
+                      <input type="date" id="demandEnd" style="width: 100%" />
+                    </div>
+                  </div>
+                  <div id="demandSingleFields" style="display: none">
+                    <div style="margin-bottom: 8px">
+                      <label style="font-size: 0.8rem">תאריך</label>
+                      <input type="date" id="demandDay" style="width: 100%" />
+                    </div>
+                    <div style="display: flex; gap: 10px">
+                      <div style="flex: 1">
+                        <label style="font-size: 0.8rem">משעה</label>
+                        <input
+                          type="time"
+                          id="demandTimeFrom"
+                          style="width: 100%"
+                        />
+                      </div>
+                      <div style="flex: 1">
+                        <label style="font-size: 0.8rem">עד שעה</label>
+                        <input
+                          type="time"
+                          id="demandTimeTo"
+                          style="width: 100%"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    id="demandNote"
+                    placeholder="הערה / סיבה (אירוע, עבודה)..."
+                    style="width: 100%"
+                  />
+                  <button
+                    class="btn btn-contained"
+                    style="background: #0d9488"
+                    onclick="window.submitDemand()"
+                  >
+                    📤 שלח דרישה
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex: 1; min-width: 320px">
+              <div class="card-paper" style="border-top: 4px solid var(--md-primary)">
+                <h3 style="margin-top: 0; color: var(--md-primary)">
+                  📋 דרישות פעילות
+                </h3>
+                <div id="demandsListContainer">
+                  <i style="color: var(--md-text-secondary)">טוען...</i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- דף "עוד" — מנהל בלבד -->
         <div id="page-more" class="container manager-only" style="padding-bottom:80px;">
           <h1 style="margin-bottom:24px;">⋯ עוד אפשרויות</h1>
@@ -1950,6 +2121,10 @@
             <div class="more-page-card" onclick="window.showPage('requests')">
               <div class="more-page-card-icon">📝</div>
               <div class="more-page-card-label">אישור בקשות</div>
+            </div>
+            <div class="more-page-card" onclick="window.showPage('demands')">
+              <div class="more-page-card-icon">📊</div>
+              <div class="more-page-card-label">דרישות כוח</div>
             </div>
             <div class="more-page-card" onclick="window.showPage('rules')">
               <div class="more-page-card-icon">⚙️</div>
@@ -2728,6 +2903,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260618e"></script>
+    <script src="script.js?v=20260618f"></script>
   </body>
 </html>

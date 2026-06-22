@@ -22,6 +22,11 @@
       "$reqId": {
         ".write": "auth != null && !data.exists()"
       }
+    },
+    "forceDemands": {
+      "$id": {
+        ".write": "auth != null && !data.exists()"
+      }
     }
   }
 }

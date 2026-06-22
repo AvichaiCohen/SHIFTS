@@ -2486,6 +2486,12 @@
           typeof window.renderMyRequestsList === "function"
         )
           window.renderMyRequestsList();
+        if (p === "demands") {
+          if (typeof window.toggleDemandUI === "function")
+            window.toggleDemandUI();
+          if (typeof window.renderDemandsList === "function")
+            window.renderDemandsList();
+        }
       };
 
       window.setLocFilter = function (loc) {
@@ -2840,6 +2846,143 @@
       window.closeMyWeekModal = function () {
         const m = document.getElementById("myWeekModal");
         if (m) m.style.display = "none";
+      };
+
+      // ===== דרישות כוח (מנהל משני) =====
+      window.toggleDemandUI = function () {
+        const type = document.getElementById("demandType");
+        if (!type) return;
+        const t = type.value;
+        document.getElementById("demandIncreaseFields").style.display =
+          t === "increase" ? "flex" : "none";
+        document.getElementById("demandReduceFields").style.display =
+          t === "reduce" ? "block" : "none";
+        const mode = document.getElementById("demandDateMode").value;
+        document.getElementById("demandRangeFields").style.display =
+          mode === "range" ? "flex" : "none";
+        document.getElementById("demandSingleFields").style.display =
+          mode === "single" ? "block" : "none";
+      };
+
+      window.submitDemand = function () {
+        const type = document.getElementById("demandType").value;
+        const loc = document.getElementById("demandLoc").value;
+        const dateMode = document.getElementById("demandDateMode").value;
+        const note = document.getElementById("demandNote").value.trim();
+        const me = window.loggedInUser || {};
+        const id = Date.now();
+        const demand = {
+          id,
+          type,
+          loc,
+          dateMode,
+          note,
+          createdBy: me.name || "מנהל משני",
+          ts: id,
+        };
+        if (type === "increase") {
+          const c = document.getElementById("demandCount").value;
+          demand.count = c ? parseInt(c) : null;
+          demand.needsEscort = document.getElementById("demandEscort").checked;
+        } else {
+          const k = document.getElementById("demandKeep").value;
+          if (k === "") {
+            alert("יש לציין כמה אנשים להשאיר.");
+            return;
+          }
+          demand.keepCount = parseInt(k);
+        }
+        if (dateMode === "range") {
+          const s = document.getElementById("demandStart").value;
+          const e = document.getElementById("demandEnd").value;
+          if (!s) {
+            alert("יש לבחור תאריך התחלה.");
+            return;
+          }
+          demand.startDate = s;
+          demand.endDate = e || s;
+        } else {
+          const d = document.getElementById("demandDay").value;
+          if (!d) {
+            alert("יש לבחור תאריך.");
+            return;
+          }
+          demand.day = d;
+          demand.timeFrom = document.getElementById("demandTimeFrom").value;
+          demand.timeTo = document.getElementById("demandTimeTo").value;
+        }
+        window.saveToCloud("forceDemands/" + id, demand);
+        alert("✅ הדרישה נשלחה למנהל הראשי!");
+        document.getElementById("demandNote").value = "";
+        document.getElementById("demandCount").value = "";
+        document.getElementById("demandKeep").value = "";
+      };
+
+      window.deleteDemand = function (id) {
+        if (window.currentUserRole !== "superAdmin") {
+          alert("רק המנהל הראשי יכול למחוק דרישות.");
+          return;
+        }
+        if (!confirm("למחוק את הדרישה?")) return;
+        if (window._fbImports && window._firebaseDb)
+          window._fbImports.remove(
+            window._fbImports.ref(window._firebaseDb, "forceDemands/" + id),
+          );
+      };
+
+      window.renderDemandsList = function () {
+        const cont = document.getElementById("demandsListContainer");
+        if (!cont) return;
+        const demands = window._forceDemands || {};
+        const arr = Object.keys(demands)
+          .map((k) => demands[k])
+          .filter(Boolean)
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        if (arr.length === 0) {
+          cont.innerHTML =
+            "<i style='color:var(--md-text-secondary)'>אין דרישות פעילות.</i>";
+          return;
+        }
+        const fmtD = (s) => (s ? s.split("-").reverse().join(".") : "");
+        const canDelete = window.currentUserRole === "superAdmin";
+        let html = "";
+        arr.forEach((d) => {
+          const isInc = d.type === "increase";
+          const color = isInc ? "#15803d" : "#b91c1c";
+          const title = isInc ? "⬆️ הגברת כוח" : "⬇️ צמצום כוח";
+          let details = `<b>מיקום:</b> ${d.loc}`;
+          if (isInc) {
+            details += d.count
+              ? ` · <b>כמות:</b> ${d.count}`
+              : ` · <span style="color:var(--md-text-secondary)">דרישה כללית</span>`;
+            if (d.needsEscort) details += ` · 🛡️ דרוש ליווי`;
+          } else {
+            details += ` · <b>להשאיר:</b> ${d.keepCount}`;
+          }
+          let when;
+          if (d.dateMode === "single") {
+            when =
+              `📅 ${fmtD(d.day)}` +
+              (d.timeFrom || d.timeTo
+                ? ` · ${d.timeFrom || ""}–${d.timeTo || ""}`
+                : "");
+          } else {
+            const s = fmtD(d.startDate);
+            const e = fmtD(d.endDate);
+            when = `📅 ${s}${e && e !== s ? " – " + e : ""}`;
+          }
+          html += `<div style="border-right:4px solid ${color}; background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+              <b style="color:${color};">${title}</b>
+              ${canDelete ? `<button onclick="window.deleteDemand(${d.id})" title="מחק" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1rem;">🗑️</button>` : ""}
+            </div>
+            <div style="font-size:0.9rem; margin-top:4px;">${details}</div>
+            <div style="font-size:0.85rem; color:var(--md-text-secondary); margin-top:3px;">${when}</div>
+            ${d.note ? `<div style="font-size:0.85rem; margin-top:3px;">📝 ${d.note}</div>` : ""}
+            <div style="font-size:0.75rem; color:var(--md-text-secondary); margin-top:3px;">— ${d.createdBy || ""}</div>
+          </div>`;
+        });
+        cont.innerHTML = html;
       };
 
       // הצעת סוגרי סופ"ש — מדרג טכנאים/נחפפים לפי מי שסגר הכי מעט, ומציע לסמן
