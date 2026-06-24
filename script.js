@@ -1818,8 +1818,6 @@
         const cbMulti = document.getElementById("specMultiParticipant");
         if (cbSingle) { cbSingle.checked = false; window.toggleSpecDayMode && window.toggleSpecDayMode(); }
         if (cbMulti) { cbMulti.checked = false; window.toggleSpecParticipantMode && window.toggleSpecParticipantMode(); }
-        const cbAll = document.getElementById("specAllStaff");
-        if (cbAll) { cbAll.checked = false; window.toggleSpecAllStaff && window.toggleSpecAllStaff(); }
         const cbReturn = document.getElementById("specReturnsToShift");
         if (cbReturn) cbReturn.checked = false;
         document.getElementById("specNote").value = "";
@@ -1843,7 +1841,6 @@
       window.saveSpecialStatus = function () {
         const isSingleDay = document.getElementById("specSingleDay")?.checked;
         const isMulti = document.getElementById("specMultiParticipant")?.checked;
-        const isAllStaff = document.getElementById("specAllStaff")?.checked;
         // "חוזר למשמרת" מסומן ⇒ העובד עדיין יכול להשתבץ; לא מסומן ⇒ חסום מהמשמרות
         const returnsToShift = document.getElementById("specReturnsToShift")?.checked === true;
         let startDate = document.getElementById("specStartDate").value;
@@ -1854,13 +1851,9 @@
         // שמירה: status נשאר "אחר" (לא נדרס) כדי שהייצוא יבחין בו; ההערה נשמרת ב-text
         if (endDate < startDate) endDate = startDate;
 
-        // בנה רשימת עובדים (כל הצוות / יחיד / מרובה)
+        // בנה רשימת עובדים (יחיד / מרובה) — כולל קבינט בכיר
         let emps = [];
-        if (isAllStaff) {
-          // כלל הצוות — כולל קבינט בכיר
-          emps = (window.staff || []).filter((e) => e.isActive !== false);
-          if (emps.length === 0) { alert("אין עובדים פעילים!"); return; }
-        } else if (isMulti) {
+        if (isMulti) {
           document.querySelectorAll(".spec-participant-select").forEach((sel) => {
             if (sel.value) {
               const e = window.staff.find((x) => x.id == sel.value);
@@ -2329,11 +2322,14 @@
         let available = activeStaff.filter((e) => {
           if (!rule.roles.includes(e.type)) return false;
           let alreadyInShift = false;
+          // סטטוס מיוחד חוסם (legacy או גלובלי ללא "חוזר למשמרת")
           if (
             window.currentSchedule.special &&
             window.currentSchedule.special[day] &&
             window.currentSchedule.special[day].some((x) => x.id === e.id)
           )
+            return false;
+          if (window.isBlockedBySpecialDay && window.isBlockedBySpecialDay(e.id, day))
             return false;
           const _shiftsToCheck = window.currentSchedule.matalUnderstaff === true
             ? [...window.currentShifts, "24 שעות"] : window.currentShifts;
@@ -3597,22 +3593,6 @@
         if (multiWrap) multiWrap.style.display = multi ? "flex" : "none";
         if (multi && document.getElementById("specParticipantRows")?.children.length === 0)
           window.addSpecParticipantRow();
-      };
-
-      // "כל הצוות" — כשמסומן, מסתיר את בחירת העובד/ים (הסטטוס יחול על כולם)
-      window.toggleSpecAllStaff = function () {
-        const all = document.getElementById("specAllStaff")?.checked;
-        const partWrap = document.getElementById("specParticipantModeWrapper");
-        const singleWrap = document.getElementById("specSingleEmpWrapper");
-        const multiWrap = document.getElementById("specMultiEmpWrapper");
-        if (partWrap) partWrap.style.display = all ? "none" : "block";
-        if (all) {
-          if (singleWrap) singleWrap.style.display = "none";
-          if (multiWrap) multiWrap.style.display = "none";
-        } else {
-          // חזרה למצב לפי checkbox "רב משתתפים"
-          if (window.toggleSpecParticipantMode) window.toggleSpecParticipantMode();
-        }
       };
 
       window.addSpecParticipantRow = function () {
