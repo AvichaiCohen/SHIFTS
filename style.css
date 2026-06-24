@@ -700,6 +700,13 @@
       body.sub-manager .super-only {
         display: none !important;
       }
+      /* משתמש צפייה בלבד — רואה לוח ומשימות, ללא הגשת בקשות / סיכום אישי / התראות */
+      body.view-only #nav-worker-requests,
+      body.view-only #btnav-worker-requests,
+      body.view-only .worker-only,
+      body.view-only #shiftChangeBanner {
+        display: none !important;
+      }
       /* הדגשת העובד המחובר בטבלה ובפלאפון */
       .highlight-me {
         background-color: #fef08a !important; /* צהוב זוהר */

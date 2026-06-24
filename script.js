@@ -12,6 +12,18 @@
       window.getWeekDbKey = function (sundayDate) {
         return `week_${sundayDate.getDate()}_${sundayDate.getMonth() + 1}_${sundayDate.getFullYear()}`;
       };
+      // המרת מפתח שבוע (week_DD_M_YYYY) לתאריך ראשון של אותו שבוע
+      window.weekKeyToSunday = function (weekKey) {
+        if (!weekKey || typeof weekKey !== "string") return null;
+        const m = weekKey.match(/^week_(\d+)_(\d+)_(\d+)$/);
+        if (!m) return null;
+        return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      };
+      // תווית קריאה לשבוע (טווח תאריכים) לפי מפתח השבוע
+      window.weekKeyToLabel = function (weekKey) {
+        const sun = window.weekKeyToSunday(weekKey);
+        return sun ? window.formatWeekString(sun) : "שבוע לא ידוע";
+      };
       window.navigateWeek = function (direction) {
         if (window.hasUnsavedChanges && !confirm("יש שינויים שלא נשמרו — לעבור שבוע בלי לשמור?"))
           return;
@@ -983,6 +995,10 @@
         // רענון חלון 15 הדקות בכל פתיחה מחדש
         window.saveSession(s);
 
+        if (s.kind === "viewer") {
+          window.enterViewerMode();
+          return;
+        }
         if (s.kind === "manager") {
           if (s.uid === ADMIN_UID) {
             window.currentUserRole = "superAdmin";
@@ -1162,6 +1178,13 @@
           return;
         }
 
+        // 0. משתמש צפייה בלבד — רואה את הלוח והמשימות הקיימים, אינו חלק מהשיבוץ
+        if (uid === VIEWER_USER && pass === VIEWER_PASS) {
+          window.saveSession({ kind: "viewer" });
+          window.enterViewerMode();
+          return;
+        }
+
         // 1. התחברות מנהל ראשי — השוואת טביעת אצבע, ללא סיסמה גלויה בקוד
         if (uid === ADMIN_UID) {
           // ניסיון התחברות מנהל מול Firebase — מקנה הרשאת כתיבה לענן
@@ -1215,6 +1238,40 @@
         }
       };
 
+      // ===== משתמש צפייה בלבד =====
+      const VIEWER_USER = "זירה";
+      const VIEWER_PASS = "1601";
+
+      window.isViewOnly = false;
+      window.enterViewerMode = function () {
+        window.currentUserRole = "viewer";
+        window.isWorkerMode = false;
+        window.isViewOnly = true;
+        window.loggedInWorker = null;
+        window.loggedInUser = {
+          id: "viewer",
+          name: "צפייה (זירה)",
+          systemRole: "viewer",
+        };
+        window.lastPendingCount = null;
+        // צפייה = אנונימי מול Firebase (קריאה בלבד) — מבטל הרשאת כתיבה אם נשארה
+        if (typeof window.fbGoAnonymous === "function") window.fbGoAnonymous();
+        document.body.classList.remove("sub-manager");
+        document.body.classList.add("worker-view", "view-only");
+        const ov = document.getElementById("loginOverlay");
+        if (ov) ov.style.display = "none";
+        document.getElementById("loginUsername").value = "";
+        document.getElementById("loginPassword").value = "";
+        const wl = document.getElementById("workerLoginDiv");
+        if (wl) wl.style.display = "none";
+        const ml = document.getElementById("mainLoginBtns");
+        if (ml) ml.style.display = "flex";
+        // אין מנוי להתראות ואין בקשת הרשאת התראות — צופה אינו מקבל התראות
+        window.showPage("schedule");
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+      };
+
       window.doWorkerLogin = function () {
         let empId = document.getElementById("loginWorkerSelect").value;
         let passInput = document.getElementById("loginWorkerPass").value;
@@ -1261,12 +1318,15 @@
         document.getElementById("loginOverlay").style.display = "none";
         document.getElementById("loginUsername").value = "";
         document.getElementById("loginPassword").value = "";
+        // התראות מערכת (בקשה חדשה) — רק למנהל הראשי. מנהל משני / עובד אינם מקבלים.
         if (
-          window.currentUserRole !== "worker" &&
+          window.currentUserRole === "superAdmin" &&
           typeof window.requestNotifPermission === "function"
         ) {
           window.requestNotifPermission();
         }
+        // איפוס מונה הבקשות בכל החלפת משתמש — מונע התראת "בקשה חדשה" מזויפת על דלתא ישנה
+        window.lastPendingCount = null;
 
         if (window.currentUserRole === "worker") {
           window.isWorkerMode = true;
@@ -1311,8 +1371,24 @@
         window.loggedInUser = null;
         window.currentUserRole = null;
         window.isWorkerMode = false;
+        window.isViewOnly = false;
         window.loggedInWorker = null;
+        window.lastPendingCount = null;
+        // ניתוק האזנות התראות של המשתמש הקודם — שלא יוצגו לבא אחריו
+        if (window._shiftNotifUnsub) {
+          try { window._shiftNotifUnsub(); } catch (e) {}
+          window._shiftNotifUnsub = null;
+        }
+        if (window._myReqUnsub) {
+          try { window._myReqUnsub(); } catch (e) {}
+          window._myReqUnsub = null;
+        }
+        window._myShiftNotifs = {};
+        window._myRequests = {};
+        if (typeof window.renderShiftChangeBanner === "function")
+          window.renderShiftChangeBanner();
         if (typeof window.clearSession === "function") window.clearSession();
+        document.body.classList.remove("view-only");
         // ביטול הרשאת כתיבה של המנהל בעת התנתקות — חזרה לאנונימי
         if (typeof window.fbGoAnonymous === "function") window.fbGoAnonymous();
         document.body.classList.remove("worker-view", "sub-manager");
@@ -4399,7 +4475,7 @@
         if (
           window.lastPendingCount !== null &&
           keys.length > window.lastPendingCount &&
-          !window.isWorkerMode &&
+          window.currentUserRole === "superAdmin" &&
           typeof window.fireNewRequestNotif === "function"
         ) {
           // מצא את הבקשה החדשה ביותר (מזהה הגדול ביותר)
@@ -4417,8 +4493,21 @@
           queueContainer.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות הממתינות לאישורך כרגע.</span>`;
           return;
         }
-        let html = `<table style="width:100%; text-align:right;"><tr><th>עובד</th><th>תאריך / יום</th><th>משמרת</th><th>סוג הבקשה</th><th>פעולות</th></tr>`;
+
+        // חלוקת הבקשות לפי שבוע — כל שבוע בקבוצה נפרדת עם כותרת טווח התאריכים
+        const groups = {};
         keys.forEach((id) => {
+          const wk = pending[id].weekKey || window.currentSelectedWeek || "כללי";
+          (groups[wk] = groups[wk] || []).push(id);
+        });
+        // מיון השבועות כרונולוגית
+        const weekKeys = Object.keys(groups).sort((a, b) => {
+          const sa = window.weekKeyToSunday(a);
+          const sb = window.weekKeyToSunday(b);
+          return (sa ? sa.getTime() : 0) - (sb ? sb.getTime() : 0);
+        });
+
+        const rowHtml = (id) => {
           const r = pending[id];
           let fDate = r.date ? r.date.split("-").reverse().join(".") : "כללי";
           let typeStr = "";
@@ -4429,10 +4518,26 @@
           else if (r.type === "constraint")
             typeStr = `⏳ אילוץ: <b>${r.note}</b>`;
           else typeStr = `📍 העדפת שיבוץ (${window.getLocName(r.loc)})`;
-          let shiftStr = r.type === "vacation" || r.type === "study" ? "-" : r.shift;
-          html += `<tr style="border-bottom: 1px solid var(--md-divider);"><td><b>${r.empName}</b></td><td>${fDate}<br><small>${r.day}</small></td><td>${shiftStr}</td><td>${typeStr}</td><td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
+          let shiftStr =
+            r.type === "vacation" || r.type === "study" ? "-" : r.shift;
+          return `<tr style="border-bottom: 1px solid var(--md-divider);"><td><b>${r.empName}</b></td><td>${fDate}<br><small>${r.day}</small></td><td>${shiftStr}</td><td>${typeStr}</td><td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
+        };
+
+        let html = "";
+        weekKeys.forEach((wk) => {
+          const isCurrent = wk === window.currentSelectedWeek;
+          const label = wk === "כללי" ? "כללי" : window.weekKeyToLabel(wk);
+          const count = groups[wk].length;
+          html += `<div style="margin-bottom:18px; border:1px solid var(--md-divider); border-radius:10px; overflow:hidden;">
+            <div style="background:${isCurrent ? "#1d4ed8" : "#475569"}; color:#fff; padding:8px 14px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+              <span>📅 שבוע ${label}${isCurrent ? " &nbsp;<span style='font-size:0.78rem; background:rgba(255,255,255,0.25); padding:2px 8px; border-radius:10px;'>השבוע המוצג</span>" : ""}</span>
+              <span style="font-size:0.85rem; background:rgba(255,255,255,0.2); padding:2px 10px; border-radius:12px;">${count} בקשות</span>
+            </div>
+            <table style="width:100%; text-align:right;"><tr><th>עובד</th><th>תאריך / יום</th><th>משמרת</th><th>סוג הבקשה</th><th>פעולות</th></tr>
+            ${groups[wk].map(rowHtml).join("")}
+            </table>
+          </div>`;
         });
-        html += `</table>`;
         queueContainer.innerHTML = html;
       };
 
