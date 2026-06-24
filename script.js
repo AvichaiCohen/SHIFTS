@@ -2772,6 +2772,28 @@
       };
 
       // === טבלת הוגנות סופ"ש ===
+      // פענוח זמן מתווית שבוע ("D/M - D/M/YYYY") — לפי תאריך הסיום; 0 אם לא ניתן
+      window._parseWeekendLabelTime = function (label) {
+        if (!label || label === "—") return 0;
+        const m = String(label).split("-").pop().trim().match(/(\d+)\/(\d+)\/(\d+)/);
+        if (!m) return 0;
+        return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+      };
+      // מידע על הסופ"ש האחרון של עובד (לפי שם): זמן, תווית, וכמות כוללת. זמן 0 = מעולם לא עבד
+      window._lastWeekendInfo = function (name) {
+        const arr = (window.weekendHistory && window.weekendHistory[name]) || [];
+        let maxT = 0,
+          lastLabel = "—";
+        arr.forEach((l) => {
+          const t = window._parseWeekendLabelTime(l);
+          if (t >= maxT) {
+            maxT = t;
+            lastLabel = l;
+          }
+        });
+        return { time: maxT, label: arr.length ? lastLabel : "—", count: arr.length };
+      };
+
       window.updateWeekendHistory = function () {
         let weekSun = window.getSunday(window.currentWeekOffset || 0);
         let weekLabel = window.formatWeekString(weekSun);
@@ -2811,7 +2833,13 @@
           .filter(
             (e) => e.isActive && (e.type === "טכנאי" || e.type === "נחפף"),
           )
-          .sort((a, b) => a.name.localeCompare(b.name));
+          // מיון לפי הסופ"ש האחרון — מי שסגר הכי מזמן (או מעולם לא) בראש
+          .sort(
+            (a, b) =>
+              window._lastWeekendInfo(a.name).time -
+                window._lastWeekendInfo(b.name).time ||
+              a.name.localeCompare(b.name),
+          );
         if (relevantStaff.length === 0) {
           cont.innerHTML =
             "<p style='color:var(--text-muted); font-style:italic;'>אין נתונים.</p>";
@@ -2826,7 +2854,7 @@
           </tr>`;
         relevantStaff.forEach((e) => {
           let hist = window.weekendHistory[e.name] || [];
-          let lastWE = hist.length > 0 ? hist[hist.length - 1] : "—";
+          let lastWE = window._lastWeekendInfo(e.name).label;
           let status = e.isNextWeekend
             ? `<span style="color:var(--md-primary); font-weight:bold;">📅 משובץ לסופ"ש הקרוב</span>`
             : e.workedLastWeekend
@@ -3146,19 +3174,19 @@
           return;
         }
         const ranked = techs
-          .map((e) => ({
-            emp: e,
-            count: (wh[e.name] || []).length,
-            last: (wh[e.name] || []).slice(-1)[0] || "—",
-          }))
+          .map((e) => {
+            const info = window._lastWeekendInfo(e.name);
+            return { emp: e, count: info.count, last: info.label, lastTime: info.time };
+          })
+          // לפי הסופ"ש האחרון — מי שסגר הכי מזמן (או מעולם לא) קודם
           .sort(
             (a, b) =>
-              a.count - b.count || a.emp.name.localeCompare(b.emp.name),
+              a.lastTime - b.lastTime || a.emp.name.localeCompare(b.emp.name),
           );
         const topN = 2; // לרוב סוגרים 2; אפשר לסמן עוד ידנית בכרטיס העובד
-        let msg = 'מועמדים לסגירת הסופ"ש הקרוב (לפי מי שסגר הכי מעט):\n\n';
+        let msg = 'מועמדים לסגירת הסופ"ש הקרוב (לפי מי שסגר הכי מזמן):\n\n';
         ranked.slice(0, 6).forEach((r, i) => {
-          msg += `${i + 1}. ${r.emp.name} — ${r.count} סופ"שים (אחרון: ${r.last})\n`;
+          msg += `${i + 1}. ${r.emp.name} — אחרון: ${r.last} (סה"כ ${r.count})\n`;
         });
         msg += `\nלסמן את ${topN} הראשונים (${ranked
           .slice(0, topN)
