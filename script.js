@@ -1802,8 +1802,9 @@
       };
 
       window.openSpecialStatusModal = function () {
+        // כולל קבינט בכיר — הם מסומנים כ"לא בשיבוץ" (isActive=false) אך עדיין ניתן להחיל עליהם סטטוס מיוחד
         let options = window.staff
-          .filter((e) => e.isActive !== false)
+          .filter((e) => e.isActive !== false || e.type === "קבינט בכיר")
           .map((e) => `<option value="${e.id}">${e.name}</option>`)
           .join("");
         document.getElementById("specEmpSelector").innerHTML =
@@ -3598,7 +3599,8 @@
       window.addSpecParticipantRow = function () {
         const container = document.getElementById("specParticipantRows");
         if (!container) return;
-        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false);
+        // כולל קבינט בכיר (מסומנים "לא בשיבוץ") כדי שניתן יהיה להחיל עליהם סטטוס מיוחד
+        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false || e.type === "קבינט בכיר");
         const opts = activeStaff.map((e) => `<option value="${e.id}">${e.name}</option>`).join("");
         const row = document.createElement("div");
         row.style.cssText = "display:flex; gap:6px; align-items:center;";
