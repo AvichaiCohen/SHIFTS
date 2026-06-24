@@ -6279,10 +6279,15 @@
               html += `<div style="height:40px;background:#f1f5f9;border-radius:4px;opacity:0.35;margin:2px 0;"></div></td>`;
               return;
             }
-            const assigned =
+            let assigned =
               data[`${d}-${r.shift}`] && data[`${d}-${r.shift}`][r.loc]
                 ? data[`${d}-${r.shift}`][r.loc]
                 : [];
+            // סטטוס מיוחד חוסם (ללא "חוזר למשמרת") — לא מציגים בתא המשמרת, רק בשורת הסטטוס
+            if (window.isBlockedBySpecialDay)
+              assigned = assigned.filter(
+                (e) => !window.isBlockedBySpecialDay(e.id, d),
+              );
             let dropEvents = window.isEditMode
               ? `ondragover="window.allowDrop(event)" ondragleave="window.dragLeave(event)" ondrop="window.drop(event, '${d}', '${r.shift}', '${safeLoc}')"`
               : "";
@@ -6454,6 +6459,11 @@
           let dayKey = `${d}-${r.shift}`;
           let empsInShift =
             data[dayKey] && data[dayKey][r.loc] ? data[dayKey][r.loc] : [];
+          // סטטוס מיוחד חוסם (ללא "חוזר למשמרת") — לא מציגים בתא המשמרת, רק בשורת הסטטוס
+          if (window.isBlockedBySpecialDay)
+            empsInShift = empsInShift.filter(
+              (e) => !window.isBlockedBySpecialDay(e.id, d),
+            );
           let shiftCustomName =
             data[dayKey] && data[dayKey][r.loc + "_customName"]
               ? data[dayKey][r.loc + "_customName"]
