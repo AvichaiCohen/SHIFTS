@@ -1245,7 +1245,8 @@
       window.isViewOnly = false;
       window.enterViewerMode = function () {
         window.currentUserRole = "viewer";
-        window.isWorkerMode = false;
+        // קריאה-בלבד כמו עובד (מסתיר עריכה/הסרה), אך view-only מסתיר גם בקשות/סיכום/התראות
+        window.isWorkerMode = true;
         window.isViewOnly = true;
         window.loggedInWorker = null;
         window.loggedInUser = {
@@ -1327,6 +1328,16 @@
         }
         // איפוס מונה הבקשות בכל החלפת משתמש — מונע התראת "בקשה חדשה" מזויפת על דלתא ישנה
         window.lastPendingCount = null;
+
+        // מיגרציה — אם יש משימות מקומיות ישנות שטרם הועלו לענן, מעלים אותן פעם אחת
+        if (
+          window.currentUserRole === "superAdmin" &&
+          window._tasksCloudExists === false &&
+          (window.systemTasks || []).length > 0 &&
+          typeof window.saveToCloud === "function"
+        ) {
+          window.saveToCloud("systemTasks", window.systemTasks, { silent: true });
+        }
 
         if (window.currentUserRole === "worker") {
           window.isWorkerMode = true;
@@ -1648,7 +1659,7 @@
         const cellKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth()+1).padStart(2,"0")}-${String(cellDate.getDate()).padStart(2,"0")}`;
         const globalSpecs = (window.specialStatuses || [])
           .filter((s) => s.startDate <= cellKey && cellKey <= s.endDate)
-          .map((s) => ({ id: s.empId, name: s.empName, status: s.status, text: s.text || "", _specialId: s.id }));
+          .map((s) => ({ id: s.empId, name: s.empName, status: s.status, text: s.text || "", _specialId: s.id, returnsToShift: s.returnsToShift === true }));
         const taskSpecs = [];
         (window.systemTasks || [])
           .filter((t) => !t.completed && t.date <= cellKey && (t.endDate || t.date) >= cellKey)
@@ -1665,6 +1676,27 @@
           if (!merged.find((m) => m.id == s.id)) merged.push(s);
         });
         return merged;
+      };
+
+      // סטטוס מיוחד חוסם שיבוץ — קיים סטטוס לעובד בתאריך נתון שאינו מסומן "חוזר למשמרת"
+      window.isBlockedBySpecialOnDate = function (empId, cellKey) {
+        return (window.specialStatuses || []).some(
+          (s) =>
+            String(s.empId) === String(empId) &&
+            s.returnsToShift !== true &&
+            s.startDate <= cellKey &&
+            cellKey <= s.endDate,
+        );
+      };
+      // אותו דבר לפי שם יום בשבוע המוצג כעת
+      window.isBlockedBySpecialDay = function (empId, dayName) {
+        const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        const idx = days.indexOf(dayName);
+        if (idx < 0) return false;
+        const d = new Date(weekSun);
+        d.setDate(d.getDate() + idx);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return window.isBlockedBySpecialOnDate(empId, key);
       };
 
       // תווית תצוגה לסטטוס מיוחד — כשהסטטוס הוא "אחר", מציג את ההערה שנכתבה
@@ -1786,6 +1818,10 @@
         const cbMulti = document.getElementById("specMultiParticipant");
         if (cbSingle) { cbSingle.checked = false; window.toggleSpecDayMode && window.toggleSpecDayMode(); }
         if (cbMulti) { cbMulti.checked = false; window.toggleSpecParticipantMode && window.toggleSpecParticipantMode(); }
+        const cbAll = document.getElementById("specAllStaff");
+        if (cbAll) { cbAll.checked = false; window.toggleSpecAllStaff && window.toggleSpecAllStaff(); }
+        const cbReturn = document.getElementById("specReturnsToShift");
+        if (cbReturn) cbReturn.checked = false;
         document.getElementById("specNote").value = "";
         document.getElementById("specialStatusModal").style.display = "flex";
       };
@@ -1807,6 +1843,9 @@
       window.saveSpecialStatus = function () {
         const isSingleDay = document.getElementById("specSingleDay")?.checked;
         const isMulti = document.getElementById("specMultiParticipant")?.checked;
+        const isAllStaff = document.getElementById("specAllStaff")?.checked;
+        // "חוזר למשמרת" מסומן ⇒ העובד עדיין יכול להשתבץ; לא מסומן ⇒ חסום מהמשמרות
+        const returnsToShift = document.getElementById("specReturnsToShift")?.checked === true;
         let startDate = document.getElementById("specStartDate").value;
         let endDate = isSingleDay ? startDate : (document.getElementById("specEndDate").value || startDate);
         let status = document.getElementById("specType").value;
@@ -1815,9 +1854,13 @@
         // שמירה: status נשאר "אחר" (לא נדרס) כדי שהייצוא יבחין בו; ההערה נשמרת ב-text
         if (endDate < startDate) endDate = startDate;
 
-        // בנה רשימת עובדים (יחיד או מרובה)
+        // בנה רשימת עובדים (כל הצוות / יחיד / מרובה)
         let emps = [];
-        if (isMulti) {
+        if (isAllStaff) {
+          // כלל הצוות — כולל קבינט בכיר
+          emps = (window.staff || []).filter((e) => e.isActive !== false);
+          if (emps.length === 0) { alert("אין עובדים פעילים!"); return; }
+        } else if (isMulti) {
           document.querySelectorAll(".spec-participant-select").forEach((sel) => {
             if (sel.value) {
               const e = window.staff.find((x) => x.id == sel.value);
@@ -1838,17 +1881,19 @@
           window.specialStatuses = (window.specialStatuses || []).filter(
             (s) => !(s.empId == emp.id && s.startDate <= endDate && s.endDate >= startDate && !s.taskId)
           );
-          window.specialStatuses.push({ id: Date.now() + Math.floor(Math.random()*1000), empId: emp.id, empName: emp.name, status, text, startDate, endDate });
+          window.specialStatuses.push({ id: Date.now() + Math.floor(Math.random()*1000), empId: emp.id, empName: emp.name, status, text, startDate, endDate, returnsToShift });
 
-          // הסרה ממשמרות השבוע הנוכחי עבור ימים שנכנסים בטווח
-          const weekSun = window.getSunday(window.currentWeekOffset || 0);
-          days.forEach((dayName, idx) => {
-            const cellDate = new Date(weekSun);
-            cellDate.setDate(cellDate.getDate() + idx);
-            const cellKey = cellDate.toISOString().split("T")[0];
-            if (cellKey >= startDate && cellKey <= endDate)
-              window._removeEmpFromDayShifts(dayName, emp.id);
-          });
+          // אם לא "חוזר למשמרת" — הסרה ממשמרות השבוע הנוכחי עבור ימים שבטווח
+          if (!returnsToShift) {
+            const weekSun = window.getSunday(window.currentWeekOffset || 0);
+            days.forEach((dayName, idx) => {
+              const cellDate = new Date(weekSun);
+              cellDate.setDate(cellDate.getDate() + idx);
+              const cellKey = cellDate.toISOString().split("T")[0];
+              if (cellKey >= startDate && cellKey <= endDate)
+                window._removeEmpFromDayShifts(dayName, emp.id);
+            });
+          }
         });
 
         window.saveToCloud("specialStatuses", window.specialStatuses);
@@ -2025,6 +2070,18 @@
         if (!window.draggedData) return;
         const { empId, sourceDay, sourceShift, sourceLoc } = window.draggedData;
         const emp = window.staff.find((e) => e.id == empId);
+
+        // סטטוס מיוחד חוסם — אזהרה לפני שיבוץ ידני לעובד עם סטטוס מיוחד (ללא "חוזר למשמרת")
+        if (
+          window.isBlockedBySpecialDay &&
+          window.isBlockedBySpecialDay(empId, targetDay) &&
+          !confirm(
+            `ל${emp ? emp.name : "עובד זה"} יש סטטוס מיוחד ביום ${targetDay} שאינו מאפשר כניסה למשמרת.\nלשבץ בכל זאת?`,
+          )
+        ) {
+          window.draggedData = null;
+          return;
+        }
 
         if (sourceDay !== "pool") {
           let isSourceBlock = false;
@@ -3542,6 +3599,22 @@
           window.addSpecParticipantRow();
       };
 
+      // "כל הצוות" — כשמסומן, מסתיר את בחירת העובד/ים (הסטטוס יחול על כולם)
+      window.toggleSpecAllStaff = function () {
+        const all = document.getElementById("specAllStaff")?.checked;
+        const partWrap = document.getElementById("specParticipantModeWrapper");
+        const singleWrap = document.getElementById("specSingleEmpWrapper");
+        const multiWrap = document.getElementById("specMultiEmpWrapper");
+        if (partWrap) partWrap.style.display = all ? "none" : "block";
+        if (all) {
+          if (singleWrap) singleWrap.style.display = "none";
+          if (multiWrap) multiWrap.style.display = "none";
+        } else {
+          // חזרה למצב לפי checkbox "רב משתתפים"
+          if (window.toggleSpecParticipantMode) window.toggleSpecParticipantMode();
+        }
+      };
+
       window.addSpecParticipantRow = function () {
         const container = document.getElementById("specParticipantRows");
         if (!container) return;
@@ -3634,7 +3707,7 @@
         };
         if (!isSingleDay && endDate && endDate > date) task.endDate = endDate;
         window.systemTasks.push(task);
-        localStorage.setItem("shift_tasks_v47", JSON.stringify(window.systemTasks));
+        window._saveTasks();
         window.syncTaskSpecialStatus(task);
         document.getElementById("newTaskDesc").value = "";
         document.getElementById("newTaskDate").value = "";
@@ -3643,11 +3716,20 @@
         window.triggerUnsavedChanges();
       };
 
+      // שמירת המשימות — מקומי (cache) + ענן (כדי שכל המשתמשים יראו)
+      window._saveTasks = function () {
+        try {
+          localStorage.setItem("shift_tasks_v47", JSON.stringify(window.systemTasks));
+        } catch (e) {}
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("systemTasks", window.systemTasks, { silent: true });
+      };
+
       window.toggleTaskStatus = function (id) {
         let t = window.systemTasks.find((x) => x.id === id);
         if (t) {
           t.completed = !t.completed;
-          localStorage.setItem("shift_tasks_v47", JSON.stringify(window.systemTasks));
+          window._saveTasks();
           window.syncTaskSpecialStatus(t);
           window.renderTasks();
           window.triggerUnsavedChanges();
@@ -3658,7 +3740,7 @@
         if (confirm("למחוק את המשימה?")) {
           const task = window.systemTasks.find((x) => x.id === id);
           window.systemTasks = window.systemTasks.filter((x) => x.id !== id);
-          localStorage.setItem("shift_tasks_v47", JSON.stringify(window.systemTasks));
+          window._saveTasks();
           if (task) {
             window.specialStatuses = (window.specialStatuses || []).filter((s) => s.taskId !== id);
             window.saveToCloud("specialStatuses", window.specialStatuses);
@@ -5430,6 +5512,11 @@
             let restingToday = [];
             activeStaff.forEach((emp) => {
               let empConst = emp.constraints || [];
+              // סטטוס מיוחד חוסם (ללא "חוזר למשמרת") — חוסם את כל היום, כמו יום חופש מלא
+              if (window.isBlockedBySpecialDay && window.isBlockedBySpecialDay(emp.id, day)) {
+                restingToday.push({ emp, reason: "סטטוס מיוחד", icon: "🚩" });
+                return;
+              }
               let isFullOff =
                 empConst.includes(`${day}-בוקר`) &&
                 empConst.includes(`${day}-ערב`) &&
@@ -6057,6 +6144,23 @@
           });
         }
 
+        // ניקוי סופי — הסרת כל עובד עם סטטוס מיוחד חוסם (ללא "חוזר למשמרת") מכל המשמרות באותו יום
+        if (window.isBlockedBySpecialDay) {
+          const _allSweepShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
+          days.forEach((day) => {
+            _allSweepShifts.forEach((s) => {
+              baseLocs.forEach((l) => {
+                const slot = window.currentSchedule[`${day}-${s}`];
+                if (slot && Array.isArray(slot[l])) {
+                  slot[l] = slot[l].filter(
+                    (e) => !window.isBlockedBySpecialDay(e.id, day),
+                  );
+                }
+              });
+            });
+          });
+        }
+
         window.triggerUnsavedChanges();
       };
 
@@ -6088,7 +6192,7 @@
             schedPage.classList.add("active");
           }
         }
-        if (window.isWorkerMode && data && !data.isPublished) {
+        if ((window.isWorkerMode || window.isViewOnly) && data && !data.isPublished) {
           const lockedMsg = `<div style="text-align:center; padding:50px 20px; color:var(--md-text-secondary);"><h2 style="font-size:2rem; margin-bottom:10px;">🔒</h2><h3>המשמרות לשבוע זה טרם פורסמו</h3><p>המנהל עדיין עובד על סידור העבודה. אנא חזור מאוחר יותר.</p></div>`;
           const desktopContainer = document.getElementById("tableOutput");
           const mobileContainer = document.getElementById("mobileCardsOutput");
