@@ -1222,9 +1222,10 @@
           }
         }
 
-        // 2. התחברות לכל שאר העובדים או המנהלים המשניים
+        // 2. התחברות לכל שאר העובדים או המנהלים המשניים (כולל סיסמה שעודכנה ע"י העובד)
         let emp = window.globalStaff.find(
-          (e) => e.personalId === uid && e.password === pass,
+          (e) =>
+            e.personalId === uid && window.getEffectivePassword(e) === pass,
         );
         if (emp) {
           window.loggedInUser = emp;
@@ -1273,6 +1274,50 @@
           window.renderTable(window.currentSchedule, window.currentNotesLog);
       };
 
+      // הסיסמה האפקטיבית של עובד — שינוי-עצמי (passwordOverrides) גובר על staffMaster
+      window.passwordOverrides = window.passwordOverrides || {};
+      window.getEffectivePassword = function (emp) {
+        if (!emp) return "1234";
+        const ov = window.passwordOverrides && window.passwordOverrides[emp.id];
+        if (ov && ov.password) return ov.password;
+        return emp.password || "1234";
+      };
+
+      // שינוי סיסמה עצמי לעובד — תקף מיידית; המנהל הראשי רואה אותה ומטמיע ל-staffMaster
+      window.changeMyPassword = function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id === "super" || me.id === "viewer") {
+          alert("רק עובד מחובר יכול לשנות סיסמה.");
+          return;
+        }
+        const cur = prompt("הסיסמה הנוכחית שלך:");
+        if (cur === null) return;
+        if (window.getEffectivePassword(me) !== cur.trim()) {
+          alert("הסיסמה הנוכחית שגויה.");
+          return;
+        }
+        const next = prompt("סיסמה חדשה (לפחות 4 תווים):");
+        if (next === null) return;
+        const np = (next || "").trim();
+        if (np.length < 4) {
+          alert("הסיסמה החדשה קצרה מדי — נדרשים לפחות 4 תווים.");
+          return;
+        }
+        if (typeof window.saveToCloud !== "function") {
+          alert("שגיאת חיבור — נסה שוב מאוחר יותר.");
+          return;
+        }
+        // כתיבה ל-passwordOverrides (העובד אנונימי — מותר לו רק כאן); תקף מיידית לכניסה הבאה
+        window.saveToCloud("passwordOverrides/" + me.id, {
+          password: np,
+          ts: Date.now(),
+        });
+        window.passwordOverrides = window.passwordOverrides || {};
+        window.passwordOverrides[me.id] = { password: np, ts: Date.now() };
+        me.password = np;
+        alert("✅ הסיסמה עודכנה!\nמהכניסה הבאה היכנס עם הסיסמה החדשה.");
+      };
+
       window.doWorkerLogin = function () {
         let empId = document.getElementById("loginWorkerSelect").value;
         let passInput = document.getElementById("loginWorkerPass").value;
@@ -1282,7 +1327,7 @@
         }
 
         let emp = window.globalStaff.find((e) => e.id == empId);
-        let actualPass = emp.password || "1234";
+        let actualPass = window.getEffectivePassword(emp);
 
         if (passInput === actualPass) {
           window.isWorkerMode = true;
@@ -1999,7 +2044,7 @@
                     ? "מנהל משני"
                     : "עובד";
               let pId = e.personalId || "לא הוגדר";
-              let pass = e.password || "1234";
+              let pass = window.getEffectivePassword(e);
 
               return `<div class="emp-card chip-${(e.type || "").replace(/\s+/g, "-")} ${isInactive}" onclick="window.openModal(${e.id})">
                         <div style="width:100%;">
@@ -4292,6 +4337,8 @@
           : "block";
         document.getElementById("reqLoc").style.display =
           type === "shift" ? "block" : "none";
+        const vacWrap = document.getElementById("reqVacDaysWrapper");
+        if (vacWrap) vacWrap.style.display = type === "vacation" ? "block" : "none";
         let reqNote = document.getElementById("reqNote");
         reqNote.style.display =
           type === "constraint" || type === "vacation" || type === "study"
@@ -4361,6 +4408,18 @@
         // קבע ומילואים — ללא מגבלת בקשות (אילוצים/חופשים)
         const _noLimit = emp.type === "קבע" || emp.type === "מילואים";
 
+        // כמות ימי חופש רצופים (רק לבקשת חופשה)
+        const vacDays =
+          type === "vacation"
+            ? Math.max(
+                1,
+                Math.min(
+                  30,
+                  parseInt(document.getElementById("reqVacDays")?.value) || 1,
+                ),
+              )
+            : 1;
+
         // יום לימודים — רק לקבע, ופעם אחת בשבוע
         if (type === "study") {
           if (emp.type !== "קבע") {
@@ -4397,7 +4456,8 @@
         if (
           targetWeekKey === window.currentSelectedWeek &&
           !_noLimit &&
-          type !== "study"
+          type !== "study" &&
+          !(type === "vacation" && vacDays > 1)
         ) {
           if (emp.prefs) {
             existingCount += emp.prefs.length;
@@ -4426,64 +4486,90 @@
           }
         }
 
-        const reqId = Date.now();
-        const newRequest = {
-          id: reqId,
-          empId: emp.id,
-          empName: emp.name,
-          date: dateVal,
-          day,
-          type,
-          shift,
-          loc,
-          note,
-          status: "pending",
-        };
-
-        // שמירה לשבוע הנכון לפי התאריך שנבחר
-        if (typeof window.saveToCloud === "function") {
+        // יצירת בקשה בודדת ליום מסוים (משמש גם לחופשה מרובת-ימים)
+        const _submitOneRequest = (dVal, dName, wkKey) => {
+          const reqId = Date.now() + Math.floor(Math.random() * 100000);
+          const newRequest = {
+            id: reqId,
+            empId: emp.id,
+            empName: emp.name,
+            date: dVal,
+            day: dName,
+            type,
+            shift,
+            loc,
+            note,
+            status: "pending",
+          };
           // עדכון מטמון מקומי לתצוגה מיידית (רק לשבוע המוצג)
-          if (targetWeekKey === window.currentSelectedWeek) {
+          if (wkKey === window.currentSelectedWeek) {
             if (!window.currentSchedule.pendingRequests)
               window.currentSchedule.pendingRequests = {};
             window.currentSchedule.pendingRequests[reqId] = newRequest;
           }
-          // כתיבה של הבקשה הבודדת לפי מזהה — מאפשר חוק הרשאה מוקשח (עובד מוסיף בלבד)
           window.saveToCloud(
-            "schedules/" + targetWeekKey + "/pendingRequests/" + reqId,
+            "schedules/" + wkKey + "/pendingRequests/" + reqId,
             newRequest,
           );
-          // אינדקס גלובלי של בקשות ממתינות — מאפשר למנהל לראות בקשות מכל השבועות, בזמן אמת
           window.saveToCloud(
             "pendingRequestsIndex/" + reqId,
-            Object.assign({}, newRequest, { weekKey: targetWeekKey, ts: reqId }),
+            Object.assign({}, newRequest, { weekKey: wkKey, ts: reqId }),
           );
-          // מראה אישית לעובד — רשימת בקשות וסטטוס (שורדת גם אחרי טיפול המנהל)
-          // כתיבה שקטה: גם אם תיכשל, הבקשה האמיתית כבר נשלחה למנהל
           window.saveToCloud(
             "myRequests/" + emp.id + "/" + reqId,
             {
               id: reqId,
               empId: emp.id,
-              date: dateVal,
-              day,
+              date: dVal,
+              day: dName,
               type,
               shift,
               loc,
               note,
-              weekKey: targetWeekKey,
+              weekKey: wkKey,
               status: "pending",
               ts: reqId,
             },
             { silent: true },
           );
+        };
+
+        if (typeof window.saveToCloud === "function") {
+          let firstDate = dateVal;
+          if (type === "vacation" && vacDays > 1) {
+            // חופשה רצופה — בקשה נפרדת לכל יום, גם אם חוצה שבועות
+            for (let i = 0; i < vacDays; i++) {
+              const dObj = new Date(reqDateObj);
+              dObj.setDate(reqDateObj.getDate() + i);
+              const dName = days[dObj.getDay()];
+              const dVal = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
+              const wkSun = new Date(dObj);
+              wkSun.setDate(dObj.getDate() - dObj.getDay());
+              const wkKey = window.getWeekDbKey(wkSun);
+              _submitOneRequest(dVal, dName, wkKey);
+            }
+          } else {
+            _submitOneRequest(dateVal, day, targetWeekKey);
+          }
 
           // הודעת הצלחה + איפוס הטופס
-          const fDate = dateVal.split("-").reverse().join(".");
-          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 תאריך: ${fDate} (${day})\n📋 סוג: ${type === 'vacation' ? 'יום חופש' : type === 'study' ? 'יום לימודים' : type === 'constraint' ? 'אילוץ' : 'בקשת שיבוץ'}\nהמנהל יטפל בבקשתך בהקדם.`);
+          const fDate = firstDate.split("-").reverse().join(".");
+          const typeLabel =
+            type === "vacation"
+              ? vacDays > 1
+                ? `${vacDays} ימי חופש (החל מ-${fDate})`
+                : "יום חופש"
+              : type === "study"
+                ? "יום לימודים"
+                : type === "constraint"
+                  ? "אילוץ"
+                  : "בקשת שיבוץ";
+          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 ${type === 'vacation' && vacDays > 1 ? typeLabel : fDate + ' (' + day + ')'}\n📋 סוג: ${type === 'vacation' && vacDays > 1 ? 'חופשה רצופה' : typeLabel}\nהמנהל יטפל בבקשתך בהקדם.`);
           document.getElementById("reqDate").value = "";
           document.getElementById("reqDay").value = "";
           document.getElementById("reqNote").value = "";
+          const _vd = document.getElementById("reqVacDays");
+          if (_vd) _vd.value = "1";
 
           setTimeout(() => {
             if (!window.waPromptEnabled) return;
@@ -4825,7 +4911,8 @@
 
         // שדות מנהל על
         document.getElementById("editPersonalId").value = emp.personalId || "";
-        document.getElementById("editPassword").value = emp.password || "1234";
+        document.getElementById("editPassword").value =
+          window.getEffectivePassword(emp);
 
         // נעילת תפקיד "מנהל ראשי" רק לאביחי
         let sysRoleSelect = document.getElementById("editSystemRole");

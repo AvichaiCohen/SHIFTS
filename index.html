@@ -471,6 +471,41 @@
             window.renderTasks();
         });
 
+        // סיסמאות שעובדים שינו לעצמם — תקפות מיידית; המנהל הראשי מטמיע ל-staffMaster ומנקה
+        window.passwordOverrides = {};
+        onValue(ref(db, "passwordOverrides"), (snapshot) => {
+          window.passwordOverrides = snapshot.exists()
+            ? snapshot.val() || {}
+            : {};
+          const keys = Object.keys(window.passwordOverrides);
+          if (
+            window.currentUserRole === "superAdmin" &&
+            Array.isArray(window.globalStaff) &&
+            keys.length > 0
+          ) {
+            let changed = false;
+            keys.forEach((empId) => {
+              const ov = window.passwordOverrides[empId];
+              const ge = window.globalStaff.find(
+                (e) => String(e.id) === String(empId),
+              );
+              if (ge && ov && ov.password && ge.password !== ov.password) {
+                ge.password = ov.password;
+                changed = true;
+              }
+            });
+            if (changed) window.saveToCloud("staffMaster", window.globalStaff);
+            // הוטמע — מנקים את הצומת (set ל-null מוחק)
+            window.saveToCloud("passwordOverrides", null);
+          }
+          if (
+            typeof window.renderStaff === "function" &&
+            document.getElementById("page-staff") &&
+            document.getElementById("page-staff").classList.contains("active")
+          )
+            window.renderStaff();
+        });
+
         window.onclick = function (event) {
           let editModal = document.getElementById("editModal");
           let specModal = document.getElementById("specialStatusModal");
@@ -487,7 +522,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260624g" />
+    <link rel="stylesheet" href="style.css?v=20260625a" />
   </head>
   <body>
     <div
@@ -1089,13 +1124,27 @@
             </div>
           </div>
 
-          <div style="margin-bottom: 12px">
+          <div
+            style="
+              margin-bottom: 12px;
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+            "
+          >
             <button
               class="btn btn-contained worker-only"
-              style="background: #c2410c; width: 100%; max-width: 320px"
+              style="background: #c2410c; flex: 1; min-width: 200px"
               onclick="window.showMyWeekSummary()"
             >
               📋 הסיכום השבועי שלי
+            </button>
+            <button
+              class="btn btn-outlined worker-only"
+              style="min-width: 150px"
+              onclick="window.changeMyPassword()"
+            >
+              🔑 שנה סיסמה
             </button>
           </div>
 
@@ -1268,6 +1317,35 @@
                 </option>
                 <option value="study">📚 יום לימודים (קבע בלבד — לא מהחופשים)</option>
               </select>
+
+              <div id="reqVacDaysWrapper" style="display: none">
+                <label
+                  style="
+                    font-size: 0.9rem;
+                    font-weight: bold;
+                    color: var(--md-text-secondary);
+                    display: block;
+                    margin-bottom: 6px;
+                  "
+                  >כמות ימי חופש רצופים (מהתאריך שנבחר):</label
+                >
+                <input
+                  type="number"
+                  id="reqVacDays"
+                  min="1"
+                  max="30"
+                  value="1"
+                  style="
+                    background: white;
+                    padding: 10px;
+                    font-size: 1rem;
+                    border-radius: 8px;
+                    border: 1px solid #cbd5e1;
+                    width: 100%;
+                    box-sizing: border-box;
+                  "
+                />
+              </div>
 
               <select
                 id="reqShift"
@@ -2969,6 +3047,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260624g"></script>
+    <script src="script.js?v=20260625a"></script>
   </body>
 </html>

@@ -27,6 +27,11 @@
       "$id": {
         ".write": "auth != null && !data.exists()"
       }
+    },
+    "passwordOverrides": {
+      "$empId": {
+        ".write": "auth != null"
+      }
     }
   }
 }
