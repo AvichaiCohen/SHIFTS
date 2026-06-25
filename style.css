@@ -596,6 +596,26 @@
           -webkit-appearance: menulist;
           appearance: menulist;
         }
+        .mobile-day-nav-btn {
+          flex: 0 0 auto;
+          min-width: 52px;
+          padding: 12px 14px;
+          border: 1px solid var(--md-primary);
+          border-radius: 12px;
+          background: var(--md-primary);
+          color: #fff;
+          font-size: 1.2rem;
+          font-weight: bold;
+          line-height: 1;
+          cursor: pointer;
+          box-shadow: var(--elevation-1);
+          -webkit-user-select: none;
+          user-select: none;
+        }
+        .mobile-day-nav-btn:active {
+          transform: scale(0.94);
+          opacity: 0.85;
+        }
         .day-tab {
           padding: 8px 20px;
           border: 1px solid var(--md-primary);
@@ -910,6 +930,17 @@
       body.screenshot-mode #tableOutput .time-label,
       #tableOutput.export-capture .time-label {
         font-size: 0.95rem !important;
+      }
+      /* הערת יום + שורת "הערות ומשימות" — מגדילים גם אותן בייצוא לתמונה */
+      body.screenshot-mode #tableOutput .day-note-display,
+      #tableOutput.export-capture .day-note-display {
+        font-size: 1rem !important;
+      }
+      body.screenshot-mode #tableOutput .note-chip,
+      #tableOutput.export-capture .note-chip,
+      body.screenshot-mode #tableOutput .note-task,
+      #tableOutput.export-capture .note-task {
+        font-size: 0.98rem !important;
       }
 
       /* ===== סטטוס מיוחד - מצב כהה ===== */

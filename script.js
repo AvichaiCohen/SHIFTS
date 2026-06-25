@@ -1516,6 +1516,14 @@
           );
       };
 
+      // מעבר יום קדימה/אחורה בנייד (חצים / החלקה) — בתוך השבוע (1=ראשון ... 7=שבת)
+      window.changeMobileDay = function (delta) {
+        let d = (window.currentMobileDay || 1) + delta;
+        if (d < 1) d = 1;
+        if (d > 7) d = 7;
+        if (d !== window.currentMobileDay) window.selectMobileDay(d);
+      };
+
       window.updateShiftCustomName = function (day, shift, loc, val) {
         if (!window.currentSchedule[`${day}-${shift}`])
           window.currentSchedule[`${day}-${shift}`] = {};
@@ -6362,7 +6370,7 @@
           if (!window.isWorkerMode) {
             noteHtml = `<br><input type="text" value="${note}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
           } else if (note) {
-            noteHtml = `<br><span style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
+            noteHtml = `<br><span class="day-note-display" style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
           }
           // תאריך היום — מתחת לשם היום, מעל ההערה
           const _cellDate = new Date(_weekSun);
@@ -6508,9 +6516,41 @@
           window.renderPendingRequestsManager();
       };
 
+      // אתחול החלקה (swipe) למעבר בין ימים בנייד — פעם אחת, על המיכל הקבוע
+      window._initMobileSwipe = function () {
+        if (window._swipeInit) return;
+        const swipeEl = document.getElementById("mobileCardsContainer");
+        if (!swipeEl) return;
+        window._swipeInit = true;
+        let sx = 0,
+          sy = 0;
+        swipeEl.addEventListener(
+          "touchstart",
+          (e) => {
+            sx = e.changedTouches[0].clientX;
+            sy = e.changedTouches[0].clientY;
+          },
+          { passive: true },
+        );
+        swipeEl.addEventListener(
+          "touchend",
+          (e) => {
+            const dx = e.changedTouches[0].clientX - sx;
+            const dy = e.changedTouches[0].clientY - sy;
+            // החלקה אופקית מובהקת בלבד
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+              // החלקה שמאלה = יום הבא; ימינה = יום קודם
+              window.changeMobileDay(dx < 0 ? 1 : -1);
+            }
+          },
+          { passive: true },
+        );
+      };
+
       window.renderMobileCards = function (data, notesLog) {
         const container = document.getElementById("mobileCardsOutput");
         if (!container) return;
+        window._initMobileSwipe();
         if (!data || Object.keys(data).length <= 1) {
           container.innerHTML = "<em>אין נתונים / לוח ריק</em>";
           return;

@@ -522,7 +522,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260625a" />
+    <link rel="stylesheet" href="style.css?v=20260625b" />
   </head>
   <body>
     <div
@@ -1149,19 +1149,45 @@
           </div>
 
           <div id="mobileDayTabs" class="mobile-day-tabs">
-            <select
-              id="mobileDaySelect"
-              class="mobile-day-select"
-              onchange="window.selectMobileDay(parseInt(this.value))"
+            <div
+              style="
+                display: flex;
+                align-items: stretch;
+                gap: 8px;
+                width: 100%;
+              "
             >
-              <option value="1">יום ראשון</option>
-              <option value="2">יום שני</option>
-              <option value="3">יום שלישי</option>
-              <option value="4">יום רביעי</option>
-              <option value="5">יום חמישי</option>
-              <option value="6">יום שישי</option>
-              <option value="7">יום שבת</option>
-            </select>
+              <button
+                type="button"
+                class="mobile-day-nav-btn"
+                onclick="window.changeMobileDay(-1)"
+                aria-label="יום קודם"
+              >
+                ▶
+              </button>
+              <select
+                id="mobileDaySelect"
+                class="mobile-day-select"
+                style="flex: 1"
+                onchange="window.selectMobileDay(parseInt(this.value))"
+              >
+                <option value="1">יום ראשון</option>
+                <option value="2">יום שני</option>
+                <option value="3">יום שלישי</option>
+                <option value="4">יום רביעי</option>
+                <option value="5">יום חמישי</option>
+                <option value="6">יום שישי</option>
+                <option value="7">יום שבת</option>
+              </select>
+              <button
+                type="button"
+                class="mobile-day-nav-btn"
+                onclick="window.changeMobileDay(1)"
+                aria-label="יום הבא"
+              >
+                ◀
+              </button>
+            </div>
           </div>
 
           <div id="desktopTableContainer" class="desktop-only">
@@ -3047,6 +3073,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260625a"></script>
+    <script src="script.js?v=20260625b"></script>
   </body>
 </html>
