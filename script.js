@@ -1516,11 +1516,24 @@
           );
       };
 
-      // מעבר יום קדימה/אחורה בנייד (חצים / החלקה) — בתוך השבוע (1=ראשון ... 7=שבת)
+      // מעבר יום קדימה/אחורה בנייד (חצים / החלקה) — חוצה שבועות:
+      // אחרי שבת → ראשון בשבוע הבא; לפני ראשון → שבת בשבוע הקודם
       window.changeMobileDay = function (delta) {
         let d = (window.currentMobileDay || 1) + delta;
-        if (d < 1) d = 1;
-        if (d > 7) d = 7;
+        if (d > 7) {
+          window.currentMobileDay = 1;
+          const sel = document.getElementById("mobileDaySelect");
+          if (sel) sel.value = "1";
+          if (typeof window.navigateWeek === "function") window.navigateWeek(1);
+          return;
+        }
+        if (d < 1) {
+          window.currentMobileDay = 7;
+          const sel = document.getElementById("mobileDaySelect");
+          if (sel) sel.value = "7";
+          if (typeof window.navigateWeek === "function") window.navigateWeek(-1);
+          return;
+        }
         if (d !== window.currentMobileDay) window.selectMobileDay(d);
       };
 
