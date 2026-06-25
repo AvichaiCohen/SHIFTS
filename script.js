@@ -6539,8 +6539,8 @@
             const dy = e.changedTouches[0].clientY - sy;
             // החלקה אופקית מובהקת בלבד
             if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-              // החלקה שמאלה = יום הבא; ימינה = יום קודם
-              window.changeMobileDay(dx < 0 ? 1 : -1);
+              // החלקה משמאל לימין = יום הבא; מימין לשמאל = יום קודם
+              window.changeMobileDay(dx > 0 ? 1 : -1);
             }
           },
           { passive: true },
