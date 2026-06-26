@@ -931,9 +931,15 @@
       #tableOutput.export-capture .time-label {
         font-size: 0.95rem !important;
       }
-      /* הערת יום + שורת "הערות ומשימות" — מגדילים גם אותן בייצוא לתמונה */
+      /* הערת יום + תאריך + שורת "הערות ומשימות" — מגדילים גם אותן בייצוא לתמונה */
       body.screenshot-mode #tableOutput .day-note-display,
       #tableOutput.export-capture .day-note-display {
+        font-size: 1.05rem !important;
+        font-weight: bold !important;
+        width: auto !important;
+      }
+      body.screenshot-mode #tableOutput .day-date-display,
+      #tableOutput.export-capture .day-date-display {
         font-size: 1rem !important;
       }
       body.screenshot-mode #tableOutput .note-chip,

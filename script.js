@@ -2965,11 +2965,19 @@
         }
         el.classList.add("export-capture"); // גופן גדול יותר בתמונה
         try {
+          // התאמת רזולוציה לוואטסאפ: תמונה ענקית מדי נדחסת ומטשטשת בהעלאה.
+          // מכוונים לרוחב ~2200px (ידידותי ל-HD של וואטסאפ) — מינימום הקטנה = טקסט חד.
+          const naturalW = el.scrollWidth || el.offsetWidth || 1200;
+          let scale = 2200 / naturalW;
+          if (!isFinite(scale)) scale = 2;
+          if (scale < 1) scale = 1; // לא להקטין מתחת לרזולוציה הטבעית
+          if (scale > 3) scale = 3; // תקרה לטבלאות צרות
           const canvas = await html2canvas(el, {
-            scale: 3,
+            scale: scale,
             backgroundColor: "#ffffff",
             useCORS: true,
             logging: false,
+            imageTimeout: 0,
           });
           const sun = window.getSunday(window.currentWeekOffset || 0);
           const sat = new Date(sun);
@@ -6381,7 +6389,7 @@
             data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
           let noteHtml = "";
           if (!window.isWorkerMode) {
-            noteHtml = `<br><input type="text" value="${note}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
+            noteHtml = `<br><input type="text" class="day-note-display" value="${note}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
           } else if (note) {
             noteHtml = `<br><span class="day-note-display" style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
           }
@@ -6389,7 +6397,7 @@
           const _cellDate = new Date(_weekSun);
           _cellDate.setDate(_cellDate.getDate() + dIdx);
           const _dateStr = `${_cellDate.getDate()}/${_cellDate.getMonth() + 1}`;
-          const dateHtml = `<br><span style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>`;
+          const dateHtml = `<br><span class="day-date-display" style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>`;
           const isTodayCol = d === _todayDay;
           const _dayHL = data.dayHighlights && data.dayHighlights[d];
           const _hlStyle = _dayHL ? `background:${_dayHL}28; border-bottom:3px solid ${_dayHL};` : '';
