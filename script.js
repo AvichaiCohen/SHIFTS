@@ -4355,6 +4355,53 @@
           let date = new Date(d);
           document.getElementById("reqDay").value = days[date.getDay()];
         }
+        window.updateVacCount();
+      };
+
+      // תאריכי חגים שאינם מנצלים יום חופש ("YYYY-MM-DD") — ניתן להוסיף לפי לוח החגים
+      window.vacationHolidayDates = window.vacationHolidayDates || [];
+      // יום שאינו מנצל חופש: שישי(5)/שבת(6) או תאריך חג מהרשימה
+      window._isVacFreeDay = function (dateObj) {
+        const dow = dateObj.getDay();
+        if (dow === 5 || dow === 6) return true;
+        const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+        return (window.vacationHolidayDates || []).includes(key);
+      };
+
+      // ספירת ימי חופש שמנוצלים בטווח [start,end] — שישי/שבת/חגים אינם נספרים
+      window._countVacDays = function (startV, endV) {
+        if (!startV) return 0;
+        const s = new Date(startV);
+        let e = endV ? new Date(endV) : new Date(startV);
+        if (isNaN(s)) return 0;
+        if (isNaN(e) || e < s) e = new Date(s);
+        let count = 0;
+        const cur = new Date(s);
+        while (cur <= e) {
+          if (!window._isVacFreeDay(cur)) count++;
+          cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+      };
+
+      // הצגה/הסתרה של תאריך-עד (חופשה בטווח מול יום בודד)
+      window.toggleVacRange = function () {
+        const single = document.getElementById("reqVacSingleDay")?.checked;
+        const rf = document.getElementById("reqVacRangeFields");
+        if (rf) rf.style.display = single ? "none" : "block";
+        window.updateVacCount();
+      };
+
+      // עדכון תצוגת "ימי חופש שינוצלו"
+      window.updateVacCount = function () {
+        const el = document.getElementById("reqVacCountVal");
+        if (!el) return;
+        const startV = document.getElementById("reqDate")?.value;
+        const single = document.getElementById("reqVacSingleDay")?.checked;
+        const endV = single
+          ? startV
+          : document.getElementById("reqVacEndDate")?.value;
+        el.textContent = window._countVacDays(startV, endV);
       };
 
       window.toggleReqType = function () {
@@ -4368,6 +4415,8 @@
           type === "shift" ? "block" : "none";
         const vacWrap = document.getElementById("reqVacDaysWrapper");
         if (vacWrap) vacWrap.style.display = type === "vacation" ? "block" : "none";
+        if (type === "vacation" && typeof window.toggleVacRange === "function")
+          window.toggleVacRange();
         let reqNote = document.getElementById("reqNote");
         reqNote.style.display =
           type === "constraint" || type === "vacation" || type === "study"
@@ -4437,17 +4486,24 @@
         // קבע ומילואים — ללא מגבלת בקשות (אילוצים/חופשים)
         const _noLimit = emp.type === "קבע" || emp.type === "מילואים";
 
-        // כמות ימי חופש רצופים (רק לבקשת חופשה)
-        const vacDays =
-          type === "vacation"
-            ? Math.max(
-                1,
-                Math.min(
-                  30,
-                  parseInt(document.getElementById("reqVacDays")?.value) || 1,
-                ),
-              )
-            : 1;
+        // חופשה — יום בודד או טווח תאריכים; שישי/שבת אינם נספרים כימי חופש
+        const vacSingle =
+          document.getElementById("reqVacSingleDay")?.checked !== false;
+        const vacEndVal =
+          type === "vacation" && !vacSingle
+            ? document.getElementById("reqVacEndDate")?.value || dateVal
+            : dateVal;
+        if (type === "vacation" && !vacSingle && vacEndVal < dateVal) {
+          alert("תאריך הסיום חייב להיות אחרי תאריך ההתחלה.");
+          return;
+        }
+        const vacCount =
+          type === "vacation" ? window._countVacDays(dateVal, vacEndVal) : 1;
+        if (type === "vacation" && vacCount === 0) {
+          alert("הטווח שנבחר כולל רק שישי/שבת — לא מנוצלים ימי חופש.");
+          return;
+        }
+        const vacIsRange = type === "vacation" && !vacSingle;
 
         // יום לימודים — רק לקבע, ופעם אחת בשבוע
         if (type === "study") {
@@ -4486,7 +4542,7 @@
           targetWeekKey === window.currentSelectedWeek &&
           !_noLimit &&
           type !== "study" &&
-          !(type === "vacation" && vacDays > 1)
+          !vacIsRange
         ) {
           if (emp.prefs) {
             existingCount += emp.prefs.length;
@@ -4565,17 +4621,20 @@
 
         if (typeof window.saveToCloud === "function") {
           let firstDate = dateVal;
-          if (type === "vacation" && vacDays > 1) {
-            // חופשה רצופה — בקשה נפרדת לכל יום, גם אם חוצה שבועות
-            for (let i = 0; i < vacDays; i++) {
-              const dObj = new Date(reqDateObj);
-              dObj.setDate(reqDateObj.getDate() + i);
-              const dName = days[dObj.getDay()];
-              const dVal = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
-              const wkSun = new Date(dObj);
-              wkSun.setDate(dObj.getDate() - dObj.getDay());
-              const wkKey = window.getWeekDbKey(wkSun);
-              _submitOneRequest(dVal, dName, wkKey);
+          if (vacIsRange) {
+            // חופשה בטווח — בקשה נפרדת לכל יום שאינו שישי/שבת, גם חוצה שבועות
+            const endObj = new Date(vacEndVal);
+            const cur = new Date(reqDateObj);
+            while (cur <= endObj) {
+              if (!window._isVacFreeDay(cur)) {
+                const dName = days[cur.getDay()];
+                const dVal = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+                const wkSun = new Date(cur);
+                wkSun.setDate(cur.getDate() - dow);
+                const wkKey = window.getWeekDbKey(wkSun);
+                _submitOneRequest(dVal, dName, wkKey);
+              }
+              cur.setDate(cur.getDate() + 1);
             }
           } else {
             _submitOneRequest(dateVal, day, targetWeekKey);
@@ -4583,22 +4642,26 @@
 
           // הודעת הצלחה + איפוס הטופס
           const fDate = firstDate.split("-").reverse().join(".");
+          const fEnd = vacEndVal.split("-").reverse().join(".");
           const typeLabel =
             type === "vacation"
-              ? vacDays > 1
-                ? `${vacDays} ימי חופש (החל מ-${fDate})`
+              ? vacIsRange
+                ? `חופשה ${fDate}–${fEnd} · ${vacCount} ימי חופש מנוצלים`
                 : "יום חופש"
               : type === "study"
                 ? "יום לימודים"
                 : type === "constraint"
                   ? "אילוץ"
                   : "בקשת שיבוץ";
-          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 ${type === 'vacation' && vacDays > 1 ? typeLabel : fDate + ' (' + day + ')'}\n📋 סוג: ${type === 'vacation' && vacDays > 1 ? 'חופשה רצופה' : typeLabel}\nהמנהל יטפל בבקשתך בהקדם.`);
+          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 ${vacIsRange ? typeLabel : fDate + ' (' + day + ')'}\n📋 סוג: ${vacIsRange ? 'חופשה בטווח (שישי/שבת לא נספרים)' : typeLabel}\nהמנהל יטפל בבקשתך בהקדם.`);
           document.getElementById("reqDate").value = "";
           document.getElementById("reqDay").value = "";
           document.getElementById("reqNote").value = "";
-          const _vd = document.getElementById("reqVacDays");
-          if (_vd) _vd.value = "1";
+          const _vs = document.getElementById("reqVacSingleDay");
+          if (_vs) _vs.checked = true;
+          const _ve = document.getElementById("reqVacEndDate");
+          if (_ve) _ve.value = "";
+          if (typeof window.toggleVacRange === "function") window.toggleVacRange();
 
           setTimeout(() => {
             if (!window.waPromptEnabled) return;
