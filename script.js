@@ -1765,6 +1765,56 @@
         return window.isBlockedBySpecialOnDate(empId, key);
       };
 
+      // בדיקת בעיות/התנגשויות שיבוץ לעובד ביום/משמרת נתונים (מנוחה אחרי לילה, אילוצים, זמינות וכו')
+      // מוחזרת רשימת מחרוזות אזהרה — ריקה אם הכל תקין. משמש גם ב-drop (אזהרה לפני שיבוץ) וגם בתצוגה (סימון ⚠️)
+      window._getAssignmentWarnings = function (emp, day, shift) {
+        const warnings = [];
+        if (!emp || !day) return warnings;
+        const dIdx = days.indexOf(day);
+        const prevDay = dIdx > 0 ? days[dIdx - 1] : null;
+        const empConst = emp.constraints || [];
+
+        if (prevDay) {
+          const workedPrevNight = baseLocs.some(
+            (l) =>
+              window.currentSchedule[`${prevDay}-לילה`] &&
+              window.currentSchedule[`${prevDay}-לילה`][l] &&
+              window.currentSchedule[`${prevDay}-לילה`][l].find((x) => x.id === emp.id),
+          );
+          if (workedPrevNight)
+            warnings.push(`עבד/ה משמרת לילה ביום ${prevDay} — נדרשת מנוחה`);
+
+          const workedPrev24 = baseLocs.some(
+            (l) =>
+              window.currentSchedule[`${prevDay}-24 שעות`] &&
+              window.currentSchedule[`${prevDay}-24 שעות`][l] &&
+              window.currentSchedule[`${prevDay}-24 שעות`][l].find((x) => x.id === emp.id),
+          );
+          if (workedPrev24)
+            warnings.push(`עבד/ה משמרת 24 שעות ביום ${prevDay} — נדרשת מנוחה`);
+        }
+
+        if (day === "ראשון" && emp.workedLastWeekend && emp.type !== "נחפף") {
+          warnings.push('עבד/ה בסופ"ש האחרון — בדרך כלל זכאי/ת למנוחה ביום ראשון');
+        }
+
+        if (empConst.includes(`${day}-${shift}`)) {
+          warnings.push(`יש לעובד/ת אילוץ/חופש רשום ל-${day} ${shift}`);
+        }
+
+        if (shift === "בוקר" && emp.canMorning === false)
+          warnings.push("העובד/ת מסומן/ת כלא זמין/ה למשמרות בוקר");
+        if (shift === "ערב" && emp.canEvening === false)
+          warnings.push("העובד/ת מסומן/ת כלא זמין/ה למשמרות ערב");
+        if (shift === "לילה" && (emp.canNight === false || emp.noNights === true))
+          warnings.push("העובד/ת מסומן/ת כלא זמין/ה למשמרות לילה");
+
+        if (window.isBlockedBySpecialDay && window.isBlockedBySpecialDay(emp.id, day))
+          warnings.push(`יש לעובד/ת סטטוס מיוחד ביום ${day} שאינו מאפשר כניסה למשמרת`);
+
+        return warnings;
+      };
+
       // תווית תצוגה לסטטוס מיוחד — כשהסטטוס הוא "אחר", מציג את ההערה שנכתבה
       window.specStatusLabel = function (sp) {
         if (!sp) return "";
@@ -2131,12 +2181,15 @@
         const { empId, sourceDay, sourceShift, sourceLoc } = window.draggedData;
         const emp = window.staff.find((e) => e.id == empId);
 
-        // סטטוס מיוחד חוסם — אזהרה לפני שיבוץ ידני לעובד עם סטטוס מיוחד (ללא "חוזר למשמרת")
+        // בדיקת בעיות שיבוץ (מנוחה אחרי לילה/24ש, אילוצים, סטטוס מיוחד, זמינות) — אזהרה מרוכזת לפני שיבוץ ידני
+        const _dropWarnings =
+          typeof window._getAssignmentWarnings === "function"
+            ? window._getAssignmentWarnings(emp, targetDay, targetShift)
+            : [];
         if (
-          window.isBlockedBySpecialDay &&
-          window.isBlockedBySpecialDay(empId, targetDay) &&
+          _dropWarnings.length > 0 &&
           !confirm(
-            `ל${emp ? emp.name : "עובד זה"} יש סטטוס מיוחד ביום ${targetDay} שאינו מאפשר כניסה למשמרת.\nלשבץ בכל זאת?`,
+            `⚠️ שים לב לפני שיבוץ ${emp ? emp.name : "העובד"} ל-${targetDay} ${targetShift}:\n\n${_dropWarnings.map((w) => "• " + w).join("\n")}\n\nלשבץ בכל זאת?`,
           )
         ) {
           window.draggedData = null;
@@ -4497,13 +4550,14 @@
           alert("תאריך הסיום חייב להיות אחרי תאריך ההתחלה.");
           return;
         }
+        const vacIsRange = type === "vacation" && !vacSingle;
         const vacCount =
           type === "vacation" ? window._countVacDays(dateVal, vacEndVal) : 1;
-        if (type === "vacation" && vacCount === 0) {
-          alert("הטווח שנבחר כולל רק שישי/שבת — לא מנוצלים ימי חופש.");
+        // חסימה רק בטווח שכולו שישי/שבת (אין בכלל מה ליצור) — יום בודד תמיד נשלח, גם אם הוא שישי/שבת
+        if (vacIsRange && vacCount === 0) {
+          alert("הטווח שנבחר כולל רק שישי/שבת — לא נוצרות בקשות (הם אינם מנצלים יום חופש).");
           return;
         }
-        const vacIsRange = type === "vacation" && !vacSingle;
 
         // יום לימודים — רק לקבע, ופעם אחת בשבוע
         if (type === "study") {
@@ -6526,7 +6580,13 @@
                   window.loggedInUser && window.loggedInUser.id === e.id
                     ? " highlight-me"
                     : "";
-                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${lockIcon}${e.name}${extraNote}</span>`;
+                const _warns = (!window.isWorkerMode && window._getAssignmentWarnings)
+                  ? window._getAssignmentWarnings(e, d, r.shift)
+                  : [];
+                const warnIcon = _warns.length
+                  ? ` <span title="${_warns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
+                  : "";
+                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
               });
             } else {
               html += `<span style="color:transparent;">.</span>`;
@@ -6737,8 +6797,14 @@
                   : window.isEditMode
                     ? `<span style="cursor:pointer; margin-left:4px; opacity:0.4;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${emp.id})">🔓</span>`
                     : "";
+              const _mWarns = (!window.isWorkerMode && window._getAssignmentWarnings)
+                ? window._getAssignmentWarnings(emp, d, r.shift)
+                : [];
+              const mWarnIcon = _mWarns.length
+                ? ` <span title="${_mWarns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
+                : "";
               // הכוכב הוסר כאן
-              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}</div>`;
+              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}${mWarnIcon}</div>`;
             });
           }
           html += `</div></div>`;

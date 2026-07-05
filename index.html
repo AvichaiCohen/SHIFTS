@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>מערכת שיבוץ Pro - מרכז שליטה</title>
+    <script>
+      // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
+      // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
+      (function () {
+        var BUILD = "20260705a";
+        var KEY = "app_build_seen_v1";
+        try {
+          if (sessionStorage.getItem(KEY) === BUILD) return;
+        } catch (e) {}
+        fetch("./version.json?t=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (v) {
+            try { sessionStorage.setItem(KEY, BUILD); } catch (e) {}
+            if (v && v.build && v.build !== BUILD) {
+              location.replace(location.pathname + "?v=" + Date.now());
+            }
+          })
+          .catch(function () {});
+      })();
+    </script>
     <link
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
       rel="stylesheet"
@@ -522,7 +542,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260630a" />
+    <link rel="stylesheet" href="style.css?v=20260705a" />
   </head>
   <body>
     <div
@@ -3115,6 +3135,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260630a"></script>
+    <script src="script.js?v=20260705a"></script>
   </body>
 </html>
