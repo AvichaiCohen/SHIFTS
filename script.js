@@ -3293,14 +3293,15 @@
         if (typeof window.rebuildWeekendHistory === "function")
           await window.rebuildWeekendHistory(); // רענון מהענן לדיוק
         const wh = window.weekendHistory || {};
+        // נחפפים אינם הצעה לגיטימית כאן — הם משובצים לסופ"ש רק במפורש (isNextWeekend/העדפה), לא כחלק ממאגר ההוגנות
         const techs = (window.staff || []).filter(
           (e) =>
             e.isActive !== false &&
-            (e.type === "טכנאי" || e.type === "נחפף") &&
+            e.type === "טכנאי" &&
             !e.workedLastWeekend,
         );
         if (techs.length === 0) {
-          alert("אין טכנאים/נחפפים זמינים לסופ\"ש (כולם עבדו שבת שעברה?).");
+          alert('אין טכנאים זמינים לסופ"ש (כולם עבדו שבת שעברה?).');
           return;
         }
         const ranked = techs
@@ -5720,7 +5721,8 @@
                 weekendStaff[loc].push(c);
               }
 
-              // fallback: אם עדיין חסרים — בחר לפי טבלת צדק (מי עשה הכי פחות סופ"שים)
+              // fallback: אם עדיין חסרים — בחר לפי הוגנות: מי שסגר סופ"ש הכי מזמן (או מעולם לא).
+              // נחפפים אינם נחשבים הצעה לגיטימית כאן — הם משובצים לסופ"ש רק כשמסומנים במפורש (isNextWeekend/העדפה).
               if (weekendStaff[loc].length < targetCount) {
                 const wShiftsForLoc = loc === LOC_MATAL ? weekendShiftsMATAL : weekendShiftsZira;
                 let fairCandidates = shuffledStaff.filter(e =>
@@ -5728,15 +5730,15 @@
                   !e.workedLastWeekend &&
                   !e.noNights &&
                   e.type !== "קבינט בכיר" &&
+                  e.type !== "נחפף" &&
                   !weekendStaff[LOC_MATAL].find(x => x.id === e.id) &&
                   !weekendStaff[LOC_ZIRA].find(x => x.id === e.id) &&
-                  !(e.type === "נחפף" && loc === LOC_ZIRA && !e.ziraWeekendAllowed) &&
                   (e.fixedLoc === "" || e.fixedLoc === loc || !e.fixedLoc || e.fixedLoc === undefined) &&
                   !wShiftsForLoc.some(sk => (e.constraints || []).includes(sk))
                 ).sort((a, b) => {
-                  const aW = (window.weekendHistory[a.name] || []).length;
-                  const bW = (window.weekendHistory[b.name] || []).length;
-                  return aW !== bW ? aW - bW : a.shiftCount - b.shiftCount;
+                  const aT = window._lastWeekendInfo(a.name).time;
+                  const bT = window._lastWeekendInfo(b.name).time;
+                  return aT !== bT ? aT - bT : a.shiftCount - b.shiftCount;
                 });
                 while (weekendStaff[loc].length < targetCount && fairCandidates.length > 0) {
                   let c = fairCandidates.shift();
