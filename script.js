@@ -5455,6 +5455,10 @@
           }
         });
 
+        // בקשות שיבוץ (העדפות) מוחלות לפי סדר הימים בשבוע — כך שכאשר בודקים
+        // "יום שני" השיבוץ של "יום ראשון" כבר קיים בלוח, וניתן לזהות התנגשות
+        // מנוחה (למשל: בקשה ללילה שני + בקשה ללילה שלישי לאותו עובד).
+        window._lastGenerateSkippedPrefs = [];
         days.forEach((day) => {
           if (
             window.currentSchedule.special &&
@@ -5480,6 +5484,20 @@
                       (x) => x.id === emp.id,
                     )
                   ) {
+                    // בדיקת התנגשות (מנוחה אחרי לילה/24ש, אילוץ, זמינות) לפני החלת ההעדפה בעיוורון
+                    const _prefWarnings = window._getAssignmentWarnings
+                      ? window._getAssignmentWarnings(emp, day, shift)
+                      : [];
+                    if (_prefWarnings.length > 0) {
+                      window._lastGenerateSkippedPrefs.push({
+                        name: emp.name,
+                        day,
+                        shift,
+                        loc,
+                        reasons: _prefWarnings,
+                      });
+                      return;
+                    }
                     window.currentSchedule[`${day}-${shift}`][loc].push({
                       ...emp,
                       isPref: true,
@@ -6408,6 +6426,17 @@
         }
 
         window.triggerUnsavedChanges();
+
+        // סיכום בקשות שיבוץ שדולגו בגלל התנגשות (מנוחה אחרי לילה/24ש, אילוץ, זמינות)
+        // — כדי שהמנהל יבין שהעובד לא שובץ לפי בקשתו, ולמה
+        if (window._lastGenerateSkippedPrefs && window._lastGenerateSkippedPrefs.length > 0) {
+          const lines = window._lastGenerateSkippedPrefs
+            .map((s) => `• ${s.name} — ${s.day} ${s.shift} (${s.reasons.join(", ")})`)
+            .join("\n");
+          alert(
+            `⚠️ ${window._lastGenerateSkippedPrefs.length} בקשות שיבוץ לא הוחלו בגלל התנגשות:\n\n${lines}\n\nניתן לשבץ ידנית ולאשר את האזהרה אם רוצים בכל זאת.`,
+          );
+        }
       };
 
       // הסרת הכוכבים (★) מפונקציות הציור שכבר קיימות בקוד שלך
