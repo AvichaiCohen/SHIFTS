@@ -1774,7 +1774,10 @@
         const prevDay = dIdx > 0 ? days[dIdx - 1] : null;
         const empConst = emp.constraints || [];
 
-        if (prevDay) {
+        // בדיקת "מנוחה אחרי לילה/24ש" רלוונטית רק א'-ה' — שישי/שבת הם סבב סופ"ש
+        // רציף בכוונה (חמישי-לילה/שישי/שבת נחשבים משמרת אחת ארוכה, לא הפרה),
+        // וראשון נבדק בנפרד לפי הדגל workedLastWeekend (לא לפי משמרת ליל שבת ממש)
+        if (prevDay && dIdx >= 1 && dIdx <= 4) {
           const workedPrevNight = baseLocs.some(
             (l) =>
               window.currentSchedule[`${prevDay}-לילה`] &&
