@@ -2018,6 +2018,7 @@
         if (!confirm("להסיר את הסטטוס המיוחד?")) return;
         window.specialStatuses = (window.specialStatuses || []).filter((s) => s.id !== specialId);
         window.saveToCloud("specialStatuses", window.specialStatuses);
+        if (typeof window.renderRequestsPage === "function") window.renderRequestsPage();
       };
 
       window.removeLegacySpecial = function (day, empId) {
@@ -2025,6 +2026,7 @@
         if (window.currentSchedule.special && window.currentSchedule.special[day])
           window.currentSchedule.special[day] = window.currentSchedule.special[day].filter((e) => e.id != empId);
         window.triggerUnsavedChanges();
+        if (typeof window.renderRequestsPage === "function") window.renderRequestsPage();
       };
 
       window.renderStaffPool = function () {
@@ -4344,8 +4346,35 @@
         });
         if (count2 === 0) html2 += `<tr><td colspan="4">אין חופשים.</td></tr>`;
         html2 += `</table>`;
+
+        // ימי לימודים — נשמרים כסטטוס מיוחד (לא כאילוץ רגיל), לכן מוצגים בטבלה נפרדת
+        let html3 = `<h3 style="margin-top:30px;">📚 ימי לימודים</h3><table><tr><th>שם עובד</th><th>יום</th><th>פעולה</th></tr>`;
+        let count3 = 0;
+        days.forEach((d) => {
+          const specs = window.getSpecialsForDay
+            ? window.getSpecialsForDay(d, window.currentSchedule)
+            : [];
+          specs
+            .filter((sp) => (sp.status || "").includes("לימודים"))
+            .forEach((sp) => {
+              count3++;
+              const removeAction =
+                sp._specialId != null
+                  ? `window.removeSpecialStatus(${sp._specialId})`
+                  : sp._taskId
+                    ? null
+                    : `window.removeLegacySpecial('${d}',${sp.id})`;
+              const removeBtn = removeAction
+                ? `<button class="btn btn-error" style="padding:4px 12px;" onclick="${removeAction}">בטל</button>`
+                : "-";
+              html3 += `<tr><td><strong>${sp.name}</strong></td><td>${d}</td><td>${removeBtn}</td></tr>`;
+            });
+        });
+        if (count3 === 0) html3 += `<tr><td colspan="3">אין ימי לימודים.</td></tr>`;
+        html3 += `</table>`;
+
         let reqCont = document.getElementById("requestsTableContainer");
-        if (reqCont) reqCont.innerHTML = html1 + html2;
+        if (reqCont) reqCont.innerHTML = html1 + html2 + html3;
       };
 
       window.removePrefFromPage = function (empId, prefIdx) {
