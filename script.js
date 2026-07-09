@@ -507,44 +507,93 @@
         }
       };
 
-      // רשימת עובדים פעילים שאין להם השבוע שום שיבוץ (בכל יום/משמרת/מיקום) ואין להם סטטוס מיוחד שמסביר את זה
-      window._getUnstaffedEmployees = function () {
+      // בדיקת שיבוץ — לכל עובד פעיל, לכל יום בשבוע: משמרת אמיתית / סטטוס מיוחד / מנוחה מחושבת / כלום.
+      // בודקת כל יום בנפרד (לא עוצרת בהסבר הראשון שנמצא) — כך שכיסוי חלקי (למשל קורס שמסתיים באמצע השבוע) לא מסתיר חוסר בהמשך השבוע.
+      window._buildStaffingCheckRows = function () {
         const sched = window.currentSchedule || {};
         const activeStaff = (window.staff || []).filter((e) => e.isActive !== false);
         const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
-        const missing = [];
-        activeStaff.forEach((emp) => {
-          let found = false;
-          days.forEach((d) => {
-            if (found) return;
-            allShifts.forEach((s) => {
-              if (found) return;
-              baseLocs.forEach((l) => {
-                if (found) return;
+        return activeStaff.map((emp) => {
+          const dayInfo = days.map((d) => {
+            for (const s of allShifts) {
+              for (const l of baseLocs) {
                 const slot = sched[`${d}-${s}`];
-                if (slot && slot[l] && slot[l].find((x) => x.id === emp.id)) found = true;
-              });
-            });
-            if (!found && typeof window.getSpecialsForDay === "function") {
-              const specs = window.getSpecialsForDay(d, sched);
-              if (specs.some((sp) => String(sp.id) === String(emp.id))) found = true;
+                if (slot && slot[l] && slot[l].find((x) => x.id === emp.id)) {
+                  const locName = window.getLocName ? window.getLocName(l) : l;
+                  return { type: "shift", label: `${s} · ${locName}` };
+                }
+              }
             }
+            if (typeof window.getSpecialsForDay === "function") {
+              const specs = window.getSpecialsForDay(d, sched);
+              const sp = specs.find((x) => String(x.id) === String(emp.id));
+              if (sp)
+                return {
+                  type: "special",
+                  label: window.specStatusLabel ? window.specStatusLabel(sp) : sp.status || "סטטוס מיוחד",
+                };
+            }
+            if (window.currentNotesLog && window.currentNotesLog[d]) {
+              const note = window.currentNotesLog[d].find((n) => n.emp && n.emp.id === emp.id);
+              if (note) return { type: "rest", label: note.reason };
+            }
+            return { type: "none", label: "—" };
           });
-          if (!found) missing.push(emp.name);
+          const shiftCount = dayInfo.filter((x) => x.type === "shift").length;
+          const explainedCount = dayInfo.filter((x) => x.type === "special" || x.type === "rest").length;
+          const noneCount = dayInfo.filter((x) => x.type === "none").length;
+          return { emp, dayInfo, shiftCount, explainedCount, noneCount };
         });
-        return missing;
       };
 
-      // בדיקת שיבוץ מלא — לשימוש עצמאי (לפני פרסום, כפתור "בדוק שיבוץ") ללא שינוי מצב
+      // עובדים שאין להם אף משמרת אמיתית השבוע (בדיקה אובייקטיבית — לא תלויה בכיסוי חלקי של סטטוס מיוחד)
+      window._getUnstaffedEmployees = function () {
+        return window
+          ._buildStaffingCheckRows()
+          .filter((r) => r.shiftCount === 0)
+          .map((r) => ({ name: r.emp.name, hasPartialCoverage: r.explainedCount > 0 }));
+      };
+
+      // טבלת בדיקת שיבוץ מלאה — מודאל עם כל עובד וכל יום
+      window.openStaffingCheckModal = function () {
+        const rows = window
+          ._buildStaffingCheckRows()
+          .sort((a, b) => a.shiftCount - b.shiftCount || b.noneCount - a.noneCount);
+        const typeStyle = {
+          shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
+          special: { icon: "🟡", bg: "rgba(245,158,11,0.14)" },
+          rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
+          none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
+        };
+        let html = `<table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.85rem;">
+          <tr style="background:var(--md-bg);">
+            <th style="padding:8px; text-align:right;">עובד</th>
+            ${days.map((d) => `<th style="padding:8px;">${d}</th>`).join("")}
+            <th style="padding:8px;">משמרות</th>
+          </tr>`;
+        rows.forEach((r) => {
+          const rowHighlight = r.shiftCount === 0 ? 'style="background:rgba(239,68,68,0.06);"' : "";
+          html += `<tr ${rowHighlight}>
+            <td style="padding:6px 10px; text-align:right; font-weight:600; border-top:1px solid var(--md-divider);">${r.emp.name}</td>
+            ${r.dayInfo
+              .map((di) => {
+                const st = typeStyle[di.type];
+                return `<td style="padding:6px; border-top:1px solid var(--md-divider); background:${st.bg};" title="${di.label.replace(/"/g, "&quot;")}">${st.icon}</td>`;
+              })
+              .join("")}
+            <td style="padding:6px 10px; border-top:1px solid var(--md-divider); font-weight:bold; color:${r.shiftCount === 0 ? "#dc2626" : "var(--md-text)"};">${r.shiftCount}</td>
+          </tr>`;
+        });
+        html += `</table>`;
+        const cont = document.getElementById("staffingCheckContent");
+        if (cont) cont.innerHTML = html;
+        const modal = document.getElementById("staffingCheckModal");
+        if (modal) modal.style.display = "flex";
+      };
+
+      // כפתור "בדוק שיבוץ מלא" — פותח את הטבלה המלאה
       window.checkFullStaffing = function () {
-        const missing = window._getUnstaffedEmployees();
-        if (missing.length === 0) {
-          alert("✅ לכל העובדים הפעילים יש שיבוץ או סטטוס השבוע.");
-        } else {
-          alert(
-            `⚠️ לעובדים הבאים אין שום שיבוץ או סטטוס השבוע:\n\n${missing.map((n) => "• " + n).join("\n")}`,
-          );
-        }
+        window.openStaffingCheckModal();
       };
 
       window.togglePublish = function () {
@@ -555,7 +604,9 @@
           if (
             missing.length > 0 &&
             !confirm(
-              `⚠️ לעובדים הבאים אין שום שיבוץ או סטטוס השבוע:\n\n${missing.map((n) => "• " + n).join("\n")}\n\nלפרסם בכל זאת?`,
+              `⚠️ לעובדים הבאים אין אף משמרת אמיתית השבוע:\n\n${missing
+                .map((m) => "• " + m.name + (m.hasPartialCoverage ? " (יש כיסוי חלקי בסטטוס מיוחד — בדוק בטבלת \"בדוק שיבוץ מלא\")" : " (אין כיסוי כלל)"))
+                .join("\n")}\n\nלפרסם בכל זאת?`,
             )
           )
             return;
