@@ -554,34 +554,110 @@
           .map((r) => ({ name: r.emp.name, hasPartialCoverage: r.explainedCount > 0 }));
       };
 
-      // טבלת בדיקת שיבוץ מלאה — מודאל עם כל עובד וכל יום
+      window.STAFFING_MIN_SHIFTS = 5;
+
+      // חתימת מצב לעובד מסוים (יום אחר יום) — לזיהוי אם משהו השתנה מאז שאושר
+      window._staffingRowSignature = function (row) {
+        return row.dayInfo.map((d) => d.type[0] + (d.label || "")).join("|");
+      };
+
+      // אישור ידני של עובד ספציפי — "בדקתי את זה, זה בסדר" (נשמר על הלוח, נדרש מחדש אם השבוע משתנה)
+      window.approveStaffingRow = function (empId) {
+        if (!window.currentSchedule.staffingApprovals) window.currentSchedule.staffingApprovals = {};
+        const row = window._buildStaffingCheckRows().find((r) => r.emp.id === empId);
+        if (!row) return;
+        window.currentSchedule.staffingApprovals[empId] = {
+          signature: window._staffingRowSignature(row),
+          ts: Date.now(),
+        };
+        window.triggerUnsavedChanges();
+        window.openStaffingCheckModal();
+      };
+
+      // אישור כל מי שנשאר לא מאושר בבת אחת
+      window.approveAllStaffingRows = function () {
+        if (!window.currentSchedule.staffingApprovals) window.currentSchedule.staffingApprovals = {};
+        window._buildStaffingCheckRows().forEach((row) => {
+          window.currentSchedule.staffingApprovals[row.emp.id] = {
+            signature: window._staffingRowSignature(row),
+            ts: Date.now(),
+          };
+        });
+        window.triggerUnsavedChanges();
+        window.openStaffingCheckModal();
+      };
+
+      // האם כל העובדים הפעילים אושרו, ואף אחד מהם לא השתנה מאז האישור
+      window._isStaffingFullyChecked = function () {
+        const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
+        const rows = window._buildStaffingCheckRows();
+        if (rows.length === 0) return false;
+        return rows.every((r) => {
+          const a = approvals[r.emp.id];
+          return a && a.signature === window._staffingRowSignature(r);
+        });
+      };
+
+      // עדכון ה-✔/⚠️ ליד כפתור "בדוק שיבוץ מלא"
+      window._updateStaffingCheckBadge = function () {
+        const badge = document.getElementById("staffingCheckBadge");
+        if (!badge) return;
+        if (window.isWorkerMode) { badge.innerHTML = ""; return; }
+        const ok = window._isStaffingFullyChecked();
+        badge.innerHTML = ok ? "✅" : "⚠️";
+        badge.title = ok
+          ? "כל העובדים נבדקו ואושרו, והלוח לא השתנה מאז"
+          : "יש עובדים שטרם אושרו, או שהלוח השתנה מאז האישור";
+      };
+
+      // טבלת בדיקת שיבוץ מלאה — מודאל עם כל עובד, כל יום, תפקיד, ואישור ידני
       window.openStaffingCheckModal = function () {
         const rows = window
           ._buildStaffingCheckRows()
           .sort((a, b) => a.shiftCount - b.shiftCount || b.noneCount - a.noneCount);
+        const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
         const typeStyle = {
           shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
           special: { icon: "🟡", bg: "rgba(245,158,11,0.14)" },
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
         };
-        let html = `<table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.85rem;">
+        let html = `<div style="text-align:left; margin-bottom:10px;">
+          <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.approveAllStaffingRows()">✅ אשר את כולם</button>
+        </div>
+        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.85rem;">
           <tr style="background:var(--md-bg);">
             <th style="padding:8px; text-align:right;">עובד</th>
+            <th style="padding:8px;">תפקיד</th>
             ${days.map((d) => `<th style="padding:8px;">${d}</th>`).join("")}
             <th style="padding:8px;">משמרות</th>
+            <th style="padding:8px;">אישור מנהל</th>
           </tr>`;
         rows.forEach((r) => {
-          const rowHighlight = r.shiftCount === 0 ? 'style="background:rgba(239,68,68,0.06);"' : "";
-          html += `<tr ${rowHighlight}>
+          const isLow = r.shiftCount < window.STAFFING_MIN_SHIFTS;
+          const rowBg =
+            r.shiftCount === 0
+              ? "rgba(239,68,68,0.08)"
+              : isLow
+                ? "rgba(245,158,11,0.08)"
+                : "";
+          const sig = window._staffingRowSignature(r);
+          const approval = approvals[r.emp.id];
+          const isApproved = approval && approval.signature === sig;
+          const approvalCell = isApproved
+            ? `<span style="color:#16a34a; font-weight:bold;" title="אושר">✔️</span>`
+            : `<button class="btn btn-outlined" style="padding:2px 10px; font-size:0.75rem;" onclick="window.approveStaffingRow(${r.emp.id})">אשר</button>`;
+          html += `<tr style="${rowBg ? "background:" + rowBg + ";" : ""}">
             <td style="padding:6px 10px; text-align:right; font-weight:600; border-top:1px solid var(--md-divider);">${r.emp.name}</td>
+            <td style="padding:6px 10px; border-top:1px solid var(--md-divider); color:var(--md-text-secondary); font-size:0.8rem;">${r.emp.type || ""}</td>
             ${r.dayInfo
               .map((di) => {
                 const st = typeStyle[di.type];
                 return `<td style="padding:6px; border-top:1px solid var(--md-divider); background:${st.bg};" title="${di.label.replace(/"/g, "&quot;")}">${st.icon}</td>`;
               })
               .join("")}
-            <td style="padding:6px 10px; border-top:1px solid var(--md-divider); font-weight:bold; color:${r.shiftCount === 0 ? "#dc2626" : "var(--md-text)"};">${r.shiftCount}</td>
+            <td style="padding:6px 10px; border-top:1px solid var(--md-divider); font-weight:bold; color:${isLow ? "#dc2626" : "var(--md-text)"};">${r.shiftCount}${isLow ? " ⚠️" : ""}</td>
+            <td style="padding:6px 10px; border-top:1px solid var(--md-divider);">${approvalCell}</td>
           </tr>`;
         });
         html += `</table>`;
@@ -589,6 +665,7 @@
         if (cont) cont.innerHTML = html;
         const modal = document.getElementById("staffingCheckModal");
         if (modal) modal.style.display = "flex";
+        window._updateStaffingCheckBadge();
       };
 
       // כפתור "בדוק שיבוץ מלא" — פותח את הטבלה המלאה
@@ -6870,6 +6947,8 @@
             ? "btn btn-outlined manager-only"
             : "btn btn-success manager-only";
         }
+        if (typeof window._updateStaffingCheckBadge === "function")
+          window._updateStaffingCheckBadge();
 
         if (window.isWorkerMode) {
           document
