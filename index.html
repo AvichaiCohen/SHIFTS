@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260708a";
+        var BUILD = "20260709a";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -526,6 +526,16 @@
             window.renderStaff();
         });
 
+        // בקשות החלפת משימות בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
+        window.taskSwapRequests = {};
+        onValue(ref(db, "taskSwapRequests"), (snapshot) => {
+          window.taskSwapRequests = snapshot.exists() ? snapshot.val() || {} : {};
+          if (typeof window.renderMyTaskSwaps === "function")
+            window.renderMyTaskSwaps();
+          if (typeof window.renderTaskSwapManager === "function")
+            window.renderTaskSwapManager();
+        });
+
         window.onclick = function (event) {
           let editModal = document.getElementById("editModal");
           let specModal = document.getElementById("specialStatusModal");
@@ -542,7 +552,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260708a" />
+    <link rel="stylesheet" href="style.css?v=20260709a" />
   </head>
   <body>
     <div
@@ -856,6 +866,13 @@
             onclick="window.togglePublish()"
           >
             👁️ פרסם לוח לעובדים
+          </button>
+          <button
+            class="btn btn-outlined manager-only"
+            style="padding: 6px 12px; font-size: 0.8rem; width: 100%; margin-top: 6px"
+            onclick="window.checkFullStaffing()"
+          >
+            🔍 בדוק שיבוץ מלא
           </button>
         </div>
 
@@ -1512,6 +1529,7 @@
 
         <div id="page-tasks" class="container">
           <h1>ניהול משימות שוטפות וימים מיוחדים</h1>
+          <div id="myTaskSwapsContainer"></div>
           <div style="display: flex; gap: 20px; flex-wrap: wrap">
             <div style="flex: 1; min-width: 300px">
               <div class="card-paper">
@@ -1582,7 +1600,7 @@
                 </div>
                 <div id="taskSingleAssigneeWrapper" style="width: 100%">
                   <select id="newTaskAssignee" style="width: 100%">
-                    <option value="">-- הקצה לעובד (חובה) --</option>
+                    <option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>
                   </select>
                 </div>
                 <div
@@ -1655,10 +1673,46 @@
                 </div>
               </div>
               <div class="card-paper">
-                <h3 style="margin-top: 0; color: var(--md-primary)">
-                  📋 רשימת משימות
-                </h3>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                  "
+                >
+                  <h3 style="margin: 0; color: var(--md-primary)">
+                    📋 רשימת משימות
+                  </h3>
+                  <button
+                    class="btn btn-outlined manager-only"
+                    style="padding: 4px 12px; font-size: 0.85rem"
+                    onclick="window.exportTasksToCSV()"
+                  >
+                    ⬇️ ייצוא לאקסל
+                  </button>
+                </div>
                 <div id="tasksList" class="task-list"></div>
+              </div>
+              <div
+                class="card-paper manager-only"
+                style="border-right: 4px solid #7c3aed"
+              >
+                <h3 style="margin-top: 0; color: #7c3aed">
+                  🔄 בקשות החלפת משימות (ממתינות לאישורך)
+                </h3>
+                <p
+                  style="
+                    font-size: 0.85rem;
+                    margin-top: 0;
+                    color: var(--md-text-secondary);
+                  "
+                >
+                  מוצגות רק בקשות שהעובד המוזמן כבר אישר — אישור סופי שלך מבצע
+                  את ההחלפה בפועל.
+                </p>
+                <div id="taskSwapManagerContainer"></div>
               </div>
             </div>
 
@@ -1762,13 +1816,19 @@
                 <p style="font-size: 0.85rem; margin-top: 0; color: var(--md-text-secondary);">
                   מעקב היסטורי — טכנאים ונחפפים שסגרו סופ"שים. הרענון מחשב מחדש מהלוחות השמורים בענן (16 שבועות אחורה).
                 </p>
-                <div style="margin-bottom: 12px;">
+                <div style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
                   <button
                     class="btn btn-outlined manager-only"
                     style="border-color: var(--md-warning); color: var(--md-warning);"
                     onclick="window.rebuildWeekendHistory()"
                   >
                     🔄 רענן וחשב מחדש מהענן
+                  </button>
+                  <button
+                    class="btn btn-outlined manager-only"
+                    onclick="window.exportWeekendJusticeToCSV()"
+                  >
+                    ⬇️ ייצוא לאקסל
                   </button>
                 </div>
                 <div id="weekendJusticeTableContainer" style="overflow-x: auto"></div>
@@ -1803,6 +1863,9 @@
                 onclick="window.clearAllStaffConstraints()"
               >
                 🧹 איפוס אילוצי שבוע נוכחי
+              </button>
+              <button class="btn btn-outlined" onclick="window.exportStaffToCSV()">
+                ⬇️ ייצוא לאקסל
               </button>
               <button
                 class="btn btn-success super-only"
@@ -1842,7 +1905,23 @@
         </div>
 
         <div id="page-requests" class="container">
-          <h1>ריכוז בקשות וחופשים לשבוע הנוכחי</h1>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 10px;
+            "
+          >
+            <h1 style="margin: 0">ריכוז בקשות וחופשים לשבוע הנוכחי</h1>
+            <button
+              class="btn btn-outlined"
+              onclick="window.exportRequestsPageToCSV()"
+            >
+              ⬇️ ייצוא לאקסל
+            </button>
+          </div>
           <div
             class="card-paper"
             style="
@@ -3135,6 +3214,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260708a"></script>
+    <script src="script.js?v=20260709a"></script>
   </body>
 </html>

@@ -507,8 +507,59 @@
         }
       };
 
+      // רשימת עובדים פעילים שאין להם השבוע שום שיבוץ (בכל יום/משמרת/מיקום) ואין להם סטטוס מיוחד שמסביר את זה
+      window._getUnstaffedEmployees = function () {
+        const sched = window.currentSchedule || {};
+        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false);
+        const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
+        const missing = [];
+        activeStaff.forEach((emp) => {
+          let found = false;
+          days.forEach((d) => {
+            if (found) return;
+            allShifts.forEach((s) => {
+              if (found) return;
+              baseLocs.forEach((l) => {
+                if (found) return;
+                const slot = sched[`${d}-${s}`];
+                if (slot && slot[l] && slot[l].find((x) => x.id === emp.id)) found = true;
+              });
+            });
+            if (!found && typeof window.getSpecialsForDay === "function") {
+              const specs = window.getSpecialsForDay(d, sched);
+              if (specs.some((sp) => String(sp.id) === String(emp.id))) found = true;
+            }
+          });
+          if (!found) missing.push(emp.name);
+        });
+        return missing;
+      };
+
+      // בדיקת שיבוץ מלא — לשימוש עצמאי (לפני פרסום, כפתור "בדוק שיבוץ") ללא שינוי מצב
+      window.checkFullStaffing = function () {
+        const missing = window._getUnstaffedEmployees();
+        if (missing.length === 0) {
+          alert("✅ לכל העובדים הפעילים יש שיבוץ או סטטוס השבוע.");
+        } else {
+          alert(
+            `⚠️ לעובדים הבאים אין שום שיבוץ או סטטוס השבוע:\n\n${missing.map((n) => "• " + n).join("\n")}`,
+          );
+        }
+      };
+
       window.togglePublish = function () {
         if (!window.currentSchedule) window.currentSchedule = {};
+        const willPublish = !window.currentSchedule.isPublished;
+        if (willPublish) {
+          const missing = window._getUnstaffedEmployees();
+          if (
+            missing.length > 0 &&
+            !confirm(
+              `⚠️ לעובדים הבאים אין שום שיבוץ או סטטוס השבוע:\n\n${missing.map((n) => "• " + n).join("\n")}\n\nלפרסם בכל זאת?`,
+            )
+          )
+            return;
+        }
         window.currentSchedule.isPublished =
           !window.currentSchedule.isPublished;
         window.triggerUnsavedChanges();
@@ -1915,6 +1966,135 @@
           "download",
           `${_fmt(_sun)}_עד_${_fmt(_sat)}-${_sat.getFullYear()}.csv`,
         );
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      // ייצוא כללי לאקסל — כל טבלת <table> בתוך container (אחת או יותר), עם כותרת סעיף
+      // (מה-h2/h3 שלפני הטבלה) ודילוג על עמודות "פעולה" (מסומנות ב-class csv-skip-col).
+      window._exportContainerTablesToCSV = function (container, filename) {
+        if (!container) { alert("אין נתונים לייצוא."); return; }
+        const tables = Array.from(container.querySelectorAll("table"));
+        if (tables.length === 0) { alert("אין נתונים לייצוא."); return; }
+        const esc = (v) => {
+          const s = String(v == null ? "" : v).trim().replace(/\s+/g, " ");
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        let csv = "﻿";
+        tables.forEach((table, idx) => {
+          let heading = "";
+          let prev = table.previousElementSibling;
+          while (prev && !heading) {
+            if (/^H[1-6]$/.test(prev.tagName)) heading = prev.innerText.trim();
+            prev = prev.previousElementSibling;
+          }
+          if (idx > 0) csv += "\n";
+          if (heading) csv += esc(heading) + "\n";
+          const rows = Array.from(table.querySelectorAll("tr"));
+          if (rows.length === 0) return;
+          const headerCells = Array.from(rows[0].querySelectorAll("th,td"));
+          const skipIdx = new Set();
+          headerCells.forEach((c, i) => {
+            if (c.classList.contains("csv-skip-col")) skipIdx.add(i);
+          });
+          rows.forEach((tr) => {
+            const cells = Array.from(tr.querySelectorAll("th,td"));
+            const line = cells
+              .filter((c, i) => !skipIdx.has(i))
+              .map((c) => esc(c.innerText || c.textContent))
+              .join(",");
+            csv += line + "\n";
+          });
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      // תאריך היום, לשימוש בשמות קבצי ייצוא
+      window._todayFileStamp = function () {
+        const d = new Date();
+        return `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+      };
+
+      window.exportTasksToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("tasksList"),
+          `משימות_${window._todayFileStamp()}.csv`,
+        );
+      };
+
+      window.exportWeekendJusticeToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("weekendJusticeTableContainer"),
+          `הוגנות_סופש_${window._todayFileStamp()}.csv`,
+        );
+      };
+
+      window.exportRequestsPageToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("requestsTableContainer"),
+          `בקשות_וחופשים_${window._todayFileStamp()}.csv`,
+        );
+      };
+
+      // ייצוא רשימת הצוות — נבנה ישירות מהנתונים (לא סריקת DOM) כדי לא לכלול סיסמה/פרטים רגישים
+      window.exportStaffToCSV = function () {
+        const esc = (v) => {
+          const s = String(v == null ? "" : v).trim().replace(/\s+/g, " ");
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const rows = [
+          ["שם", "דרג", 'מס"א', "מיקום קבוע", "מכסת חופש", "חופש מנוצל", "חופש נותר", "פעיל בשיבוץ"],
+        ];
+        (window.staff || []).forEach((e) => {
+          const empConst = e.constraints || [];
+          const uniqueDaysOff = new Set(
+            empConst
+              .filter((c) => {
+                const d = c.split("-")[0];
+                return (
+                  empConst.includes(`${d}-בוקר`) &&
+                  empConst.includes(`${d}-ערב`) &&
+                  empConst.includes(`${d}-לילה`)
+                );
+              })
+              .map((c) => c.split("-")[0]),
+          ).size;
+          let specVacDays = 0;
+          (window.specialStatuses || [])
+            .filter(
+              (s) =>
+                String(s.empId) === String(e.id) &&
+                ["חופש", "חופשה", "מחלה"].some((v) => (s.status || "").includes(v)),
+            )
+            .forEach((s) => {
+              if (s.startDate && s.endDate)
+                specVacDays += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
+            });
+          const vacQuota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
+          const vacUsed = uniqueDaysOff + specVacDays;
+          rows.push([
+            e.name,
+            e.type,
+            e.personalId || "",
+            window.getLocName ? window.getLocName(e.fixedLoc) : e.fixedLoc || "רנדומלי",
+            vacQuota,
+            vacUsed,
+            vacQuota - vacUsed,
+            e.isActive === false ? "לא" : "כן",
+          ]);
+        });
+        const csv = "﻿" + rows.map((r) => r.map(esc).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `רשימת_צוות_${window._todayFileStamp()}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -3478,7 +3658,7 @@
       };
 
       window.renderTasks = function () {
-        let assigneeHtml = `<option value="">-- הקצה לעובד (חובה) --</option>`;
+        let assigneeHtml = `<option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>`;
         window.staff
           .filter((e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"))
           .forEach((e) => {
@@ -3498,6 +3678,10 @@
           window.renderHolidaysLog();
         if (typeof window.renderEmployeeSummary === "function")
           window.renderEmployeeSummary();
+        if (typeof window.renderMyTaskSwaps === "function")
+          window.renderMyTaskSwaps();
+        if (typeof window.renderTaskSwapManager === "function")
+          window.renderTaskSwapManager();
         let html = "";
         if (window.systemTasks.length === 0) {
           html = `<div style="text-align:center; color:var(--text-muted); padding:20px;">אין משימות פתוחות כרגע.</div>`;
@@ -3514,7 +3698,7 @@
               <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:70px;">תאריך</th>
               <th style="padding:8px; border-bottom:2px solid var(--md-divider);">משימה</th>
               <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:80px;">עובד</th>
-              <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:60px;" class="task-action-btn"></th>
+              <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:60px;" class="task-action-btn csv-skip-col"></th>
             </tr>`;
           sortedTasks.forEach((t) => {
             let dateStr = t.date ? t.date.split("-").reverse().join(".") : "—";
@@ -3524,10 +3708,25 @@
               ? "opacity:0.55; text-decoration:line-through;"
               : "";
             let btnText = t.completed ? "↩" : "✔";
+            const _participantNames =
+              t.assignees && t.assignees.length > 0
+                ? t.assignees.map((a) => a.name)
+                : t.assignee
+                  ? [t.assignee]
+                  : [];
+            const _meForSwap = window.loggedInWorker || window.loggedInUser;
+            const _canSwap =
+              window.isWorkerMode &&
+              !t.completed &&
+              _meForSwap &&
+              _participantNames.includes(_meForSwap.name);
+            const swapBtn = _canSwap
+              ? `<br><button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem; margin-top:4px;" onclick="window.requestTaskSwap(${t.id})">🔄 בקש החלפה</button>`
+              : "";
             html += `<tr style="border-bottom:1px solid var(--md-divider); ${rowStyle}">
               <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${dateStr}</td>
               <td style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${t.category || ""}]</strong>${t.desc ? " " + t.desc : ""}</td>
-              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${(t.assignees && t.assignees.length > 0 ? t.assignees.map(a => a.name).join(", ") : t.assignee) || "<span style='color:var(--text-muted);'>—</span>"}</td>
+              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.join(", ") : "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
               <td style="padding:6px; text-align:center;" class="task-action-btn">
                 <button class="btn btn-outlined" title="${t.completed ? "בטל סיום" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleTaskStatus(${t.id})">${btnText}</button>
                 <button class="btn btn-error" title="מחק" style="padding:2px 6px; font-size:0.85rem; min-width:auto; margin-top:4px;" onclick="window.deleteTask(${t.id})">🗑</button>
@@ -3818,6 +4017,133 @@
         window.saveToCloud("specialStatuses", window.specialStatuses);
       };
 
+      // ===== החלפת משימות בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית) =====
+      window.taskSwapRequests = window.taskSwapRequests || {};
+
+      // עובד A מבקש מעובד B להחליף אותו במשימה שטרם בוצעה
+      window.requestTaskSwap = function (taskId) {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        const task = (window.systemTasks || []).find((t) => t.id === taskId);
+        if (!task) return;
+        const others = (window.staff || []).filter(
+          (e) => e.isActive !== false && String(e.id) !== String(me.id),
+        );
+        if (others.length === 0) { alert("אין עובדים אחרים להחלפה."); return; }
+        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
+        const choice = prompt(`למי לשלוח בקשת החלפה למשימה?\n\n${optionsStr}\n\nהקלד את המספר:`);
+        if (!choice) return;
+        const idx = parseInt(choice.trim(), 10) - 1;
+        const target = others[idx];
+        if (!target) { alert("בחירה לא תקינה."); return; }
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        const req = {
+          id,
+          taskId,
+          taskLabel: `[${task.category || ""}]${task.desc ? " " + task.desc : ""}`,
+          date: task.date || "",
+          fromEmpId: me.id,
+          fromEmpName: me.name,
+          toEmpId: target.id,
+          toEmpName: target.name,
+          ts: id,
+        };
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("taskSwapRequests/" + id, req);
+        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+      };
+
+      // תגובת העובד המוזמן (B) — אישור/דחייה (נכתב כילד חדש כדי לעמוד בכללי ההרשאה)
+      window.respondTaskSwap = function (reqId, approve) {
+        if (typeof window.saveToCloud !== "function") return;
+        window.saveToCloud("taskSwapRequests/" + reqId + "/targetResponse", {
+          approved: approve,
+          ts: Date.now(),
+        });
+        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+      };
+
+      // רשימת בקשות החלפה שממתינות לתגובתי (אני העובד המוזמן, B)
+      window.renderMyTaskSwaps = function () {
+        const cont = document.getElementById("myTaskSwapsContainer");
+        if (!cont) return;
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { cont.innerHTML = ""; return; }
+        const all = Object.values(window.taskSwapRequests || {}).filter(Boolean);
+        const pending = all.filter(
+          (r) => String(r.toEmpId) === String(me.id) && !r.targetResponse,
+        );
+        if (pending.length === 0) { cont.innerHTML = ""; return; }
+        let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפת משימה אליי</h3>`;
+        pending.forEach((r) => {
+          const fDate = r.date ? r.date.split("-").reverse().join(".") : "";
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+            <div><b>${r.fromEmpName}</b> מבקש/ת שתחליף/י אותו/ה במשימה: ${r.taskLabel}${fDate ? " (" + fDate + ")" : ""}</div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', true)">✅ אשר</button>
+              <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', false)">❌ דחה</button>
+            </div>
+          </div>`;
+        });
+        html += `</div>`;
+        cont.innerHTML = html;
+      };
+
+      // עבור המנהל: בקשות שאושרו ע"י העובד המוזמן וממתינות לאישור סופי
+      window.renderTaskSwapManager = function () {
+        const cont = document.getElementById("taskSwapManagerContainer");
+        if (!cont) return;
+        const all = Object.values(window.taskSwapRequests || {}).filter(Boolean);
+        const pendingAdmin = all.filter(
+          (r) => r.targetResponse && r.targetResponse.approved === true && !r.adminDecision,
+        );
+        if (pendingAdmin.length === 0) {
+          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
+          return;
+        }
+        let html = `<table style="width:100%; text-align:right;"><tr><th>ממי</th><th>למי</th><th>משימה</th><th>תאריך</th><th>פעולה</th></tr>`;
+        pendingAdmin.forEach((r) => {
+          const fDate = r.date ? r.date.split("-").reverse().join(".") : "-";
+          html += `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td><b>${r.fromEmpName}</b></td><td><b>${r.toEmpName}</b></td><td>${r.taskLabel}</td><td>${fDate}</td>
+            <td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeTaskSwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeTaskSwap('${r.id}', false)">❌ דחה</button></td>
+          </tr>`;
+        });
+        html += `</table>`;
+        cont.innerHTML = html;
+      };
+
+      // אישור סופי של מנהל — מבצע את ההחלפה בפועל במשימה
+      window.finalizeTaskSwap = function (reqId, approve) {
+        const r = (window.taskSwapRequests || {})[reqId];
+        if (!r) return;
+        if (approve) {
+          const task = (window.systemTasks || []).find((t) => t.id === r.taskId);
+          if (task) {
+            const assignees =
+              task.assignees && task.assignees.length > 0
+                ? task.assignees
+                : task.assignee
+                  ? [{ name: task.assignee }]
+                  : [];
+            const idx = assignees.findIndex((a) => a.name === r.fromEmpName);
+            if (idx > -1) assignees[idx] = { name: r.toEmpName };
+            else assignees.push({ name: r.toEmpName });
+            task.assignees = assignees;
+            if (task.assignee === r.fromEmpName) task.assignee = r.toEmpName;
+            window._saveTasks();
+            window.syncTaskSpecialStatus(task);
+            window.renderTasks();
+          }
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("taskSwapRequests/" + reqId + "/adminDecision", {
+            approved: approve,
+            ts: Date.now(),
+          });
+        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+      };
+
       window.addTask = function () {
         const category = document.getElementById("newTaskCategory").value.trim();
         const desc = document.getElementById("newTaskDesc").value.trim();
@@ -3829,15 +4155,26 @@
         if (!category) { alert("יש לבחור קטגוריית משימה!"); return; }
         if (!date) { alert("יש לבחור תאריך!"); return; }
 
+        // משימה עתידית (אחרי היום) — לא חובה להקצות עובד כבר עכשיו
+        const _today = new Date();
+        const _todayKey = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, "0")}-${String(_today.getDate()).padStart(2, "0")}`;
+        const isFutureTask = date > _todayKey;
+
         let assignees = [];
         if (isMulti) {
           const rows = document.querySelectorAll(".task-participant-select");
           rows.forEach((sel) => { if (sel.value) assignees.push({ name: sel.value }); });
-          if (assignees.length === 0) { alert("יש לבחור לפחות עובד אחד!"); return; }
+          if (assignees.length === 0 && !isFutureTask) {
+            alert("יש לבחור לפחות עובד אחד!");
+            return;
+          }
         } else {
           const assignee = document.getElementById("newTaskAssignee").value;
-          if (!assignee) { alert("יש לבחור עובד למשימה!"); return; }
-          assignees = [{ name: assignee }];
+          if (!assignee && !isFutureTask) {
+            alert("יש לבחור עובד למשימה!");
+            return;
+          }
+          if (assignee) assignees = [{ name: assignee }];
         }
 
         const task = {
@@ -4304,7 +4641,7 @@
       };
 
       window.renderRequestsPage = function () {
-        let html1 = `<h3>⭐ עדיפויות קשיחות ומשמרות מבוקשות</h3><table><tr><th>שם עובד</th><th>יום</th><th>משמרת</th><th>מיקום מבוקש</th><th>פעולה</th></tr>`;
+        let html1 = `<h3>⭐ עדיפויות קשיחות ומשמרות מבוקשות</h3><table><tr><th>שם עובד</th><th>יום</th><th>משמרת</th><th>מיקום מבוקש</th><th class="csv-skip-col">פעולה</th></tr>`;
         let count1 = 0;
         window.staff.forEach((emp) => {
           if (emp.prefs) {
@@ -4318,7 +4655,7 @@
         if (count1 === 0)
           html1 += `<tr><td colspan="5">אין בקשות משמרת לשבוע הקרוב.</td></tr>`;
         html1 += `</table>`;
-        let html2 = `<h3 style="margin-top:30px;">🌴 חופשים ואילוצים</h3><table><tr><th>שם עובד</th><th>יום וזמן</th><th>סטטוס</th><th>פעולה</th></tr>`;
+        let html2 = `<h3 style="margin-top:30px;">🌴 חופשים ואילוצים</h3><table><tr><th>שם עובד</th><th>יום וזמן</th><th>סטטוס</th><th class="csv-skip-col">פעולה</th></tr>`;
         let count2 = 0;
         window.staff.forEach((emp) => {
           let empConst = emp.constraints || [];
@@ -4348,7 +4685,7 @@
         html2 += `</table>`;
 
         // ימי לימודים — נשמרים כסטטוס מיוחד (לא כאילוץ רגיל), לכן מוצגים בטבלה נפרדת
-        let html3 = `<h3 style="margin-top:30px;">📚 ימי לימודים</h3><table><tr><th>שם עובד</th><th>יום</th><th>פעולה</th></tr>`;
+        let html3 = `<h3 style="margin-top:30px;">📚 ימי לימודים</h3><table><tr><th>שם עובד</th><th>יום</th><th class="csv-skip-col">פעולה</th></tr>`;
         let count3 = 0;
         days.forEach((d) => {
           const specs = window.getSpecialsForDay
