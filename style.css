@@ -905,6 +905,12 @@
       body.screenshot-mode .main-content {
         padding: 12px !important;
       }
+      /* סימון ⚠️ (התנגשות שיבוץ) הוא מידע פנימי למנהל — לא מוצג במסך נקי / ייצוא לתמונה */
+      body.screenshot-mode .assign-warn-icon,
+      #tableOutput.export-capture .assign-warn-icon,
+      #mobileCardsContainer.export-capture .assign-warn-icon {
+        display: none !important;
+      }
 
       /* גופן גדול יותר במסך נקי ובייצוא לתמונה — לקריאות בשיתוף */
       body.screenshot-mode #tableOutput .name-chip,

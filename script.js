@@ -7114,7 +7114,7 @@
                   ? window._getAssignmentWarnings(e, d, r.shift)
                   : [];
                 const warnIcon = _warns.length
-                  ? ` <span title="${_warns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
+                  ? ` <span class="assign-warn-icon" title="${_warns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
                   : "";
                 html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
               });
@@ -7331,7 +7331,7 @@
                 ? window._getAssignmentWarnings(emp, d, r.shift)
                 : [];
               const mWarnIcon = _mWarns.length
-                ? ` <span title="${_mWarns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
+                ? ` <span class="assign-warn-icon" title="${_mWarns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
                 : "";
               // הכוכב הוסר כאן
               html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}${mWarnIcon}</div>`;
