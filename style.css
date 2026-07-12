@@ -695,8 +695,7 @@
       }
       body.worker-view #managerToolbar,
       body.worker-view #taskInputsWrapper,
-      body.worker-view .task-action-btn,
-      body.worker-view #holLogInputsWrapper {
+      body.worker-view .task-action-btn {
         display: none !important;
       }
       body.worker-view .loc-box,
@@ -724,7 +723,10 @@
       body.view-only #nav-worker-requests,
       body.view-only #btnav-worker-requests,
       body.view-only .worker-only,
-      body.view-only #shiftChangeBanner {
+      body.view-only #shiftChangeBanner,
+      body.view-only #holLogInputsWrapper,
+      body.view-only #myTaskSwapsContainer,
+      body.view-only #myHolidaySwapsContainer {
         display: none !important;
       }
       /* הדגשת העובד המחובר בטבלה ובפלאפון */

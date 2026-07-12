@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260710b";
+        var BUILD = "20260710c";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -366,6 +366,7 @@
 
         onValue(ref(db, "holidaysLog"), (snapshot) => {
           window.holidaysLog = snapshot.exists() ? snapshot.val() : [];
+          window._holidaysLogLoaded = true;
           if (typeof window.renderHolidaysLog === "function")
             window.renderHolidaysLog();
         });
@@ -460,6 +461,7 @@
         // משימות (systemTasks) — מסונכרנות בענן כדי שכל המשתמשים (כולל עובדים/צפייה) יראו אותן
         onValue(ref(db, "systemTasks"), (snapshot) => {
           window._tasksCloudExists = snapshot.exists();
+          window._systemTasksLoaded = true;
           if (snapshot.exists()) {
             const val = snapshot.val();
             window.systemTasks = (
@@ -545,6 +547,7 @@
           if (
             window.currentUserRole === "superAdmin" &&
             entries.length > 0 &&
+            window._systemTasksLoaded &&
             Array.isArray(window.systemTasks)
           ) {
             entries.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -569,6 +572,38 @@
           if (typeof window.renderTasks === "function") window.renderTasks();
         });
 
+        // השתבצות עובדים לחגים — נכתבות ע"י עובד אנונימי (create-only),
+        // המנהל הראשי מיישם אוטומטית ל-holidaysLog כשהוא מחובר
+        window.holidaySignupRequests = {};
+        onValue(ref(db, "holidaySignupRequests"), (snapshot) => {
+          window.holidaySignupRequests = snapshot.exists() ? snapshot.val() || {} : {};
+          const entries = Object.values(window.holidaySignupRequests).filter(Boolean);
+          if (
+            window.currentUserRole === "superAdmin" &&
+            entries.length > 0 &&
+            window._holidaysLogLoaded &&
+            Array.isArray(window.holidaysLog)
+          ) {
+            entries.forEach((log) => {
+              if (!window.holidaysLog.find((l) => l.id === log.id))
+                window.holidaysLog.push(log);
+              window.saveToCloud("holidaySignupRequests/" + log.id, null);
+            });
+            window.saveToCloud("holidaysLog", window.holidaysLog);
+          }
+          if (typeof window.renderHolidaysLog === "function") window.renderHolidaysLog();
+        });
+
+        // בקשות החלפת חגים בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
+        window.holidaySwapRequests = {};
+        onValue(ref(db, "holidaySwapRequests"), (snapshot) => {
+          window.holidaySwapRequests = snapshot.exists() ? snapshot.val() || {} : {};
+          if (typeof window.renderMyHolidaySwaps === "function")
+            window.renderMyHolidaySwaps();
+          if (typeof window.renderHolidaySwapManager === "function")
+            window.renderHolidaySwapManager();
+        });
+
         window.onclick = function (event) {
           let editModal = document.getElementById("editModal");
           let specModal = document.getElementById("specialStatusModal");
@@ -585,7 +620,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260710b" />
+    <link rel="stylesheet" href="style.css?v=20260710c" />
   </head>
   <body>
     <div
@@ -1751,6 +1786,7 @@
             </div>
 
             <div style="flex: 1; min-width: 300px">
+              <div id="myHolidaySwapsContainer"></div>
               <div
                 class="card-paper"
                 style="border-top: 4px solid var(--md-secondary)"
@@ -1759,11 +1795,12 @@
                   מעקב סגירת חגים וימים מיוחדים
                 </h3>
                 <p style="font-size: 0.85rem; margin-top: 0">
-                  תיעוד שנתי של עובדים שסגרו משמרות בחגים.
+                  תיעוד שנתי של עובדים שסגרו משמרות בחגים. עובד יכול להשתבץ
+                  לחג (יתעדכן סופית כשהמנהל הראשי מחובר) ולבקש החלפה על רישום
+                  שלו.
                 </p>
                 <div
                   id="holLogInputsWrapper"
-                  class="manager-only"
                   style="
                     display: flex;
                     flex-direction: column;
@@ -1811,6 +1848,7 @@
                       title="שנה"
                     />
                     <button
+                      id="holLogSubmitBtn"
                       class="btn btn-contained"
                       style="background: var(--md-secondary); flex: 1"
                       onclick="window.addHolidayLog()"
@@ -1820,6 +1858,16 @@
                   </div>
                 </div>
                 <div id="holidaysLogTable"></div>
+              </div>
+
+              <div
+                class="card-paper manager-only"
+                style="border-right: 4px solid #7c3aed"
+              >
+                <h3 style="margin-top: 0; color: #7c3aed">
+                  🔄 בקשות החלפת חגים (ממתינות לאישורך)
+                </h3>
+                <div id="holidaySwapManagerContainer"></div>
               </div>
 
               <div
@@ -3275,6 +3323,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260710b"></script>
+    <script src="script.js?v=20260710c"></script>
   </body>
 </html>

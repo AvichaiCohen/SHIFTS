@@ -3143,30 +3143,51 @@
         const tableContainer = document.getElementById("holidaysLogTable");
         const selectEmp = document.getElementById("holLogEmp");
         if (!tableContainer || !selectEmp) return;
-        let empOptions =
-          `<option value="">-- בחר עובד --</option>` +
-          window.staff
-            .filter((e) => e.isActive)
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((e) => `<option value="${e.name}">${e.name}</option>`)
-            .join("");
-        if (selectEmp.innerHTML !== empOptions)
-          selectEmp.innerHTML = empOptions;
+        const meForHol = window.loggedInWorker || window.loggedInUser;
+        // עובד — הרשימה נעולה על השם שלו בלבד (הוא רק משתבץ לעצמו)
+        if (window.isWorkerMode && meForHol && meForHol.id !== "super") {
+          const opt = `<option value="${meForHol.name}">${meForHol.name}</option>`;
+          if (selectEmp.innerHTML !== opt) selectEmp.innerHTML = opt;
+          selectEmp.value = meForHol.name;
+          selectEmp.setAttribute("disabled", "true");
+        } else {
+          let empOptions =
+            `<option value="">-- בחר עובד --</option>` +
+            window.staff
+              .filter((e) => e.isActive)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((e) => `<option value="${e.name}">${e.name}</option>`)
+              .join("");
+          if (selectEmp.innerHTML !== empOptions) selectEmp.innerHTML = empOptions;
+          selectEmp.removeAttribute("disabled");
+        }
+        const submitBtn = document.getElementById("holLogSubmitBtn");
+        if (submitBtn)
+          submitBtn.innerText = window.isWorkerMode ? "🙋 השתבץ לחג" : "➕ הוסף רישום";
+
         if (!window.holidaysLog || window.holidaysLog.length === 0) {
           tableContainer.innerHTML =
             "<p style='color:#64748b; font-style:italic;'>אין רישומים במערכת.</p>";
           if (typeof window.renderHolidayStats === "function")
             window.renderHolidayStats();
+          if (typeof window.renderMyHolidaySwaps === "function") window.renderMyHolidaySwaps();
+          if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
           return;
         }
-        let html = `<table style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">פעולה</th></tr>`;
+        let html = `<table style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">פעולה</th><th>החלפה</th></tr>`;
         window.holidaysLog.forEach((log) => {
-          html += `<tr><td><b>${log.name}</b></td><td>${log.type} ${log.custom ? `(${log.custom})` : ""}</td><td>${log.year}</td><td class="task-action-btn"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td></tr>`;
+          const canSwap = window.isWorkerMode && meForHol && log.name === meForHol.name;
+          const swapBtn = canSwap
+            ? `<button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem;" onclick="window.requestHolidaySwap(${log.id})">🔄 בקש החלפה</button>`
+            : "";
+          html += `<tr><td><b>${log.name}</b></td><td>${log.type} ${log.custom ? `(${log.custom})` : ""}</td><td>${log.year}</td><td class="task-action-btn"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td><td>${swapBtn}</td></tr>`;
         });
         html += `</table>`;
         tableContainer.innerHTML = html;
         if (typeof window.renderHolidayStats === "function")
           window.renderHolidayStats();
+        if (typeof window.renderMyHolidaySwaps === "function") window.renderMyHolidaySwaps();
+        if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
       };
 
       window.addHolidayLog = function () {
@@ -3185,14 +3206,23 @@
           custom: type === "אחר" ? custom : "",
           year,
         };
+        // עדכון מקומי אופטימי — מוצג מיד
         window.holidaysLog = window.holidaysLog || [];
         window.holidaysLog.push(log);
-        if (typeof window.saveToCloud === "function")
+        window.renderHolidaysLog();
+        if (window.isWorkerMode) {
+          // עובד אנונימי לא יכול לכתוב ל-holidaysLog ישירות — נכתב כבקשה,
+          // המנהל הראשי מיישם בפועל כשהוא מחובר (כמו התנדבות למשימה)
+          if (typeof window.saveToCloud === "function")
+            window.saveToCloud("holidaySignupRequests/" + log.id, log);
+          alert("✅ נרשמת לחג! (יתעדכן סופית כשהמנהל הראשי יתחבר)");
+        } else if (typeof window.saveToCloud === "function") {
           window.saveToCloud("holidaysLog", window.holidaysLog);
+        }
         document.getElementById("holLogCustom").value = "";
         document.getElementById("holLogCustom").style.display = "none";
         document.getElementById("holLogType").value = "";
-        document.getElementById("holLogEmp").value = "";
+        if (!window.isWorkerMode) document.getElementById("holLogEmp").value = "";
       };
 
       window.deleteHolidayLog = function (id) {
@@ -3201,6 +3231,115 @@
           if (typeof window.saveToCloud === "function")
             window.saveToCloud("holidaysLog", window.holidaysLog);
         }
+      };
+
+      // ===== החלפת חגים בין עובדים (אותו תבנית כמו החלפת משימות) =====
+      window.holidaySwapRequests = window.holidaySwapRequests || {};
+
+      window.requestHolidaySwap = function (logId) {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        const log = (window.holidaysLog || []).find((l) => l.id === logId);
+        if (!log) return;
+        const others = (window.staff || []).filter(
+          (e) => e.isActive !== false && String(e.id) !== String(me.id),
+        );
+        if (others.length === 0) { alert("אין עובדים אחרים להחלפה."); return; }
+        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
+        const choice = prompt(`למי לשלוח בקשת החלפת חג?\n\n${optionsStr}\n\nהקלד את המספר:`);
+        if (!choice) return;
+        const idx = parseInt(choice.trim(), 10) - 1;
+        const target = others[idx];
+        if (!target) { alert("בחירה לא תקינה."); return; }
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        const req = {
+          id,
+          logId,
+          holidayLabel: `${log.type}${log.custom ? " (" + log.custom + ")" : ""} · ${log.year}`,
+          fromEmpId: me.id,
+          fromEmpName: me.name,
+          toEmpId: target.id,
+          toEmpName: target.name,
+          ts: id,
+        };
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidaySwapRequests/" + id, req);
+        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+      };
+
+      window.respondHolidaySwap = function (reqId, approve) {
+        if (typeof window.saveToCloud !== "function") return;
+        window.saveToCloud("holidaySwapRequests/" + reqId + "/targetResponse", {
+          approved: approve,
+          ts: Date.now(),
+        });
+        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+      };
+
+      window.renderMyHolidaySwaps = function () {
+        const cont = document.getElementById("myHolidaySwapsContainer");
+        if (!cont) return;
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { cont.innerHTML = ""; return; }
+        const all = Object.values(window.holidaySwapRequests || {}).filter(Boolean);
+        const pending = all.filter(
+          (r) => String(r.toEmpId) === String(me.id) && !r.targetResponse,
+        );
+        if (pending.length === 0) { cont.innerHTML = ""; return; }
+        let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפת חג אליי</h3>`;
+        pending.forEach((r) => {
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+            <div><b>${r.fromEmpName}</b> מבקש/ת שתחליף/י אותו/ה בחג: ${r.holidayLabel}</div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', true)">✅ אשר</button>
+              <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', false)">❌ דחה</button>
+            </div>
+          </div>`;
+        });
+        html += `</div>`;
+        cont.innerHTML = html;
+      };
+
+      window.renderHolidaySwapManager = function () {
+        const cont = document.getElementById("holidaySwapManagerContainer");
+        if (!cont) return;
+        const all = Object.values(window.holidaySwapRequests || {}).filter(Boolean);
+        const pendingAdmin = all.filter(
+          (r) => r.targetResponse && r.targetResponse.approved === true && !r.adminDecision,
+        );
+        if (pendingAdmin.length === 0) {
+          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
+          return;
+        }
+        let html = `<table style="width:100%; text-align:right;"><tr><th>ממי</th><th>למי</th><th>חג</th><th>פעולה</th></tr>`;
+        pendingAdmin.forEach((r) => {
+          html += `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td><b>${r.fromEmpName}</b></td><td><b>${r.toEmpName}</b></td><td>${r.holidayLabel}</td>
+            <td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeHolidaySwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeHolidaySwap('${r.id}', false)">❌ דחה</button></td>
+          </tr>`;
+        });
+        html += `</table>`;
+        cont.innerHTML = html;
+      };
+
+      window.finalizeHolidaySwap = function (reqId, approve) {
+        const r = (window.holidaySwapRequests || {})[reqId];
+        if (!r) return;
+        if (approve) {
+          const log = (window.holidaysLog || []).find((l) => l.id === r.logId);
+          if (log) {
+            log.name = r.toEmpName;
+            if (typeof window.saveToCloud === "function")
+              window.saveToCloud("holidaysLog", window.holidaysLog);
+            window.renderHolidaysLog();
+          }
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidaySwapRequests/" + reqId + "/adminDecision", {
+            approved: approve,
+            ts: Date.now(),
+          });
+        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
       };
 
       // === טבלת הוגנות סופ"ש ===

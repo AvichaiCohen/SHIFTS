@@ -45,6 +45,19 @@
       "$id": {
         ".write": "auth != null && !data.exists()"
       }
+    },
+    "holidaySignupRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()"
+      }
+    },
+    "holidaySwapRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()",
+        "targetResponse": {
+          ".write": "auth != null && !data.exists()"
+        }
+      }
     }
   }
 }
