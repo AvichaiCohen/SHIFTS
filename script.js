@@ -3851,10 +3851,20 @@
             const swapBtn = _canSwap
               ? `<br><button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem; margin-top:4px;" onclick="window.requestTaskSwap(${t.id})">🔄 בקש החלפה</button>`
               : "";
+            // משימה פתוחה (ללא עובד) — עובד מתאים יכול להתנדב אליה
+            const _canVolunteer =
+              window.isWorkerMode &&
+              !t.completed &&
+              _participantNames.length === 0 &&
+              _meForSwap &&
+              (_meForSwap.type === "טכנאי" || _meForSwap.type === "נחפף");
+            const volunteerBtn = _canVolunteer
+              ? `<button class="btn btn-contained" style="background:#16a34a; padding:2px 8px; font-size:0.72rem;" onclick="window.volunteerForTask(${t.id})">🙋 התנדב</button>`
+              : "";
             html += `<tr style="border-bottom:1px solid var(--md-divider); ${rowStyle}">
               <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${dateStr}</td>
               <td style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${t.category || ""}]</strong>${t.desc ? " " + t.desc : ""}</td>
-              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.join(", ") : "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
+              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.join(", ") : volunteerBtn || "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
               <td style="padding:6px; text-align:center;" class="task-action-btn">
                 <button class="btn btn-outlined" title="${t.completed ? "בטל סיום" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleTaskStatus(${t.id})">${btnText}</button>
                 <button class="btn btn-error" title="מחק" style="padding:2px 6px; font-size:0.85rem; min-width:auto; margin-top:4px;" onclick="window.deleteTask(${t.id})">🗑</button>
@@ -4270,6 +4280,43 @@
             ts: Date.now(),
           });
         alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+      };
+
+      // ===== התנדבות למשימה פתוחה (ללא עובד מוקצה) =====
+      // עובד אנונימי לא יכול לכתוב ל-systemTasks ישירות, לכן נכתבת בקשה בנתיב
+      // create-only ייעודי; המנהל הראשי (שיש לו הרשאת כתיבה מלאה) מיישם אותה
+      // אוטומטית ברגע שהוא מחובר (ראה listener ב-index.html), בדומה ל-passwordOverrides.
+      window.volunteerForTask = function (taskId) {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        const task = (window.systemTasks || []).find((t) => t.id === taskId);
+        if (!task) return;
+        const already = (task.assignees && task.assignees.length > 0) || task.assignee;
+        if (already) {
+          alert("למשימה הזו כבר יש מתנדב.");
+          window.renderTasks();
+          return;
+        }
+        if (
+          !confirm(
+            `להתנדב למשימה: [${task.category || ""}]${task.desc ? " " + task.desc : ""}?`,
+          )
+        )
+          return;
+        // עדכון אופטימי מקומי — מוצג מיד; ייכתב בפועל ל-systemTasks כשהמנהל הראשי מחובר
+        task.assignees = [{ name: me.name }];
+        task.assignee = me.name;
+        window.renderTasks();
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("taskVolunteerRequests/" + id, {
+            id,
+            taskId,
+            empId: me.id,
+            empName: me.name,
+            ts: id,
+          });
+        alert("✅ נרשמת למשימה!");
       };
 
       window.addTask = function () {

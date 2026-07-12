@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260710a";
+        var BUILD = "20260710b";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -536,6 +536,39 @@
             window.renderTaskSwapManager();
         });
 
+        // התנדבות עובדים למשימות פתוחות — נכתבות ע"י עובד אנונימי (create-only),
+        // והמנהל הראשי (הרשאת כתיבה מלאה) מיישם אותן אוטומטית ל-systemTasks כשהוא מחובר
+        window.taskVolunteerRequests = {};
+        onValue(ref(db, "taskVolunteerRequests"), (snapshot) => {
+          window.taskVolunteerRequests = snapshot.exists() ? snapshot.val() || {} : {};
+          const entries = Object.values(window.taskVolunteerRequests).filter(Boolean);
+          if (
+            window.currentUserRole === "superAdmin" &&
+            entries.length > 0 &&
+            Array.isArray(window.systemTasks)
+          ) {
+            entries.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            let changed = false;
+            entries.forEach((req) => {
+              const task = window.systemTasks.find((t) => t.id === req.taskId);
+              if (task) {
+                const already = (task.assignees && task.assignees.length > 0) || task.assignee;
+                if (!already) {
+                  task.assignees = [{ name: req.empName }];
+                  task.assignee = req.empName;
+                  changed = true;
+                  if (typeof window.syncTaskSpecialStatus === "function")
+                    window.syncTaskSpecialStatus(task);
+                }
+              }
+              // ניקוי הבקשה שטופלה (גם אם המשימה כבר הוקצתה לפני שהתנדבות זו הגיעה)
+              window.saveToCloud("taskVolunteerRequests/" + req.id, null);
+            });
+            if (changed && typeof window._saveTasks === "function") window._saveTasks();
+          }
+          if (typeof window.renderTasks === "function") window.renderTasks();
+        });
+
         window.onclick = function (event) {
           let editModal = document.getElementById("editModal");
           let specModal = document.getElementById("specialStatusModal");
@@ -552,7 +585,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260710a" />
+    <link rel="stylesheet" href="style.css?v=20260710b" />
   </head>
   <body>
     <div
@@ -3242,6 +3275,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260710a"></script>
+    <script src="script.js?v=20260710b"></script>
   </body>
 </html>

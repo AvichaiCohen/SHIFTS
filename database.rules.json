@@ -40,6 +40,11 @@
           ".write": "auth != null && !data.exists()"
         }
       }
+    },
+    "taskVolunteerRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()"
+      }
     }
   }
 }
