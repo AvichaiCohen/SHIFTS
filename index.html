@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260713a";
+        var BUILD = "20260713b";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -528,6 +528,27 @@
             window.renderStaff();
         });
 
+        // בקשות שינוי סיסמה מעובדים אנונימיים (create-only — מטעמי אבטחה
+        // עובד אנונימי לא יכול לכתוב ישירות ל-passwordOverrides של עובד אחר).
+        // המנהל הראשי מיישם ל-passwordOverrides (ה-listener שמעל ימשיך משם
+        // ויטמיע ל-staffMaster) ומנקה את הבקשה שטופלה.
+        window.passwordChangeRequests = {};
+        onValue(ref(db, "passwordChangeRequests"), (snapshot) => {
+          window.passwordChangeRequests = snapshot.exists() ? snapshot.val() || {} : {};
+          const entries = Object.values(window.passwordChangeRequests).filter(Boolean);
+          if (window.currentUserRole === "superAdmin" && entries.length > 0) {
+            entries.forEach((req) => {
+              if (req.empId != null && req.password) {
+                window.saveToCloud("passwordOverrides/" + req.empId, {
+                  password: req.password,
+                  ts: req.ts || Date.now(),
+                });
+              }
+              window.saveToCloud("passwordChangeRequests/" + req.id, null);
+            });
+          }
+        });
+
         // בקשות החלפת משימות בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
         window.taskSwapRequests = {};
         onValue(ref(db, "taskSwapRequests"), (snapshot) => {
@@ -620,7 +641,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260713a" />
+    <link rel="stylesheet" href="style.css?v=20260713b" />
   </head>
   <body>
     <div
@@ -3155,6 +3176,147 @@
       </div>
     </div>
 
+    <div id="editTaskModal" class="modal">
+      <div class="modal-content" style="max-width: 500px">
+        <h3 style="color: var(--md-primary); margin-top: 0">
+          ✏️ עריכת משימה
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <select id="editTaskCategory" style="width: 100%"></select>
+          <input
+            type="text"
+            id="editTaskDesc"
+            placeholder="הערה (אופציונלי)..."
+            style="width: 100%"
+          />
+          <div style="display: flex; gap: 10px; flex-wrap: wrap">
+            <div style="flex: 1; min-width: 130px">
+              <label
+                style="
+                  font-size: 0.8rem;
+                  color: var(--md-text-secondary);
+                  display: block;
+                  margin-bottom: 3px;
+                "
+                >מתאריך</label
+              >
+              <input type="date" id="editTaskDate" style="width: 100%" />
+            </div>
+            <div style="flex: 1; min-width: 130px">
+              <label
+                style="
+                  font-size: 0.8rem;
+                  color: var(--md-text-secondary);
+                  display: block;
+                  margin-bottom: 3px;
+                "
+                >עד תאריך (אופציונלי)</label
+              >
+              <input type="date" id="editTaskEndDate" style="width: 100%" />
+            </div>
+          </div>
+          <div>
+            <label
+              style="
+                font-size: 0.8rem;
+                color: var(--md-text-secondary);
+                display: block;
+                margin-bottom: 5px;
+              "
+              >עובדים משויכים</label
+            >
+            <div
+              id="editTaskAssigneeRows"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                max-height: 180px;
+                overflow-y: auto;
+                background: var(--md-bg);
+                padding: 8px;
+                border-radius: 8px;
+              "
+            ></div>
+          </div>
+        </div>
+        <div
+          style="display: flex; justify-content: space-between; margin-top: 20px"
+        >
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('editTaskModal').style.display = 'none'"
+          >
+            ביטול
+          </button>
+          <button class="btn btn-contained" onclick="window.saveEditTask()">
+            💾 שמור שינויים
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="editHolidayModal" class="modal">
+      <div class="modal-content" style="max-width: 420px">
+        <h3 style="color: var(--md-secondary); margin-top: 0">
+          ✏️ עריכת רישום חג
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <select id="editHolEmp" style="width: 100%"></select>
+          <select
+            id="editHolType"
+            style="width: 100%"
+            onchange="
+              document.getElementById('editHolCustom').style.display =
+                this.value === 'אחר' ? 'block' : 'none'
+            "
+          >
+            <option value="">-- בחר חג / אירוע --</option>
+            <option value="פסח א">פסח א'</option>
+            <option value="פסח ב">פסח ב'</option>
+            <option value="סוכות א">סוכות א'</option>
+            <option value="סוכות ב / שמחת תורה">
+              סוכות ב' / שמחת תורה
+            </option>
+            <option value="יום כיפורים">יום כיפורים</option>
+            <option value="פורים">פורים</option>
+            <option value="שבועות">שבועות</option>
+            <option value="ראש השנה">ראש השנה</option>
+            <option value="אחר">אחר (ציין ידנית)</option>
+          </select>
+          <input
+            type="text"
+            id="editHolCustom"
+            placeholder="ציין אירוע מיוחד..."
+            style="display: none; width: 100%"
+          />
+          <input
+            type="number"
+            id="editHolYear"
+            style="width: 100%"
+            title="שנה"
+          />
+        </div>
+        <div
+          style="display: flex; justify-content: space-between; margin-top: 20px"
+        >
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('editHolidayModal').style.display = 'none'"
+          >
+            ביטול
+          </button>
+          <button
+            class="btn btn-contained"
+            style="background: var(--md-secondary)"
+            onclick="window.saveEditHoliday()"
+          >
+            💾 שמור שינויים
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="commanderSelectModal" class="modal">
       <div class="modal-content" style="max-width: 420px">
         <h3 style="color: #0284c7; margin-top: 0">
@@ -3323,6 +3485,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260713a"></script>
+    <script src="script.js?v=20260713b"></script>
   </body>
 </html>

@@ -28,9 +28,9 @@
         ".write": "auth != null && !data.exists()"
       }
     },
-    "passwordOverrides": {
-      "$empId": {
-        ".write": "auth != null"
+    "passwordChangeRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()"
       }
     },
     "taskSwapRequests": {

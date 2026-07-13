@@ -1,3 +1,15 @@
+      // בריחת HTML לטקסט לא-מהימן (למשל טקסט חופשי שהגיע מבקשות שנכתבות ע"י
+      // משתמשים אנונימיים) לפני הכנסתו ל-innerHTML, כדי למנוע XSS מאוחסן.
+      window.escapeHtml = function (str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      };
+
       window.getSunday = function (offset) {
         let d = new Date();
         let day = d.getDay();
@@ -1486,14 +1498,20 @@
           alert("שגיאת חיבור — נסה שוב מאוחר יותר.");
           return;
         }
-        // כתיבה ל-passwordOverrides (העובד אנונימי — מותר לו רק כאן); תקף מיידית לכניסה הבאה
-        window.saveToCloud("passwordOverrides/" + me.id, {
-          password: np,
-          ts: Date.now(),
-        });
+        // עדכון מקומי אופטימי — תקף מיידית להמשך השימוש במכשיר הזה.
+        // הכתיבה בפועל ל-passwordOverrides נעשית ע"י המנהל הראשי (כמו תכונות
+        // אחרות של עובד אנונימי) כדי שמשתמש אנונימי לא יוכל לכתוב ישירות לנתיב
+        // שמשותף לכל העובדים ולדרוס סיסמה של עובד אחר.
         window.passwordOverrides = window.passwordOverrides || {};
         window.passwordOverrides[me.id] = { password: np, ts: Date.now() };
         me.password = np;
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        window.saveToCloud("passwordChangeRequests/" + id, {
+          id,
+          empId: me.id,
+          password: np,
+          ts: id,
+        });
         alert("✅ הסיסמה עודכנה!\nמהכניסה הבאה היכנס עם הסיסמה החדשה.");
       };
 
@@ -3182,7 +3200,11 @@
             : "";
           const rowStyle = log.completed ? "opacity:0.55; text-decoration:line-through;" : "";
           const doneBtnText = log.completed ? "↩" : "✔";
-          html += `<tr style="${rowStyle}"><td><b>${log.name}</b></td><td>${log.type} ${log.custom ? `(${log.custom})` : ""}</td><td>${log.year}</td><td class="task-action-btn" style="text-align:center;"><button class="btn btn-outlined" title="${log.completed ? "בטל סימון בוצע" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleHolidayLogStatus(${log.id})">${doneBtnText}</button></td><td class="task-action-btn"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td><td>${swapBtn}</td></tr>`;
+          const safeName = window.escapeHtml(log.name);
+          const safeType = window.escapeHtml(log.type);
+          const safeCustom = window.escapeHtml(log.custom);
+          const safeYear = window.escapeHtml(log.year);
+          html += `<tr style="${rowStyle}"><td><b>${safeName}</b></td><td>${safeType} ${safeCustom ? `(${safeCustom})` : ""}</td><td>${safeYear}</td><td class="task-action-btn" style="text-align:center;"><button class="btn btn-outlined" title="${log.completed ? "בטל סימון בוצע" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleHolidayLogStatus(${log.id})">${doneBtnText}</button></td><td class="task-action-btn"><button class="btn btn-outlined" title="ערוך" style="padding:2px 8px; font-size:0.75rem;" onclick="window.openEditHolidayModal(${log.id})">✏️</button> <button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td><td>${swapBtn}</td></tr>`;
         });
         html += `</table>`;
         tableContainer.innerHTML = html;
@@ -3245,6 +3267,52 @@
           window.saveToCloud("holidaysLog", window.holidaysLog);
       };
 
+      window.openEditHolidayModal = function (id) {
+        const log = (window.holidaysLog || []).find((l) => l.id === id);
+        if (!log) return;
+        window._editingHolidayId = id;
+        const empOptions = (window.staff || [])
+          .filter((e) => e.isActive)
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((e) => `<option value="${e.name}" ${e.name === log.name ? "selected" : ""}>${e.name}</option>`)
+          .join("");
+        const empSel = document.getElementById("editHolEmp");
+        if (empSel) empSel.innerHTML = empOptions;
+        const typeSel = document.getElementById("editHolType");
+        if (typeSel) typeSel.value = log.type || "";
+        const customEl = document.getElementById("editHolCustom");
+        if (customEl) {
+          customEl.value = log.custom || "";
+          customEl.style.display = log.type === "אחר" ? "block" : "none";
+        }
+        const yearEl = document.getElementById("editHolYear");
+        if (yearEl) yearEl.value = log.year || "";
+        const modal = document.getElementById("editHolidayModal");
+        if (modal) modal.style.display = "flex";
+      };
+
+      window.saveEditHoliday = function () {
+        const id = window._editingHolidayId;
+        const log = (window.holidaysLog || []).find((l) => l.id === id);
+        if (!log) return;
+        const name = document.getElementById("editHolEmp").value;
+        const type = document.getElementById("editHolType").value;
+        const custom = document.getElementById("editHolCustom").value;
+        const year = document.getElementById("editHolYear").value;
+        if (!name || !type || !year) {
+          alert("יש למלא שם עובד, סוג חג/אירוע ושנה.");
+          return;
+        }
+        log.name = name;
+        log.type = type;
+        log.custom = type === "אחר" ? custom : "";
+        log.year = year;
+        window.renderHolidaysLog();
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidaysLog", window.holidaysLog);
+        document.getElementById("editHolidayModal").style.display = "none";
+      };
+
       // ===== החלפת חגים בין עובדים (אותו תבנית כמו החלפת משימות) =====
       window.holidaySwapRequests = window.holidaySwapRequests || {};
 
@@ -3301,7 +3369,7 @@
         let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפת חג אליי</h3>`;
         pending.forEach((r) => {
           html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
-            <div><b>${r.fromEmpName}</b> מבקש/ת שתחליף/י אותו/ה בחג: ${r.holidayLabel}</div>
+            <div><b>${window.escapeHtml(r.fromEmpName)}</b> מבקש/ת שתחליף/י אותו/ה בחג: ${window.escapeHtml(r.holidayLabel)}</div>
             <div style="display:flex; gap:6px;">
               <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', true)">✅ אשר</button>
               <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', false)">❌ דחה</button>
@@ -3326,7 +3394,7 @@
         let html = `<table style="width:100%; text-align:right;"><tr><th>ממי</th><th>למי</th><th>חג</th><th>פעולה</th></tr>`;
         pendingAdmin.forEach((r) => {
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
-            <td><b>${r.fromEmpName}</b></td><td><b>${r.toEmpName}</b></td><td>${r.holidayLabel}</td>
+            <td><b>${window.escapeHtml(r.fromEmpName)}</b></td><td><b>${window.escapeHtml(r.toEmpName)}</b></td><td>${window.escapeHtml(r.holidayLabel)}</td>
             <td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeHolidaySwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeHolidaySwap('${r.id}', false)">❌ דחה</button></td>
           </tr>`;
         });
@@ -4014,10 +4082,11 @@
               : "";
             html += `<tr style="border-bottom:1px solid var(--md-divider); ${rowStyle}">
               <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${dateStr}</td>
-              <td style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${t.category || ""}]</strong>${t.desc ? " " + t.desc : ""}</td>
-              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.join(", ") : volunteerBtn || "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
+              <td style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${window.escapeHtml(t.category)}]</strong>${t.desc ? " " + window.escapeHtml(t.desc) : ""}</td>
+              <td style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.map(window.escapeHtml).join(", ") : volunteerBtn || "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
               <td style="padding:6px; text-align:center;" class="task-action-btn">
                 <button class="btn btn-outlined" title="${t.completed ? "בטל סיום" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleTaskStatus(${t.id})">${btnText}</button>
+                <button class="btn btn-outlined" title="ערוך" style="padding:2px 6px; font-size:0.85rem; min-width:auto; margin-top:4px;" onclick="window.openEditTaskModal(${t.id})">✏️</button>
                 <button class="btn btn-error" title="מחק" style="padding:2px 6px; font-size:0.85rem; min-width:auto; margin-top:4px;" onclick="window.deleteTask(${t.id})">🗑</button>
               </td>
             </tr>`;
@@ -4052,10 +4121,13 @@
           });
         });
 
-        // ספירת חגים לכל עובד
+        // ספירת חגים לכל עובד — בהפרדה בין מה שבוצע לבין מה שעדיין לא
         let holCounts = {};
         (window.holidaysLog || []).forEach((log) => {
-          if (log.name) holCounts[log.name] = (holCounts[log.name] || 0) + 1;
+          if (!log.name) return;
+          if (!holCounts[log.name]) holCounts[log.name] = { done: 0, total: 0 };
+          holCounts[log.name].total++;
+          if (log.completed) holCounts[log.name].done++;
         });
 
         let sorted = [...relevantStaff].sort(
@@ -4067,7 +4139,7 @@
           <tr style="background:var(--md-bg);">
             <th style="padding:8px; border-bottom:2px solid var(--md-divider);">שם העובד</th>
             <th style="padding:8px; border-bottom:2px solid var(--md-divider); text-align:center; width:90px;">משימות</th>
-            <th style="padding:8px; border-bottom:2px solid var(--md-divider); text-align:center; width:70px;">חגים</th>
+            <th style="padding:8px; border-bottom:2px solid var(--md-divider); text-align:center; width:70px;">חגים (בוצעו)</th>
           </tr>`;
         sorted.forEach((e) => {
           let tc = taskCounts[e.name];
@@ -4076,11 +4148,16 @@
             cats.length > 0
               ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px; white-space:normal;">${cats.map((c) => `${c}: ${tc.byCat[c]}`).join(" · ")}</div>`
               : "";
-          let hol = holCounts[e.name] || 0;
+          let hol = holCounts[e.name] || { done: 0, total: 0 };
+          let pending = hol.total - hol.done;
+          let holLine =
+            hol.total > 0
+              ? `${hol.done > 0 ? hol.done : "<span style='color:var(--md-divider);'>-</span>"}${pending > 0 ? `<div style="font-size:0.68rem; color:var(--md-warning); font-weight:normal;">+${pending} ממתין${pending > 1 ? "ים" : ""}</div>` : ""}`
+              : "<span style='color:var(--md-divider);'>-</span>";
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
             <td style="padding:8px; word-break:break-word;"><strong>${e.name}</strong> <span style="font-size:0.7em; color:var(--text-muted);">(${e.type})</span>${catLine}</td>
             <td style="padding:8px; text-align:center; color:var(--md-success); font-weight:bold; font-size:1.1em;">${tc.total > 0 ? tc.total : "<span style='color:var(--md-divider);'>-</span>"}</td>
-            <td style="padding:8px; text-align:center; color:var(--md-secondary); font-weight:bold; font-size:1.1em;">${hol > 0 ? hol : "<span style='color:var(--md-divider);'>-</span>"}</td>
+            <td style="padding:8px; text-align:center; color:var(--md-secondary); font-weight:bold; font-size:1.1em;">${holLine}</td>
           </tr>`;
         });
         html += `</table>`;
@@ -4134,10 +4211,12 @@
         let done = empTasks.filter((t) => t.completed);
         let open = empTasks.filter((t) => !t.completed);
 
-        // חגים שסגר
+        // חגים — בהפרדה בין מה שנסגר בפועל לבין מה שרק נרשם/ממתין
         let empHolidays = (window.holidaysLog || []).filter(
           (l) => l.name === name,
         );
+        let holDone = empHolidays.filter((l) => l.completed);
+        let holPending = empHolidays.filter((l) => !l.completed);
 
         let html = "";
 
@@ -4152,8 +4231,12 @@
             <div style="font-size:0.75rem; color:var(--text-muted);">פתוחות</div>
           </div>
           <div style="flex:1; min-width:90px; text-align:center; background:var(--md-bg); border-radius:8px; padding:10px;">
-            <div style="font-size:1.4rem; font-weight:bold; color:var(--md-secondary);">${empHolidays.length}</div>
+            <div style="font-size:1.4rem; font-weight:bold; color:var(--md-secondary);">${holDone.length}</div>
             <div style="font-size:0.75rem; color:var(--text-muted);">חגים שנסגרו</div>
+          </div>
+          <div style="flex:1; min-width:90px; text-align:center; background:var(--md-bg); border-radius:8px; padding:10px;">
+            <div style="font-size:1.4rem; font-weight:bold; color:var(--md-warning);">${holPending.length}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">חגים ממתינים</div>
           </div>
         </div>`;
 
@@ -4181,7 +4264,7 @@
               : `<span style="color:var(--md-warning);">פתוח</span>`;
             html += `<tr style="border-bottom:1px solid var(--md-divider);">
               <td style="padding:6px; white-space:nowrap;">${dateStr}</td>
-              <td style="padding:6px;"><b style="color:var(--md-primary);">[${t.category || ""}]</b>${t.desc ? " " + t.desc : ""}</td>
+              <td style="padding:6px;"><b style="color:var(--md-primary);">[${window.escapeHtml(t.category)}]</b>${t.desc ? " " + window.escapeHtml(t.desc) : ""}</td>
               <td style="padding:6px; text-align:center; white-space:nowrap;">${status}</td>
             </tr>`;
           });
@@ -4189,7 +4272,7 @@
         }
 
         // טבלת חגים
-        html += `<h4 style="margin:8px 0; color:var(--md-secondary);">🎄 חגים שנסגרו</h4>`;
+        html += `<h4 style="margin:8px 0; color:var(--md-secondary);">🎄 חגים</h4>`;
         if (empHolidays.length === 0) {
           html += `<p style="color:var(--text-muted); font-size:0.85rem; margin:0;">אין רישומי חגים.</p>`;
         } else {
@@ -4197,11 +4280,18 @@
             <tr style="background:var(--md-bg);">
               <th style="padding:6px; border-bottom:1px solid var(--md-divider);">חג / אירוע</th>
               <th style="padding:6px; border-bottom:1px solid var(--md-divider); text-align:center;">שנה</th>
+              <th style="padding:6px; border-bottom:1px solid var(--md-divider); text-align:center;">סטטוס</th>
             </tr>`;
           empHolidays.forEach((l) => {
+            let holStatus = l.completed
+              ? `<span style="color:var(--md-success);">✔ נסגר</span>`
+              : `<span style="color:var(--md-warning);">ממתין</span>`;
+            const safeType = window.escapeHtml(l.type);
+            const safeCustom = window.escapeHtml(l.custom);
             html += `<tr style="border-bottom:1px solid var(--md-divider);">
-              <td style="padding:6px;">${l.type} ${l.custom ? `(${l.custom})` : ""}</td>
-              <td style="padding:6px; text-align:center;">${l.year}</td>
+              <td style="padding:6px;">${safeType} ${safeCustom ? `(${safeCustom})` : ""}</td>
+              <td style="padding:6px; text-align:center;">${window.escapeHtml(l.year)}</td>
+              <td style="padding:6px; text-align:center; white-space:nowrap;">${holStatus}</td>
             </tr>`;
           });
           html += `</table></div>`;
@@ -4367,7 +4457,7 @@
         pending.forEach((r) => {
           const fDate = r.date ? r.date.split("-").reverse().join(".") : "";
           html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
-            <div><b>${r.fromEmpName}</b> מבקש/ת שתחליף/י אותו/ה במשימה: ${r.taskLabel}${fDate ? " (" + fDate + ")" : ""}</div>
+            <div><b>${window.escapeHtml(r.fromEmpName)}</b> מבקש/ת שתחליף/י אותו/ה במשימה: ${window.escapeHtml(r.taskLabel)}${fDate ? " (" + window.escapeHtml(fDate) + ")" : ""}</div>
             <div style="display:flex; gap:6px;">
               <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', true)">✅ אשר</button>
               <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', false)">❌ דחה</button>
@@ -4394,7 +4484,7 @@
         pendingAdmin.forEach((r) => {
           const fDate = r.date ? r.date.split("-").reverse().join(".") : "-";
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
-            <td><b>${r.fromEmpName}</b></td><td><b>${r.toEmpName}</b></td><td>${r.taskLabel}</td><td>${fDate}</td>
+            <td><b>${window.escapeHtml(r.fromEmpName)}</b></td><td><b>${window.escapeHtml(r.toEmpName)}</b></td><td>${window.escapeHtml(r.taskLabel)}</td><td>${window.escapeHtml(fDate)}</td>
             <td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeTaskSwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeTaskSwap('${r.id}', false)">❌ דחה</button></td>
           </tr>`;
         });
@@ -4554,6 +4644,71 @@
           window.renderTasks();
           window.triggerUnsavedChanges();
         }
+      };
+
+      window.openEditTaskModal = function (id) {
+        const t = (window.systemTasks || []).find((x) => x.id === id);
+        if (!t) return;
+        window._editingTaskId = id;
+        const catHtml = window.taskCategories
+          .map((c) => `<option value="${c}" ${c === t.category ? "selected" : ""}>${c}</option>`)
+          .join("");
+        const catSel = document.getElementById("editTaskCategory");
+        if (catSel) catSel.innerHTML = catHtml;
+        const descEl = document.getElementById("editTaskDesc");
+        if (descEl) descEl.value = t.desc || "";
+        const dateEl = document.getElementById("editTaskDate");
+        if (dateEl) dateEl.value = t.date || "";
+        const endDateEl = document.getElementById("editTaskEndDate");
+        if (endDateEl) endDateEl.value = t.endDate || "";
+        const participants =
+          t.assignees && t.assignees.length > 0
+            ? t.assignees.map((a) => a.name)
+            : t.assignee
+              ? [t.assignee]
+              : [];
+        const activeStaff = (window.staff || []).filter(
+          (e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"),
+        );
+        const rows = document.getElementById("editTaskAssigneeRows");
+        if (rows) {
+          rows.innerHTML = activeStaff
+            .map(
+              (e) =>
+                `<label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="edit-task-assignee-cb" value="${e.name}" ${participants.includes(e.name) ? "checked" : ""}><span>${e.name} (${e.type})</span></label>`,
+            )
+            .join("");
+        }
+        const modal = document.getElementById("editTaskModal");
+        if (modal) modal.style.display = "flex";
+      };
+
+      window.saveEditTask = function () {
+        const id = window._editingTaskId;
+        const t = (window.systemTasks || []).find((x) => x.id === id);
+        if (!t) return;
+        const category = document.getElementById("editTaskCategory").value;
+        const desc = document.getElementById("editTaskDesc").value.trim();
+        const date = document.getElementById("editTaskDate").value;
+        const endDateEl = document.getElementById("editTaskEndDate");
+        const endDate = endDateEl ? endDateEl.value : "";
+        if (!category) { alert("יש לבחור קטגוריית משימה!"); return; }
+        if (!date) { alert("יש לבחור תאריך!"); return; }
+        const checked = Array.from(
+          document.querySelectorAll(".edit-task-assignee-cb:checked"),
+        ).map((cb) => cb.value);
+        t.category = category;
+        t.desc = desc;
+        t.date = date;
+        if (endDate && endDate > date) t.endDate = endDate;
+        else delete t.endDate;
+        t.assignees = checked.map((name) => ({ name }));
+        t.assignee = checked[0] || "";
+        window._saveTasks();
+        window.syncTaskSpecialStatus(t);
+        window.renderTasks();
+        window.triggerUnsavedChanges();
+        document.getElementById("editTaskModal").style.display = "none";
       };
 
       window.renderRulesUI = function () {
