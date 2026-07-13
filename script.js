@@ -3174,13 +3174,15 @@
           if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
           return;
         }
-        let html = `<table style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">פעולה</th><th>החלפה</th></tr>`;
+        let html = `<table style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">בוצע</th><th class="task-action-btn">פעולה</th><th>החלפה</th></tr>`;
         window.holidaysLog.forEach((log) => {
           const canSwap = window.isWorkerMode && meForHol && log.name === meForHol.name;
           const swapBtn = canSwap
             ? `<button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem;" onclick="window.requestHolidaySwap(${log.id})">🔄 בקש החלפה</button>`
             : "";
-          html += `<tr><td><b>${log.name}</b></td><td>${log.type} ${log.custom ? `(${log.custom})` : ""}</td><td>${log.year}</td><td class="task-action-btn"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td><td>${swapBtn}</td></tr>`;
+          const rowStyle = log.completed ? "opacity:0.55; text-decoration:line-through;" : "";
+          const doneBtnText = log.completed ? "↩" : "✔";
+          html += `<tr style="${rowStyle}"><td><b>${log.name}</b></td><td>${log.type} ${log.custom ? `(${log.custom})` : ""}</td><td>${log.year}</td><td class="task-action-btn" style="text-align:center;"><button class="btn btn-outlined" title="${log.completed ? "בטל סימון בוצע" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleHolidayLogStatus(${log.id})">${doneBtnText}</button></td><td class="task-action-btn"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.deleteHolidayLog(${log.id})">מחק</button></td><td>${swapBtn}</td></tr>`;
         });
         html += `</table>`;
         tableContainer.innerHTML = html;
@@ -3205,6 +3207,7 @@
           type,
           custom: type === "אחר" ? custom : "",
           year,
+          completed: false,
         };
         // עדכון מקומי אופטימי — מוצג מיד
         window.holidaysLog = window.holidaysLog || [];
@@ -3231,6 +3234,15 @@
           if (typeof window.saveToCloud === "function")
             window.saveToCloud("holidaysLog", window.holidaysLog);
         }
+      };
+
+      window.toggleHolidayLogStatus = function (id) {
+        const log = (window.holidaysLog || []).find((l) => l.id === id);
+        if (!log) return;
+        log.completed = !log.completed;
+        window.renderHolidaysLog();
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidaysLog", window.holidaysLog);
       };
 
       // ===== החלפת חגים בין עובדים (אותו תבנית כמו החלפת משימות) =====
