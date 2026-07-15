@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715a";
+        var BUILD = "20260715b";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -641,7 +641,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715a" />
+    <link rel="stylesheet" href="style.css?v=20260715b" />
   </head>
   <body>
     <div
@@ -3485,6 +3485,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715a"></script>
+    <script src="script.js?v=20260715b"></script>
   </body>
 </html>

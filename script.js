@@ -7494,7 +7494,7 @@
               );
               dayTasks.forEach((t) => {
                 let assign = t.assignee ? ` - ${window.escapeHtml(t.assignee)}` : "";
-                html += `<div class="note-task">📋 ${window.escapeHtml(t.category)}${assign}</div>`;
+                html += `<div class="note-task" style="background:rgba(37,99,235,0.12); color:#2563eb; padding:4px 10px; border-radius:12px; font-size:0.8em; margin:2px; display:inline-block; font-weight:bold;">📋 ${window.escapeHtml(t.category)}${assign}</div>`;
               });
             }
             // סטטוס מיוחד (חופש/יום לימודים/וכו') — מוצג כאן יחד עם שאר ההערות
