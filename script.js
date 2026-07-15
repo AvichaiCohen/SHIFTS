@@ -7479,27 +7479,6 @@
           html += `</tr>`;
         });
 
-        let hasSpecial = days.some((d) => window.getSpecialsForDay(d, data).length > 0);
-        if (hasSpecial) {
-          html += `<tr><td class="td-special-header"><b style="font-size:1.1em;">🚩 סטטוס מיוחד</b><br><span style="font-size:0.8em;">(אקסל בלבד)</span></td>`;
-          days.forEach((d) => {
-            html += `<td class="td-special-cell">`;
-            let specs = window.getSpecialsForDay(d, data);
-            specs.forEach((sp) => {
-              let isMe = window.loggedInUser && window.loggedInUser.id === sp.id ? " highlight-me" : "";
-              let removeBtn = !window.isWorkerMode
-                ? (sp._specialId != null
-                    ? `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
-                    : sp._taskId ? ""
-                    : `<span class="mobile-remove-btn" style="margin-right:8px; cursor:pointer;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
-                : "";
-              html += `<div class="name-chip chip-special${isMe}">👤 ${sp.name} <br> <b style="font-size:0.8em; margin-right:4px;">${window.specStatusLabel(sp)}</b>${removeBtn}</div>`;
-            });
-            html += `</td>`;
-          });
-          html += `</tr>`;
-        }
-
         if (!window.isEmergencyMode) {
           html += `<tr><td style="background:rgba(245,158,11,0.1); font-weight:bold; color:#d97706;">הערות ומשימות</td>`;
           days.forEach((d) => {
@@ -7514,8 +7493,33 @@
                 (t) => t.date === cellKey && !t.completed,
               );
               dayTasks.forEach((t) => {
-                let assign = t.assignee ? ` - ${t.assignee}` : "";
-                html += `<div class="note-task">📋 ${t.category}${assign}</div>`;
+                let assign = t.assignee ? ` - ${window.escapeHtml(t.assignee)}` : "";
+                html += `<div class="note-task">📋 ${window.escapeHtml(t.category)}${assign}</div>`;
+              });
+            }
+            // סטטוס מיוחד (חופש/יום לימודים/וכו') — מוצג כאן יחד עם שאר ההערות
+            // במקום בשורה נפרדת, כדי לא לכפול את אותו מידע פעמיים על הלוח.
+            // משימות עם תאריך כבר מוצגות למעלה כ-note-task, אז לא מציגים אותן שוב כאן.
+            if (typeof window.getSpecialsForDay === "function") {
+              const daySpecials = window.getSpecialsForDay(d, data).filter((sp) => {
+                if (sp._taskId != null) return false;
+                if (sp._specialId != null) {
+                  const rec = (window.specialStatuses || []).find(
+                    (s) => s.id === sp._specialId,
+                  );
+                  if (rec && rec.taskId != null) return false;
+                }
+                return true;
+              });
+              daySpecials.forEach((sp) => {
+                const removeAction =
+                  sp._specialId != null
+                    ? `window.removeSpecialStatus(${sp._specialId})`
+                    : `window.removeLegacySpecial('${d}',${sp.id})`;
+                const removeBtn = !window.isWorkerMode
+                  ? `<span class="mobile-remove-btn" style="margin-right:4px; cursor:pointer;" onclick="${removeAction}">✕</span>`
+                  : "";
+                html += `<div class="note-chip" style="background:rgba(147,51,234,0.12); color:#9333ea; padding:4px 10px; border-radius:12px; font-size:0.8em; margin:2px; display:inline-block; font-weight:bold;">🚩 ${window.escapeHtml(sp.name)} - ${window.escapeHtml(window.specStatusLabel(sp))}${removeBtn}</div>`;
               });
             }
             if (notesLog && notesLog[d]) {
@@ -7524,7 +7528,7 @@
                 let colorClass = isVacation
                   ? "background:rgba(239,68,68,0.1); color:var(--md-error);"
                   : "background:rgba(245,158,11,0.1); color:var(--md-warning);";
-                html += `<div class="note-chip" data-name="${n.emp.name}" style="${colorClass} padding:4px 10px; border-radius:12px; font-size:0.8em; margin:2px; display:inline-block; font-weight:bold;">${n.icon || ""} ${n.emp.name} - ${n.reason}</div>`;
+                html += `<div class="note-chip" data-name="${window.escapeHtml(n.emp.name)}" style="${colorClass} padding:4px 10px; border-radius:12px; font-size:0.8em; margin:2px; display:inline-block; font-weight:bold;">${n.icon || ""} ${window.escapeHtml(n.emp.name)} - ${window.escapeHtml(n.reason)}</div>`;
               });
             }
             html += `</td>`;
@@ -7693,31 +7697,29 @@
           html += `</div></div>`;
         });
 
+        // הערות — סטטוסים מיוחדים (חופש/יום לימודים/משימה) יחד עם הערות מנוחה
+        // וזמינות (אחרי לילה, אחרי שבת, חופש מלא) תחת כרטיס אחד מאוחד.
         let specs = window.getSpecialsForDay(d, data);
-        if (specs.length > 0) {
-          html += `<div class="mobile-shift-card" style="border-right-color:#9333ea; background:#faf5ff;"><div class="mobile-shift-header"><span style="color:#9333ea; font-weight:bold;">🚩 סטטוסים מיוחדים</span></div><div class="mobile-shift-body">`;
+        let hasNotes = specs.length > 0 || (notesLog && notesLog[d] && notesLog[d].length > 0);
+        if (hasNotes) {
+          html += `<div class="mobile-shift-card" style="border-right-color:#d97706; background:#fffbeb;"><div class="mobile-shift-header"><span style="color:#d97706; font-weight:bold;">📋 הערות</span></div><div class="mobile-shift-body" style="display:flex; flex-wrap:wrap; gap:6px; padding:4px 0;">`;
           specs.forEach((sp) => {
-            let isMe = window.loggedInUser && window.loggedInUser.id === sp.id ? " highlight-me-mobile" : "";
             let removeBtn = !window.isWorkerMode
               ? (sp._specialId != null
-                  ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
+                  ? `<span class="mobile-remove-btn" style="margin-right:6px; color:#ef4444;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
                   : sp._taskId ? ""
-                  : `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
+                  : `<span class="mobile-remove-btn" style="margin-right:6px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
               : "";
-            html += `<div class="mobile-emp-chip mobile-chip-special${isMe}"><span>👤 ${sp.name} <br> <b style="font-size:0.85em;">${window.specStatusLabel(sp)}</b></span>${removeBtn}</div>`;
+            html += `<div style="background:rgba(147,51,234,0.12); color:#9333ea; padding:6px 12px; border-radius:16px; font-size:0.88rem; font-weight:bold;">🚩 ${window.escapeHtml(sp.name)} - ${window.escapeHtml(window.specStatusLabel(sp))}${removeBtn}</div>`;
           });
-          html += `</div></div>`;
-        }
-
-        // הערות מנוחה וזמינות (אחרי לילה, אחרי שבת, חופש מלא)
-        if (notesLog && notesLog[d] && notesLog[d].length > 0) {
-          html += `<div class="mobile-shift-card" style="border-right-color:#d97706; background:#fffbeb;"><div class="mobile-shift-header"><span style="color:#d97706; font-weight:bold;">📋 הערות זמינות</span></div><div class="mobile-shift-body" style="display:flex; flex-wrap:wrap; gap:6px; padding:4px 0;">`;
-          notesLog[d].forEach((n) => {
-            let isVacation = n.reason && n.reason.includes("חופש");
-            let bg = isVacation ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)";
-            let color = isVacation ? "#dc2626" : "#b45309";
-            html += `<div style="background:${bg}; color:${color}; padding:6px 12px; border-radius:16px; font-size:0.88rem; font-weight:bold;">${n.icon || ""} ${n.emp.name} — ${n.reason}</div>`;
-          });
+          if (notesLog && notesLog[d]) {
+            notesLog[d].forEach((n) => {
+              let isVacation = n.reason && n.reason.includes("חופש");
+              let bg = isVacation ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)";
+              let color = isVacation ? "#dc2626" : "#b45309";
+              html += `<div style="background:${bg}; color:${color}; padding:6px 12px; border-radius:16px; font-size:0.88rem; font-weight:bold;">${n.icon || ""} ${window.escapeHtml(n.emp.name)} — ${window.escapeHtml(n.reason)}</div>`;
+            });
+          }
           html += `</div></div>`;
         }
 
