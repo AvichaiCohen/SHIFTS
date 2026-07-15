@@ -7490,7 +7490,7 @@
               cellDate.setDate(cellDate.getDate() + dayIdx);
               let cellKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, "0")}-${String(cellDate.getDate()).padStart(2, "0")}`;
               let dayTasks = window.systemTasks.filter(
-                (t) => t.date === cellKey && !t.completed,
+                (t) => !t.completed && t.date <= cellKey && (t.endDate || t.date) >= cellKey,
               );
               dayTasks.forEach((t) => {
                 let assign = t.assignee ? ` - ${window.escapeHtml(t.assignee)}` : "";
