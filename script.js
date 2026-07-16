@@ -2546,14 +2546,19 @@
           if (isSourceBlock) {
             sourceBlockArr.forEach((sk) => {
               let [bDay, bShift] = sk.split("-");
+              const isSourceShift = bDay === sourceDay && bShift === sourceShift;
               if (
                 window.currentSchedule[`${bDay}-${bShift}`] &&
                 window.currentSchedule[`${bDay}-${bShift}`][sourceLoc]
               ) {
+                // משמרת אחרת בבלוק הסופ"ש עם נעילה אישית לא נוגעים בה — רק
+                // המשמרת שממנה בפועל גוררים מוסרת תמיד
                 window.currentSchedule[`${bDay}-${bShift}`][sourceLoc] =
-                  window.currentSchedule[`${bDay}-${bShift}`][sourceLoc].filter(
-                    (e) => e.id != empId,
-                  );
+                  window.currentSchedule[`${bDay}-${bShift}`][sourceLoc].filter((e) => {
+                    if (e.id != empId) return true;
+                    if (isSourceShift) return false;
+                    return e.isLocked === true;
+                  });
               }
             });
           } else {
@@ -2951,14 +2956,19 @@
         if (isBlockDrop) {
           blockArr.forEach((sk) => {
             let [bDay, bShift] = sk.split("-");
+            const isClickedShift = bDay === d && bShift === s;
             if (
               window.currentSchedule[`${bDay}-${bShift}`] &&
               window.currentSchedule[`${bDay}-${bShift}`][loc]
             ) {
+              // משמרת אחרת בבלוק הסופ"ש עם נעילה אישית לא נוגעים בה — רק
+              // המשמרת שעליה בפועל לחצו ✕ מוסרת תמיד
               window.currentSchedule[`${bDay}-${bShift}`][loc] =
-                window.currentSchedule[`${bDay}-${bShift}`][loc].filter(
-                  (e) => e.id != id,
-                );
+                window.currentSchedule[`${bDay}-${bShift}`][loc].filter((e) => {
+                  if (e.id != id) return true;
+                  if (isClickedShift) return false;
+                  return e.isLocked === true;
+                });
             }
           });
         } else {
