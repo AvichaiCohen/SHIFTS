@@ -11,24 +11,34 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715g";
+        var BUILD = "20260715h";
         var KEY = "app_build_seen_v1";
-        try {
-          if (sessionStorage.getItem(KEY) === BUILD) return;
-        } catch (e) {}
-        fetch("./version.json?t=" + Date.now(), { cache: "no-store" })
-          .then(function (r) {
-            return r.json();
-          })
-          .then(function (v) {
-            try {
-              sessionStorage.setItem(KEY, BUILD);
-            } catch (e) {}
-            if (v && v.build && v.build !== BUILD) {
-              location.replace(location.pathname + "?v=" + Date.now());
-            }
-          })
-          .catch(function () {});
+        function checkAppVersion(force) {
+          try {
+            if (!force && sessionStorage.getItem(KEY) === BUILD) return;
+          } catch (e) {}
+          fetch("./version.json?t=" + Date.now(), { cache: "no-store" })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (v) {
+              try {
+                sessionStorage.setItem(KEY, BUILD);
+              } catch (e) {}
+              if (v && v.build && v.build !== BUILD) {
+                location.replace(location.pathname + "?v=" + Date.now());
+              }
+            })
+            .catch(function () {});
+        }
+        checkAppVersion(false);
+        // iOS Safari (בעיקר PWA שהותקן למסך הבית) לעיתים מקפיא כרטיסייה/אפליקציה
+        // ברקע ומחזיר אותה מ-bfcache בחזרה לחזית בלי לטעון מחדש בכלל — אין fetch,
+        // אין הרצת סקריפט. persisted=true מזהה בדיוק את המצב הזה, ומכריח בדיקה
+        // מיידית גם אם כבר "נבדק" הבנייה הזו בסשן.
+        window.addEventListener("pageshow", function (event) {
+          if (event.persisted) checkAppVersion(true);
+        });
       })();
     </script>
     <link
@@ -681,7 +691,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715g" />
+    <link rel="stylesheet" href="style.css?v=20260715h" />
   </head>
   <body>
     <div
@@ -4227,6 +4237,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715g"></script>
+    <script src="script.js?v=20260715h"></script>
   </body>
 </html>
