@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715e";
+        var BUILD = "20260715f";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -257,6 +257,7 @@
               "canManNightAlone",
               "ziraWeekendAllowed",
               "canZiraEvening",
+              "isWeekendCloserCandidate",
             ];
             // הוספת עובדים חדשים שנוספו ל-staffMaster לאחר שמירת השבוע
             (window.globalStaff || []).forEach((gEmp) => {
@@ -679,7 +680,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715e" />
+    <link rel="stylesheet" href="style.css?v=20260715f" />
   </head>
   <body>
     <div
@@ -1176,6 +1177,14 @@
                 title='מציע את הטכנאים שלא סגרו סופ"ש הכי הרבה זמן'
               >
                 🏖️ הצע סוגרי סופ"ש
+              </button>
+              <button
+                class="btn btn-contained"
+                style="background: #0d9488"
+                onclick="window.setWeekendClosers()"
+                title='קובע ונועל מראש רק את משמרות הסופ"ש/חג, מתוך מי שסומן כמועמד בכרטיס העובד — בלי לגעת בשאר השבוע'
+              >
+                🔒 קבע סוגרי סופ"ש
               </button>
               <button
                 class="btn btn-outlined"
@@ -2997,6 +3006,23 @@
               />
               מאושר לערבים בזירה (טכנאי יכול לעשות ערב בזירה)</label
             >
+            <label
+              id="lblWeekendCloser"
+              style="
+                cursor: pointer;
+                color: #0d9488;
+                font-size: 0.875rem;
+                display: none;
+                margin-top: 10px;
+                font-weight: bold;
+              "
+              ><input
+                type="checkbox"
+                id="editWeekendCloser"
+                style="vertical-align: middle"
+              />
+              מועמד לסגירת סופ"ש/חג (יוצע ב"קבע סוגרי סופ"ש")</label
+            >
             <div
               id="commanderSection"
               style="
@@ -4176,6 +4202,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715e"></script>
+    <script src="script.js?v=20260715f"></script>
   </body>
 </html>

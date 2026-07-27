@@ -3878,6 +3878,106 @@
         );
       };
 
+      // ===== הכנת סוגרי סופ"ש/חג מראש — רק סוגרי הסופ"ש, לא שאר השבוע =====
+      // בוחר מתוך מאגר "מועמדים לסגירת סופ״ש" שסומן ידנית בכרטיס העובד (isWeekendCloserCandidate),
+      // מדרג לפי מי שסגר הכי מזמן, ומשבץ+נועל ישירות את משמרות הסופ"ש/חג בלבד —
+      // בלי לגעת בשאר ימי השבוע. טכנאים מחולקים 2 לזירה ו-2 למת"ל (מצטרפים לנחפפים בזירה).
+      window.setWeekendClosers = async function () {
+        if (typeof window.rebuildWeekendHistory === "function")
+          await window.rebuildWeekendHistory();
+
+        const pool = (window.staff || []).filter(
+          (e) =>
+            e.isActive !== false &&
+            e.isWeekendCloserCandidate === true &&
+            (e.type === "טכנאי" || e.type === "נחפף") &&
+            !e.workedLastWeekend,
+        );
+        if (pool.length === 0) {
+          alert(
+            'אין מועמדים זמינים לסגירת סופ"ש/חג.\nיש לסמן "מועמד לסגירת סופ"ש/חג" בכרטיס העובד (בעריכה) לפחות למי שרלוונטי.',
+          );
+          return;
+        }
+
+        const ranked = pool
+          .map((e) => {
+            const info = window._lastWeekendInfo(e.name);
+            return { emp: e, last: info.label, lastTime: info.time };
+          })
+          .sort(
+            (a, b) => a.lastTime - b.lastTime || a.emp.name.localeCompare(b.emp.name),
+          );
+
+        const techs = ranked.filter((r) => r.emp.type === "טכנאי");
+        const nachpafim = ranked.filter((r) => r.emp.type === "נחפף");
+
+        // טכנאים: מי שסגר הכי מזמן קודם, ומחולקים לסירוגין 2 לזירה / 2 למת"ל
+        const techCount = Math.min(4, techs.length);
+        const chosenTechs = techs.slice(0, techCount);
+        const halfUp = Math.ceil(techCount / 2);
+        const techsToZira = chosenTechs.slice(0, halfUp);
+        const techsToMatal = chosenTechs.slice(halfUp);
+
+        // נחפפים: משלימים את זירה עד ליעד (אם נותר מקום אחרי הטכנאים)
+        const ziraTarget =
+          (window.rules[LOC_ZIRA] && window.rules[LOC_ZIRA]["weekend"] && window.rules[LOC_ZIRA]["weekend"].count) || 2;
+        const ziraNeeded = Math.max(0, ziraTarget - techsToZira.length);
+        const chosenNachpaf = nachpafim.slice(0, ziraNeeded);
+
+        const finalZira = [...techsToZira, ...chosenNachpaf];
+        const finalMatal = techsToMatal;
+
+        if (finalZira.length === 0 && finalMatal.length === 0) {
+          alert('לא נמצאו מספיק מועמדים זמינים לסגירת הסופ"ש/חג.');
+          return;
+        }
+
+        let msg = 'הצעה לסגירת הסופ"ש/חג הקרוב (לפי מי שסגר הכי מזמן):\n\n';
+        msg += `🎯 זירה: ${finalZira.map((r) => r.emp.name).join(", ") || "—"}\n`;
+        msg += `🏢 מת"ל: ${finalMatal.map((r) => r.emp.name).join(", ") || "—"}\n\n`;
+        msg += 'לקבוע ולנעול את השיבוץ הזה? (שאר ימי השבוע לא ייפגעו — אפשר להמשיך לתכנן אותם בנפרד)';
+        if (!confirm(msg)) return;
+
+        if (typeof window.initSchedule === "function") window.initSchedule();
+
+        const assignBlock = (list, loc, blockArr) => {
+          list.forEach((r) => {
+            blockArr.forEach((sk) => {
+              const [bDay, bShift] = sk.split("-");
+              if (!window.currentSchedule[`${bDay}-${bShift}`])
+                window.currentSchedule[`${bDay}-${bShift}`] = {};
+              if (!window.currentSchedule[`${bDay}-${bShift}`][loc])
+                window.currentSchedule[`${bDay}-${bShift}`][loc] = [];
+              if (
+                !window.currentSchedule[`${bDay}-${bShift}`][loc].find(
+                  (e) => e.id === r.emp.id,
+                )
+              ) {
+                window.currentSchedule[`${bDay}-${bShift}`][loc].push({
+                  ...r.emp,
+                  isLocked: true,
+                });
+              }
+            });
+            r.emp.isNextWeekend = true;
+            r.emp.workedLastWeekend = false;
+          });
+        };
+
+        assignBlock(finalZira, LOC_ZIRA, weekendShiftsZira);
+        assignBlock(finalMatal, LOC_MATAL, weekendShiftsMATAL);
+
+        window.triggerUnsavedChanges();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        if (typeof window.renderMobileCards === "function")
+          window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
+        alert(
+          '🔒 סוגרי הסופ"ש/חג נקבעו וננעלו. אפשר להמשיך לתכנן את שאר השבוע בנפרד.\nלא לשכוח "שמור לענן" כדי לשמר את השינוי.',
+        );
+      };
+
       // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)
       window.rebuildWeekendHistory = async function () {
         const cont = document.getElementById("weekendJusticeTableContainer");
@@ -5881,6 +5981,8 @@
           type === "נחפף" ? "block" : "none";
         document.getElementById("lblZiraEvening").style.display =
           type === "טכנאי" ? "block" : "none";
+        document.getElementById("lblWeekendCloser").style.display =
+          type === "טכנאי" || type === "נחפף" ? "block" : "none";
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
         document.getElementById("commanderSection").style.display =
           commanderRoles.includes(type) ? "block" : "none";
@@ -5951,6 +6053,8 @@
           emp.ziraWeekendAllowed || false;
         document.getElementById("editZiraEvening").checked =
           emp.canZiraEvening || false;
+        document.getElementById("editWeekendCloser").checked =
+          emp.isWeekendCloserCandidate || false;
         // בדיקה אם העובד כבר ברשימת המפקדים (גם ללא empId — לפי שם)
         let linkedCmd = window.commanders.find(
           (c) => c.empId === emp.id || c.name === emp.name,
@@ -6054,6 +6158,8 @@
           document.getElementById("editZiraWeekend").checked;
         emp.canZiraEvening =
           document.getElementById("editZiraEvening").checked;
+        emp.isWeekendCloserCandidate =
+          document.getElementById("editWeekendCloser").checked;
 
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
         if (commanderRoles.includes(emp.type)) {
@@ -6135,6 +6241,7 @@
           globalEmp.canManNightAlone = emp.canManNightAlone;
           globalEmp.ziraWeekendAllowed = emp.ziraWeekendAllowed;
           globalEmp.canZiraEvening = emp.canZiraEvening;
+          globalEmp.isWeekendCloserCandidate = emp.isWeekendCloserCandidate;
           globalEmp.isCommander = emp.isCommander === true;
           globalEmp.commanderPhone = emp.commanderPhone || "";
           if (window.currentUserRole === "superAdmin") {
@@ -6170,6 +6277,7 @@
             canManNightAlone: true,
             ziraWeekendAllowed: false,
             canZiraEvening: false,
+            isWeekendCloserCandidate: false,
             vacationQuota: 14,
             workedLastWeekend: false,
             isNextWeekend: false,
