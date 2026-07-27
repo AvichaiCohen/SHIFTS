@@ -459,19 +459,20 @@
           if (typeof window.saveScheduleBackup === "function")
             window.saveScheduleBackup(wk, window.currentSchedule);
 
+          // "עבד סופ"ש" (ומקבל מנוחה בראשון) רק למי שהיה בשישי ושבת בכל 4
+          // המשמרות (שישי-בוקר/לילה, שבת-בוקר/לילה) באותו מיקום — לא מספיק
+          // משמרת בודדת מתוך הסופ"ש כדי לחייב מנוחה בראשון.
           let weekendWorkers = new Set();
-          // חמישי-לילה נחשב סופ"ש רק במת"ל (לא בזירה)
-          const locWeekendMap = [
-            { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
-            { loc: LOC_ZIRA, shifts: weekendShiftsZira },
-          ];
-          locWeekendMap.forEach(({ loc, shifts }) => {
-            shifts.forEach((sk) => {
+          const CORE_WEEKEND_SHIFTS = ["שישי-בוקר", "שישי-לילה", "שבת-בוקר", "שבת-לילה"];
+          baseLocs.forEach((loc) => {
+            const idSetsPerShift = CORE_WEEKEND_SHIFTS.map((sk) => {
               let [d, s] = sk.split("-");
               const slot = window.currentSchedule[`${d}-${s}`];
-              if (slot && slot[loc]) {
-                slot[loc].forEach((emp) => weekendWorkers.add(emp.id));
-              }
+              return slot && slot[loc] ? new Set(slot[loc].map((e) => e.id)) : new Set();
+            });
+            const [firstSet, ...restSets] = idSetsPerShift;
+            firstSet.forEach((id) => {
+              if (restSets.every((s) => s.has(id))) weekendWorkers.add(id);
             });
           });
           // גם עובדים שמסומנים ידנית כ"ישובץ לסופ"ש" — נחשבים כעובדי סופ"ש לשבוע הבא
@@ -3912,12 +3913,22 @@
         const techs = ranked.filter((r) => r.emp.type === "טכנאי");
         const nachpafim = ranked.filter((r) => r.emp.type === "נחפף");
 
-        // טכנאים: מי שסגר הכי מזמן קודם, ומחולקים לסירוגין 2 לזירה / 2 למת"ל
+        // טכנאים: מי שסגר הכי מזמן קודם, ומחולקים לסירוגין 2 לזירה / 2 למת"ל.
+        // טכנאי ג' לא נשארים זוג (או לבד בזירה) — מפזרים אותם בין שני המיקומות
+        // לפני שממלאים בטכנאי א'/ב', כדי לא לרכז את כולם באותו צד.
         const techCount = Math.min(4, techs.length);
         const chosenTechs = techs.slice(0, techCount);
         const halfUp = Math.ceil(techCount / 2);
-        const techsToZira = chosenTechs.slice(0, halfUp);
-        const techsToMatal = chosenTechs.slice(halfUp);
+        const seniorTechs = chosenTechs.filter((r) => r.emp.techLevel !== "ג");
+        const juniorTechs = chosenTechs.filter((r) => r.emp.techLevel === "ג");
+        const techsToZira = [];
+        const techsToMatal = [];
+        juniorTechs.forEach((r, i) => {
+          (i % 2 === 0 ? techsToZira : techsToMatal).push(r);
+        });
+        seniorTechs.forEach((r) => {
+          (techsToZira.length < halfUp ? techsToZira : techsToMatal).push(r);
+        });
 
         // נחפפים: משלימים את זירה עד ליעד (אם נותר מקום אחרי הטכנאים)
         const ziraTarget =
@@ -5983,6 +5994,8 @@
           type === "טכנאי" ? "block" : "none";
         document.getElementById("lblWeekendCloser").style.display =
           type === "טכנאי" || type === "נחפף" ? "block" : "none";
+        document.getElementById("lblTechLevel").style.display =
+          type === "טכנאי" ? "block" : "none";
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
         document.getElementById("commanderSection").style.display =
           commanderRoles.includes(type) ? "block" : "none";
@@ -6055,6 +6068,7 @@
           emp.canZiraEvening || false;
         document.getElementById("editWeekendCloser").checked =
           emp.isWeekendCloserCandidate || false;
+        document.getElementById("editTechLevel").value = emp.techLevel || "";
         // בדיקה אם העובד כבר ברשימת המפקדים (גם ללא empId — לפי שם)
         let linkedCmd = window.commanders.find(
           (c) => c.empId === emp.id || c.name === emp.name,
@@ -6160,6 +6174,7 @@
           document.getElementById("editZiraEvening").checked;
         emp.isWeekendCloserCandidate =
           document.getElementById("editWeekendCloser").checked;
+        emp.techLevel = document.getElementById("editTechLevel").value;
 
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
         if (commanderRoles.includes(emp.type)) {
@@ -6242,6 +6257,7 @@
           globalEmp.ziraWeekendAllowed = emp.ziraWeekendAllowed;
           globalEmp.canZiraEvening = emp.canZiraEvening;
           globalEmp.isWeekendCloserCandidate = emp.isWeekendCloserCandidate;
+          globalEmp.techLevel = emp.techLevel;
           globalEmp.isCommander = emp.isCommander === true;
           globalEmp.commanderPhone = emp.commanderPhone || "";
           if (window.currentUserRole === "superAdmin") {
@@ -6278,6 +6294,7 @@
             ziraWeekendAllowed: false,
             canZiraEvening: false,
             isWeekendCloserCandidate: false,
+            techLevel: "",
             vacationQuota: 14,
             workedLastWeekend: false,
             isNextWeekend: false,
@@ -6680,7 +6697,17 @@
                 weekendStaff[loc].length < targetCount &&
                 candidates.length > 0
               ) {
-                let c = candidates.shift();
+                let c;
+                // מת"ל: שני טכנאים ג' יחד בסופ"ש אסור — עדיפות לטכנאי א'/ב' אם יש
+                if (
+                  loc === LOC_MATAL &&
+                  weekendStaff[loc].some((x) => x.techLevel === "ג")
+                ) {
+                  const seniorIdx = candidates.findIndex((x) => x.techLevel !== "ג");
+                  c = seniorIdx > -1 ? candidates.splice(seniorIdx, 1)[0] : candidates.shift();
+                } else {
+                  c = candidates.shift();
+                }
                 c.shiftCount++;
                 c.isPref = true;
                 weekendStaff[loc].push(c);
@@ -6706,7 +6733,16 @@
                   return aT !== bT ? aT - bT : a.shiftCount - b.shiftCount;
                 });
                 while (weekendStaff[loc].length < targetCount && fairCandidates.length > 0) {
-                  let c = fairCandidates.shift();
+                  let cIdx = 0;
+                  // מת"ל: שני טכנאים ג' יחד בסופ"ש אסור — עדיפות לטכנאי א'/ב' אם יש
+                  if (
+                    loc === LOC_MATAL &&
+                    weekendStaff[loc].some((x) => x.techLevel === "ג")
+                  ) {
+                    const seniorIdx = fairCandidates.findIndex((x) => x.techLevel !== "ג");
+                    if (seniorIdx > -1) cIdx = seniorIdx;
+                  }
+                  let c = fairCandidates.splice(cIdx, 1)[0];
                   if (weekendStaff[LOC_MATAL].find(x => x.id === c.id) || weekendStaff[LOC_ZIRA].find(x => x.id === c.id)) continue;
                   c.shiftCount++;
                   c.isPref = true;
@@ -6880,6 +6916,15 @@
                         day === "חמישי" &&
                         weekendStaff[LOC_ZIRA].find((x) => x.id === e.id)
                       ) &&
+                      // טכנאי ג' לא משובץ לילה בזירה לבד — רק א'/ב' (או מלווה מנוסה כבר קיים)
+                      !(
+                        loc === LOC_ZIRA &&
+                        e.type === "טכנאי" &&
+                        e.techLevel === "ג" &&
+                        !window.currentSchedule[nightSk][loc].some(
+                          (x) => x.type !== "טכנאי" || x.techLevel !== "ג",
+                        )
+                      ) &&
                       window.isAllowedInLoc(e, day, "לילה", loc)
                     );
                   })
@@ -6927,7 +6972,20 @@
                   });
                 }
                 while (schedArr.length < targetLimit && candidates.length > 0) {
-                  let c = candidates.shift();
+                  let c;
+                  // מת"ל: שני טכנאים ג' יחד בלילה אסור — אם כבר יש ג' במשמרת,
+                  // עדיפות לטכנאי א'/ב' מתוך המועמדים (אם קיים)
+                  if (
+                    loc === LOC_MATAL &&
+                    schedArr.some((x) => x.techLevel === "ג")
+                  ) {
+                    const seniorIdx = candidates.findIndex(
+                      (x) => x.techLevel !== "ג",
+                    );
+                    c = seniorIdx > -1 ? candidates.splice(seniorIdx, 1)[0] : candidates.shift();
+                  } else {
+                    c = candidates.shift();
+                  }
                   c.shiftCount++;
                   schedArr.push(c);
                   dayLog[day].push(c.id);
@@ -6967,6 +7025,14 @@
               baseLocs.forEach((loc) => {
                 if (loc === LOC_MATAL) return;
                 if (window.isShiftLocked(day, "ערב", loc)) return;
+                // טכנאי כבר משובץ ללילה בזירה אותו יום (מגיע 17:30) — מכסה גם
+                // את הערב, אין צורך באיוש נפרד למשמרת הערב
+                const _ziraNightHasTech = (
+                  (window.currentSchedule[nightSk] &&
+                    window.currentSchedule[nightSk][LOC_ZIRA]) ||
+                  []
+                ).some((e) => e.type === "טכנאי");
+                if (_ziraNightHasTech) return;
                 const rule = window.rules[loc]["weekday_ערב"];
                 if (rule) {
                   let candidates = activeStaff

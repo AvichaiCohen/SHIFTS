@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715f";
+        var BUILD = "20260715g";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -258,6 +258,7 @@
               "ziraWeekendAllowed",
               "canZiraEvening",
               "isWeekendCloserCandidate",
+              "techLevel",
             ];
             // הוספת עובדים חדשים שנוספו ל-staffMaster לאחר שמירת השבוע
             (window.globalStaff || []).forEach((gEmp) => {
@@ -680,7 +681,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715f" />
+    <link rel="stylesheet" href="style.css?v=20260715g" />
   </head>
   <body>
     <div
@@ -3024,6 +3025,30 @@
               מועמד לסגירת סופ"ש/חג (יוצע ב"קבע סוגרי סופ"ש")</label
             >
             <div
+              id="lblTechLevel"
+              style="
+                display: none;
+                margin-top: 10px;
+              "
+            >
+              <label
+                style="
+                  font-size: 0.875rem;
+                  font-weight: bold;
+                  color: #334155;
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >רמת טכנאי (משפיע על שיבוץ ליווי/לילה)</label
+              >
+              <select id="editTechLevel" style="width: 100%">
+                <option value="">-- לא מוגדר --</option>
+                <option value="א">טכנאי א'</option>
+                <option value="ב">טכנאי ב'</option>
+                <option value="ג">טכנאי ג' (דורש ליווי א'/ב' בלילה/סופ"ש)</option>
+              </select>
+            </div>
+            <div
               id="commanderSection"
               style="
                 display: none;
@@ -4202,6 +4227,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715f"></script>
+    <script src="script.js?v=20260715g"></script>
   </body>
 </html>
