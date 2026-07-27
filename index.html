@@ -2,8 +2,11 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>מערכת שיבוץ Pro - מרכז שליטה</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>משמרות</title>
     <script>
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
@@ -14,9 +17,13 @@
           if (sessionStorage.getItem(KEY) === BUILD) return;
         } catch (e) {}
         fetch("./version.json?t=" + Date.now(), { cache: "no-store" })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            return r.json();
+          })
           .then(function (v) {
-            try { sessionStorage.setItem(KEY, BUILD); } catch (e) {}
+            try {
+              sessionStorage.setItem(KEY, BUILD);
+            } catch (e) {}
             if (v && v.build && v.build !== BUILD) {
               location.replace(location.pathname + "?v=" + Date.now());
             }
@@ -113,7 +120,8 @@
       window.fbCreateAdmin = (password) =>
         createUserWithEmailAndPassword(auth, window.ADMIN_EMAIL, password);
       window.fbUpdateAdminPassword = (password) => {
-        if (!auth.currentUser) return Promise.reject(new Error("no-current-user"));
+        if (!auth.currentUser)
+          return Promise.reject(new Error("no-current-user"));
         return updatePassword(auth.currentUser, password);
       };
 
@@ -353,289 +361,321 @@
       window.addEventListener("DOMContentLoaded", () => {
         // ממתינים לניסיון ההתחברות האנונימית לפני רישום ההאזנות למסד הנתונים
         authReady.then(() => {
-        window.currentWeekOffset = 0;
-        let sun = window.getSunday(0);
+          window.currentWeekOffset = 0;
+          let sun = window.getSunday(0);
 
-        document
-          .querySelectorAll(".currentWeekDisplay")
-          .forEach((el) => (el.innerText = window.formatWeekString(sun)));
-        window.currentSelectedWeek = window.getWeekDbKey(sun);
-        window.loadWeekFromCloud(window.currentSelectedWeek);
+          document
+            .querySelectorAll(".currentWeekDisplay")
+            .forEach((el) => (el.innerText = window.formatWeekString(sun)));
+          window.currentSelectedWeek = window.getWeekDbKey(sun);
+          window.loadWeekFromCloud(window.currentSelectedWeek);
 
-        onValue(ref(db, "holidaysLog"), (snapshot) => {
-          window.holidaysLog = snapshot.exists() ? snapshot.val() : [];
-          window._holidaysLogLoaded = true;
-          if (typeof window.renderHolidaysLog === "function")
-            window.renderHolidaysLog();
-        });
+          onValue(ref(db, "holidaysLog"), (snapshot) => {
+            window.holidaysLog = snapshot.exists() ? snapshot.val() : [];
+            window._holidaysLogLoaded = true;
+            if (typeof window.renderHolidaysLog === "function")
+              window.renderHolidaysLog();
+          });
 
-        // אינדקס בקשות ממתינות גלובלי — עדכון חי של תור הבקשות אצל המנהל (כל השבועות)
-        onValue(ref(db, "pendingRequestsIndex"), (snapshot) => {
-          window._allPending = snapshot.exists() ? snapshot.val() : {};
-          if (typeof window.renderPendingRequestsManager === "function")
-            window.renderPendingRequestsManager();
-          if (typeof window.renderRequestsPage === "function")
-            window.renderRequestsPage();
-        });
+          // אינדקס בקשות ממתינות גלובלי — עדכון חי של תור הבקשות אצל המנהל (כל השבועות)
+          onValue(ref(db, "pendingRequestsIndex"), (snapshot) => {
+            window._allPending = snapshot.exists() ? snapshot.val() : {};
+            if (typeof window.renderPendingRequestsManager === "function")
+              window.renderPendingRequestsManager();
+            if (typeof window.renderRequestsPage === "function")
+              window.renderRequestsPage();
+          });
 
-        // דרישות כוח (מנהל משני) — עדכון חי
-        onValue(ref(db, "forceDemands"), (snapshot) => {
-          window._forceDemands = snapshot.exists() ? snapshot.val() : {};
-          if (typeof window.renderDemandsList === "function")
-            window.renderDemandsList();
-        });
+          // דרישות כוח (מנהל משני) — עדכון חי
+          onValue(ref(db, "forceDemands"), (snapshot) => {
+            window._forceDemands = snapshot.exists() ? snapshot.val() : {};
+            if (typeof window.renderDemandsList === "function")
+              window.renderDemandsList();
+          });
 
-        // האזנה להגדרות גלובליות של משמרות
-        onValue(ref(db, "globalRules"), (snapshot) => {
-          if (snapshot.exists()) {
-            window.globalRulesDefault = snapshot.val();
-            // רק אם אין הגדרות ייחודיות לשבוע הנוכחי - החל את הגלובלי
-            if (window.currentSchedule && !window.currentSchedule.rules) {
-              window.rules = JSON.parse(
-                JSON.stringify(window.globalRulesDefault),
-              );
+          // האזנה להגדרות גלובליות של משמרות
+          onValue(ref(db, "globalRules"), (snapshot) => {
+            if (snapshot.exists()) {
+              window.globalRulesDefault = snapshot.val();
+              // רק אם אין הגדרות ייחודיות לשבוע הנוכחי - החל את הגלובלי
+              if (window.currentSchedule && !window.currentSchedule.rules) {
+                window.rules = JSON.parse(
+                  JSON.stringify(window.globalRulesDefault),
+                );
+                localStorage.setItem(
+                  "shift_rules_v47",
+                  JSON.stringify(window.rules),
+                );
+                if (typeof window.renderRulesUI === "function")
+                  try {
+                    window.renderRulesUI();
+                  } catch (e) {
+                    console.warn("renderRulesUI error:", e);
+                  }
+              }
+            }
+          });
+
+          // האזנה לשעות משמרות גלובליות
+          onValue(ref(db, "globalShiftTimes"), (snapshot) => {
+            if (snapshot.exists()) {
+              window._globalShiftTimes = snapshot.val();
+              if (
+                window.currentSchedule &&
+                !window.currentSchedule.shiftTimesByLoc
+              ) {
+                window._weekShiftTimes = JSON.parse(
+                  JSON.stringify(window._globalShiftTimes),
+                );
+                if (typeof window.renderRulesUI === "function")
+                  try {
+                    window.renderRulesUI();
+                  } catch (e) {
+                    console.warn("renderRulesUI error:", e);
+                  }
+              }
+            }
+          });
+
+          // האזנה להגדרת וואטסאפ גלובלית (מנהל שולט מכל מכשיר)
+          onValue(ref(db, "settings/waPromptEnabled"), (snapshot) => {
+            if (snapshot.exists()) {
+              window.waPromptEnabled = snapshot.val() === true;
               localStorage.setItem(
-                "shift_rules_v47",
-                JSON.stringify(window.rules),
+                "shift_wa_enabled_v1",
+                JSON.stringify(window.waPromptEnabled),
               );
-              if (typeof window.renderRulesUI === "function")
-                try {
-                  window.renderRulesUI();
-                } catch (e) {
-                  console.warn("renderRulesUI error:", e);
-                }
+              const waChk = document.getElementById("settingWaEnabled");
+              if (waChk) waChk.checked = window.waPromptEnabled;
             }
-          }
-        });
+          });
 
-        // האזנה לשעות משמרות גלובליות
-        onValue(ref(db, "globalShiftTimes"), (snapshot) => {
-          if (snapshot.exists()) {
-            window._globalShiftTimes = snapshot.val();
-            if (
-              window.currentSchedule &&
-              !window.currentSchedule.shiftTimesByLoc
-            ) {
-              window._weekShiftTimes = JSON.parse(
-                JSON.stringify(window._globalShiftTimes),
-              );
-              if (typeof window.renderRulesUI === "function")
-                try {
-                  window.renderRulesUI();
-                } catch (e) {
-                  console.warn("renderRulesUI error:", e);
-                }
-            }
-          }
-        });
-
-        // האזנה להגדרת וואטסאפ גלובלית (מנהל שולט מכל מכשיר)
-        onValue(ref(db, "settings/waPromptEnabled"), (snapshot) => {
-          if (snapshot.exists()) {
-            window.waPromptEnabled = snapshot.val() === true;
-            localStorage.setItem("shift_wa_enabled_v1", JSON.stringify(window.waPromptEnabled));
-            const waChk = document.getElementById("settingWaEnabled");
-            if (waChk) waChk.checked = window.waPromptEnabled;
-          }
-        });
-
-        // טביעת אצבע של סיסמת המנהל הראשי — מאפשרת החלפת סיסמה בלי שינוי קוד
-        onValue(ref(db, "settings/adminHash"), (snapshot) => {
-          window.adminHashOverride = snapshot.exists() ? snapshot.val() : null;
-        });
-
-        // האזנה לסטטוסים מיוחדים גלובליים (חוצי שבועות)
-        window.specialStatuses = [];
-        onValue(ref(db, "specialStatuses"), (snapshot) => {
-          window.specialStatuses = snapshot.exists()
-            ? Array.isArray(snapshot.val())
+          // טביעת אצבע של סיסמת המנהל הראשי — מאפשרת החלפת סיסמה בלי שינוי קוד
+          onValue(ref(db, "settings/adminHash"), (snapshot) => {
+            window.adminHashOverride = snapshot.exists()
               ? snapshot.val()
-              : Object.values(snapshot.val())
-            : [];
-          if (typeof window.renderTable === "function")
-            window.renderTable(window.currentSchedule, window.currentNotesLog);
-        });
+              : null;
+          });
 
-        // משימות (systemTasks) — מסונכרנות בענן כדי שכל המשתמשים (כולל עובדים/צפייה) יראו אותן
-        onValue(ref(db, "systemTasks"), (snapshot) => {
-          window._tasksCloudExists = snapshot.exists();
-          window._systemTasksLoaded = true;
-          if (snapshot.exists()) {
-            const val = snapshot.val();
-            window.systemTasks = (
-              Array.isArray(val) ? val : Object.values(val)
-            ).filter(Boolean);
-            try {
-              localStorage.setItem(
-                "shift_tasks_v47",
-                JSON.stringify(window.systemTasks),
+          // האזנה לסטטוסים מיוחדים גלובליים (חוצי שבועות)
+          window.specialStatuses = [];
+          onValue(ref(db, "specialStatuses"), (snapshot) => {
+            window.specialStatuses = snapshot.exists()
+              ? Array.isArray(snapshot.val())
+                ? snapshot.val()
+                : Object.values(snapshot.val())
+              : [];
+            if (typeof window.renderTable === "function")
+              window.renderTable(
+                window.currentSchedule,
+                window.currentNotesLog,
               );
-            } catch (e) {}
-          } else if (
-            window.currentUserRole === "superAdmin" &&
-            (window.systemTasks || []).length > 0 &&
-            typeof window.saveToCloud === "function"
-          ) {
-            // מיגרציה חד-פעמית — העלאת המשימות המקומיות הקיימות לענן
-            window.saveToCloud("systemTasks", window.systemTasks);
-          }
-          if (typeof window.renderTable === "function")
-            window.renderTable(window.currentSchedule, window.currentNotesLog);
-          if (
-            typeof window.renderTasks === "function" &&
-            document.getElementById("page-tasks") &&
-            document
-              .getElementById("page-tasks")
-              .classList.contains("active")
-          )
-            window.renderTasks();
-        });
+          });
 
-        // סיסמאות שעובדים שינו לעצמם — תקפות מיידית; המנהל הראשי מטמיע ל-staffMaster ומנקה
-        window.passwordOverrides = {};
-        onValue(ref(db, "passwordOverrides"), (snapshot) => {
-          window.passwordOverrides = snapshot.exists()
-            ? snapshot.val() || {}
-            : {};
-          const keys = Object.keys(window.passwordOverrides);
-          if (
-            window.currentUserRole === "superAdmin" &&
-            Array.isArray(window.globalStaff) &&
-            keys.length > 0
-          ) {
-            let changed = false;
-            keys.forEach((empId) => {
-              const ov = window.passwordOverrides[empId];
-              const ge = window.globalStaff.find(
-                (e) => String(e.id) === String(empId),
+          // משימות (systemTasks) — מסונכרנות בענן כדי שכל המשתמשים (כולל עובדים/צפייה) יראו אותן
+          onValue(ref(db, "systemTasks"), (snapshot) => {
+            window._tasksCloudExists = snapshot.exists();
+            window._systemTasksLoaded = true;
+            if (snapshot.exists()) {
+              const val = snapshot.val();
+              window.systemTasks = (
+                Array.isArray(val) ? val : Object.values(val)
+              ).filter(Boolean);
+              try {
+                localStorage.setItem(
+                  "shift_tasks_v47",
+                  JSON.stringify(window.systemTasks),
+                );
+              } catch (e) {}
+            } else if (
+              window.currentUserRole === "superAdmin" &&
+              (window.systemTasks || []).length > 0 &&
+              typeof window.saveToCloud === "function"
+            ) {
+              // מיגרציה חד-פעמית — העלאת המשימות המקומיות הקיימות לענן
+              window.saveToCloud("systemTasks", window.systemTasks);
+            }
+            if (typeof window.renderTable === "function")
+              window.renderTable(
+                window.currentSchedule,
+                window.currentNotesLog,
               );
-              if (ge && ov && ov.password && ge.password !== ov.password) {
-                ge.password = ov.password;
-                changed = true;
-              }
-            });
-            if (changed) window.saveToCloud("staffMaster", window.globalStaff);
-            // הוטמע — מנקים את הצומת (set ל-null מוחק)
-            window.saveToCloud("passwordOverrides", null);
-          }
-          if (
-            typeof window.renderStaff === "function" &&
-            document.getElementById("page-staff") &&
-            document.getElementById("page-staff").classList.contains("active")
-          )
-            window.renderStaff();
-        });
+            if (
+              typeof window.renderTasks === "function" &&
+              document.getElementById("page-tasks") &&
+              document.getElementById("page-tasks").classList.contains("active")
+            )
+              window.renderTasks();
+          });
 
-        // בקשות שינוי סיסמה מעובדים אנונימיים (create-only — מטעמי אבטחה
-        // עובד אנונימי לא יכול לכתוב ישירות ל-passwordOverrides של עובד אחר).
-        // המנהל הראשי מיישם ל-passwordOverrides (ה-listener שמעל ימשיך משם
-        // ויטמיע ל-staffMaster) ומנקה את הבקשה שטופלה.
-        window.passwordChangeRequests = {};
-        onValue(ref(db, "passwordChangeRequests"), (snapshot) => {
-          window.passwordChangeRequests = snapshot.exists() ? snapshot.val() || {} : {};
-          const entries = Object.values(window.passwordChangeRequests).filter(Boolean);
-          if (window.currentUserRole === "superAdmin" && entries.length > 0) {
-            entries.forEach((req) => {
-              if (req.empId != null && req.password) {
-                window.saveToCloud("passwordOverrides/" + req.empId, {
-                  password: req.password,
-                  ts: req.ts || Date.now(),
-                });
-              }
-              window.saveToCloud("passwordChangeRequests/" + req.id, null);
-            });
-          }
-        });
-
-        // בקשות החלפת משימות בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
-        window.taskSwapRequests = {};
-        onValue(ref(db, "taskSwapRequests"), (snapshot) => {
-          window.taskSwapRequests = snapshot.exists() ? snapshot.val() || {} : {};
-          if (typeof window.renderMyTaskSwaps === "function")
-            window.renderMyTaskSwaps();
-          if (typeof window.renderTaskSwapManager === "function")
-            window.renderTaskSwapManager();
-        });
-
-        // התנדבות עובדים למשימות פתוחות — נכתבות ע"י עובד אנונימי (create-only),
-        // והמנהל הראשי (הרשאת כתיבה מלאה) מיישם אותן אוטומטית ל-systemTasks כשהוא מחובר
-        window.taskVolunteerRequests = {};
-        onValue(ref(db, "taskVolunteerRequests"), (snapshot) => {
-          window.taskVolunteerRequests = snapshot.exists() ? snapshot.val() || {} : {};
-          const entries = Object.values(window.taskVolunteerRequests).filter(Boolean);
-          if (
-            window.currentUserRole === "superAdmin" &&
-            entries.length > 0 &&
-            window._systemTasksLoaded &&
-            Array.isArray(window.systemTasks)
-          ) {
-            entries.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-            let changed = false;
-            entries.forEach((req) => {
-              const task = window.systemTasks.find((t) => t.id === req.taskId);
-              if (task) {
-                const already = (task.assignees && task.assignees.length > 0) || task.assignee;
-                if (!already) {
-                  task.assignees = [{ name: req.empName }];
-                  task.assignee = req.empName;
+          // סיסמאות שעובדים שינו לעצמם — תקפות מיידית; המנהל הראשי מטמיע ל-staffMaster ומנקה
+          window.passwordOverrides = {};
+          onValue(ref(db, "passwordOverrides"), (snapshot) => {
+            window.passwordOverrides = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            const keys = Object.keys(window.passwordOverrides);
+            if (
+              window.currentUserRole === "superAdmin" &&
+              Array.isArray(window.globalStaff) &&
+              keys.length > 0
+            ) {
+              let changed = false;
+              keys.forEach((empId) => {
+                const ov = window.passwordOverrides[empId];
+                const ge = window.globalStaff.find(
+                  (e) => String(e.id) === String(empId),
+                );
+                if (ge && ov && ov.password && ge.password !== ov.password) {
+                  ge.password = ov.password;
                   changed = true;
-                  if (typeof window.syncTaskSpecialStatus === "function")
-                    window.syncTaskSpecialStatus(task);
                 }
-              }
-              // ניקוי הבקשה שטופלה (גם אם המשימה כבר הוקצתה לפני שהתנדבות זו הגיעה)
-              window.saveToCloud("taskVolunteerRequests/" + req.id, null);
-            });
-            if (changed && typeof window._saveTasks === "function") window._saveTasks();
+              });
+              if (changed)
+                window.saveToCloud("staffMaster", window.globalStaff);
+              // הוטמע — מנקים את הצומת (set ל-null מוחק)
+              window.saveToCloud("passwordOverrides", null);
+            }
+            if (
+              typeof window.renderStaff === "function" &&
+              document.getElementById("page-staff") &&
+              document.getElementById("page-staff").classList.contains("active")
+            )
+              window.renderStaff();
+          });
+
+          // בקשות שינוי סיסמה מעובדים אנונימיים (create-only — מטעמי אבטחה
+          // עובד אנונימי לא יכול לכתוב ישירות ל-passwordOverrides של עובד אחר).
+          // המנהל הראשי מיישם ל-passwordOverrides (ה-listener שמעל ימשיך משם
+          // ויטמיע ל-staffMaster) ומנקה את הבקשה שטופלה.
+          window.passwordChangeRequests = {};
+          onValue(ref(db, "passwordChangeRequests"), (snapshot) => {
+            window.passwordChangeRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            const entries = Object.values(window.passwordChangeRequests).filter(
+              Boolean,
+            );
+            if (window.currentUserRole === "superAdmin" && entries.length > 0) {
+              entries.forEach((req) => {
+                if (req.empId != null && req.password) {
+                  window.saveToCloud("passwordOverrides/" + req.empId, {
+                    password: req.password,
+                    ts: req.ts || Date.now(),
+                  });
+                }
+                window.saveToCloud("passwordChangeRequests/" + req.id, null);
+              });
+            }
+          });
+
+          // בקשות החלפת משימות בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
+          window.taskSwapRequests = {};
+          onValue(ref(db, "taskSwapRequests"), (snapshot) => {
+            window.taskSwapRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            if (typeof window.renderMyTaskSwaps === "function")
+              window.renderMyTaskSwaps();
+            if (typeof window.renderTaskSwapManager === "function")
+              window.renderTaskSwapManager();
+          });
+
+          // התנדבות עובדים למשימות פתוחות — נכתבות ע"י עובד אנונימי (create-only),
+          // והמנהל הראשי (הרשאת כתיבה מלאה) מיישם אותן אוטומטית ל-systemTasks כשהוא מחובר
+          window.taskVolunteerRequests = {};
+          onValue(ref(db, "taskVolunteerRequests"), (snapshot) => {
+            window.taskVolunteerRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            const entries = Object.values(window.taskVolunteerRequests).filter(
+              Boolean,
+            );
+            if (
+              window.currentUserRole === "superAdmin" &&
+              entries.length > 0 &&
+              window._systemTasksLoaded &&
+              Array.isArray(window.systemTasks)
+            ) {
+              entries.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              let changed = false;
+              entries.forEach((req) => {
+                const task = window.systemTasks.find(
+                  (t) => t.id === req.taskId,
+                );
+                if (task) {
+                  const already =
+                    (task.assignees && task.assignees.length > 0) ||
+                    task.assignee;
+                  if (!already) {
+                    task.assignees = [{ name: req.empName }];
+                    task.assignee = req.empName;
+                    changed = true;
+                    if (typeof window.syncTaskSpecialStatus === "function")
+                      window.syncTaskSpecialStatus(task);
+                  }
+                }
+                // ניקוי הבקשה שטופלה (גם אם המשימה כבר הוקצתה לפני שהתנדבות זו הגיעה)
+                window.saveToCloud("taskVolunteerRequests/" + req.id, null);
+              });
+              if (changed && typeof window._saveTasks === "function")
+                window._saveTasks();
+            }
+            if (typeof window.renderTasks === "function") window.renderTasks();
+          });
+
+          // השתבצות עובדים לחגים — נכתבות ע"י עובד אנונימי (create-only),
+          // המנהל הראשי מיישם אוטומטית ל-holidaysLog כשהוא מחובר
+          window.holidaySignupRequests = {};
+          onValue(ref(db, "holidaySignupRequests"), (snapshot) => {
+            window.holidaySignupRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            const entries = Object.values(window.holidaySignupRequests).filter(
+              Boolean,
+            );
+            if (
+              window.currentUserRole === "superAdmin" &&
+              entries.length > 0 &&
+              window._holidaysLogLoaded &&
+              Array.isArray(window.holidaysLog)
+            ) {
+              entries.forEach((log) => {
+                if (!window.holidaysLog.find((l) => l.id === log.id))
+                  window.holidaysLog.push(log);
+                window.saveToCloud("holidaySignupRequests/" + log.id, null);
+              });
+              window.saveToCloud("holidaysLog", window.holidaysLog);
+            }
+            if (typeof window.renderHolidaysLog === "function")
+              window.renderHolidaysLog();
+          });
+
+          // בקשות החלפת חגים בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
+          window.holidaySwapRequests = {};
+          onValue(ref(db, "holidaySwapRequests"), (snapshot) => {
+            window.holidaySwapRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            if (typeof window.renderMyHolidaySwaps === "function")
+              window.renderMyHolidaySwaps();
+            if (typeof window.renderHolidaySwapManager === "function")
+              window.renderHolidaySwapManager();
+          });
+
+          window.onclick = function (event) {
+            let editModal = document.getElementById("editModal");
+            let specModal = document.getElementById("specialStatusModal");
+            let cmdModal = document.getElementById("commanderSelectModal");
+            if (event.target == editModal) window.closeModal();
+            if (event.target == specModal) specModal.style.display = "none";
+            if (event.target == cmdModal) cmdModal.style.display = "none";
+          };
+
+          // רישום Service Worker להתראות רקע
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("./sw.js").catch(() => {});
           }
-          if (typeof window.renderTasks === "function") window.renderTasks();
-        });
-
-        // השתבצות עובדים לחגים — נכתבות ע"י עובד אנונימי (create-only),
-        // המנהל הראשי מיישם אוטומטית ל-holidaysLog כשהוא מחובר
-        window.holidaySignupRequests = {};
-        onValue(ref(db, "holidaySignupRequests"), (snapshot) => {
-          window.holidaySignupRequests = snapshot.exists() ? snapshot.val() || {} : {};
-          const entries = Object.values(window.holidaySignupRequests).filter(Boolean);
-          if (
-            window.currentUserRole === "superAdmin" &&
-            entries.length > 0 &&
-            window._holidaysLogLoaded &&
-            Array.isArray(window.holidaysLog)
-          ) {
-            entries.forEach((log) => {
-              if (!window.holidaysLog.find((l) => l.id === log.id))
-                window.holidaysLog.push(log);
-              window.saveToCloud("holidaySignupRequests/" + log.id, null);
-            });
-            window.saveToCloud("holidaysLog", window.holidaysLog);
-          }
-          if (typeof window.renderHolidaysLog === "function") window.renderHolidaysLog();
-        });
-
-        // בקשות החלפת חגים בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
-        window.holidaySwapRequests = {};
-        onValue(ref(db, "holidaySwapRequests"), (snapshot) => {
-          window.holidaySwapRequests = snapshot.exists() ? snapshot.val() || {} : {};
-          if (typeof window.renderMyHolidaySwaps === "function")
-            window.renderMyHolidaySwaps();
-          if (typeof window.renderHolidaySwapManager === "function")
-            window.renderHolidaySwapManager();
-        });
-
-        window.onclick = function (event) {
-          let editModal = document.getElementById("editModal");
-          let specModal = document.getElementById("specialStatusModal");
-          let cmdModal = document.getElementById("commanderSelectModal");
-          if (event.target == editModal) window.closeModal();
-          if (event.target == specModal) specModal.style.display = "none";
-          if (event.target == cmdModal) cmdModal.style.display = "none";
-        };
-
-        // רישום Service Worker להתראות רקע
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.register("./sw.js").catch(() => {});
-        }
         }); // סוף authReady.then
       });
     </script>
@@ -799,7 +839,11 @@
         </button>
         <button
           class="btn btn-outlined manager-only"
-          style="border-color: rgba(255,255,255,0.5); color: white; margin-left: 10px;"
+          style="
+            border-color: rgba(255, 255, 255, 0.5);
+            color: white;
+            margin-left: 10px;
+          "
           onclick="window.openImportModal()"
         >
           📤 ייבוא CSV
@@ -833,10 +877,18 @@
         </button>
         <button
           class="btn btn-outlined manager-only"
-          style="border-color:white; color:white; padding:6px 8px; margin-right:4px; font-size:0.85rem;"
+          style="
+            border-color: white;
+            color: white;
+            padding: 6px 8px;
+            margin-right: 4px;
+            font-size: 0.85rem;
+          "
           onclick="window.openModeSettings('emergency')"
           title="הגדרות תאריך מצב חירום"
-        >⚙️</button>
+        >
+          ⚙️
+        </button>
       </div>
     </nav>
 
@@ -940,7 +992,12 @@
           </button>
           <button
             class="btn btn-outlined manager-only"
-            style="padding: 6px 12px; font-size: 0.8rem; width: 100%; margin-top: 6px"
+            style="
+              padding: 6px 12px;
+              font-size: 0.8rem;
+              width: 100%;
+              margin-top: 6px;
+            "
             onclick="window.checkFullStaffing()"
           >
             🔍 בדוק שיבוץ מלא
@@ -1147,13 +1204,24 @@
               </button>
               <button
                 class="btn btn-outlined"
-                style="border-color:#b45309; color:#b45309; padding:6px 8px; font-size:0.85rem;"
+                style="
+                  border-color: #b45309;
+                  color: #b45309;
+                  padding: 6px 8px;
+                  font-size: 0.85rem;
+                "
                 onclick="window.openModeSettings('matal')"
                 title='הגדרות תאריך מצב חוסר מת"ל'
-              >⚙️</button>
+              >
+                ⚙️
+              </button>
               <button
                 class="btn btn-outlined"
-                style="border-color:#64748b; color:#64748b; font-size:0.82rem;"
+                style="
+                  border-color: #64748b;
+                  color: #64748b;
+                  font-size: 0.82rem;
+                "
                 onclick="window.openDraftsModal()"
                 title="שמירה וטעינה של טיוטות לוח"
               >
@@ -1162,7 +1230,10 @@
               <button
                 id="aiScheduleBtn"
                 class="btn btn-contained"
-                style="background:linear-gradient(135deg,#7c3aed,#4f46e5); color:#fff;"
+                style="
+                  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+                  color: #fff;
+                "
                 onclick="window.openAIScheduler()"
                 title="הצע לוח משמרות באמצעות בינה מלאכותית"
               >
@@ -1187,13 +1258,30 @@
               overflow: hidden;
             "
           >
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;">
-              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;">
+            <div
+              style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                width: 100%;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  flex-wrap: nowrap;
+                "
+              >
                 <button
                   class="btn btn-outlined week-arrow"
-                  style="padding: 4px 8px; min-width: auto;"
+                  style="padding: 4px 8px; min-width: auto"
                   onclick="window.navigateWeek(-1)"
-                >▶</button>
+                >
+                  ▶
+                </button>
                 <span
                   class="currentWeekDisplay"
                   style="
@@ -1207,12 +1295,15 @@
                     text-align: center;
                     white-space: nowrap;
                   "
-                >...</span>
+                  >...</span
+                >
                 <button
                   class="btn btn-outlined week-arrow"
-                  style="padding: 4px 8px; min-width: auto;"
+                  style="padding: 4px 8px; min-width: auto"
                   onclick="window.navigateWeek(1)"
-                >◀</button>
+                >
+                  ◀
+                </button>
               </div>
               <input
                 type="date"
@@ -1258,12 +1349,7 @@
 
           <div id="mobileDayTabs" class="mobile-day-tabs">
             <div
-              style="
-                display: flex;
-                align-items: stretch;
-                gap: 8px;
-                width: 100%;
-              "
+              style="display: flex; align-items: stretch; gap: 8px; width: 100%"
             >
               <button
                 type="button"
@@ -1449,7 +1535,9 @@
                 <option value="constraint">
                   ⏳ אילוץ נקודתי (לא יכול משמרת ספציפית)
                 </option>
-                <option value="study">📚 יום לימודים (קבע בלבד — לא מהחופשים)</option>
+                <option value="study">
+                  📚 יום לימודים (קבע בלבד — לא מהחופשים)
+                </option>
               </select>
 
               <div id="reqVacDaysWrapper" style="display: none">
@@ -1671,7 +1759,9 @@
                 </div>
                 <div id="taskSingleAssigneeWrapper" style="width: 100%">
                   <select id="newTaskAssignee" style="width: 100%">
-                    <option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>
+                    <option value="">
+                      -- הקצה לעובד (לא חובה למשימה עתידית) --
+                    </option>
                   </select>
                 </div>
                 <div
@@ -1797,9 +1887,8 @@
                   מעקב סגירת חגים וימים מיוחדים
                 </h3>
                 <p style="font-size: 0.85rem; margin-top: 0">
-                  תיעוד שנתי של עובדים שסגרו משמרות בחגים. עובד יכול להשתבץ
-                  לחג (יתעדכן סופית כשהמנהל הראשי מחובר) ולבקש החלפה על רישום
-                  שלו.
+                  תיעוד שנתי של עובדים שסגרו משמרות בחגים. עובד יכול להשתבץ לחג
+                  (יתעדכן סופית כשהמנהל הראשי מחובר) ולבקש החלפה על רישום שלו.
                 </p>
                 <div
                   id="holLogInputsWrapper"
@@ -1897,13 +1986,30 @@
                 <h3 style="color: var(--md-warning); margin-top: 0">
                   ⚖️ טבלת הוגנות — מי סגר סופ"ש
                 </h3>
-                <p style="font-size: 0.85rem; margin-top: 0; color: var(--md-text-secondary);">
-                  מעקב היסטורי — טכנאים ונחפפים שסגרו סופ"שים. הרענון מחשב מחדש מהלוחות השמורים בענן (16 שבועות אחורה).
+                <p
+                  style="
+                    font-size: 0.85rem;
+                    margin-top: 0;
+                    color: var(--md-text-secondary);
+                  "
+                >
+                  מעקב היסטורי — טכנאים ונחפפים שסגרו סופ"שים. הרענון מחשב מחדש
+                  מהלוחות השמורים בענן (16 שבועות אחורה).
                 </p>
-                <div style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <div
+                  style="
+                    margin-bottom: 12px;
+                    display: flex;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                  "
+                >
                   <button
                     class="btn btn-outlined manager-only"
-                    style="border-color: var(--md-warning); color: var(--md-warning);"
+                    style="
+                      border-color: var(--md-warning);
+                      color: var(--md-warning);
+                    "
                     onclick="window.rebuildWeekendHistory()"
                   >
                     🔄 רענן וחשב מחדש מהענן
@@ -1915,7 +2021,10 @@
                     ⬇️ ייצוא לאקסל
                   </button>
                 </div>
-                <div id="weekendJusticeTableContainer" style="overflow-x: auto"></div>
+                <div
+                  id="weekendJusticeTableContainer"
+                  style="overflow-x: auto"
+                ></div>
               </div>
             </div>
           </div>
@@ -1948,7 +2057,10 @@
               >
                 🧹 איפוס אילוצי שבוע נוכחי
               </button>
-              <button class="btn btn-outlined" onclick="window.exportStaffToCSV()">
+              <button
+                class="btn btn-outlined"
+                onclick="window.exportStaffToCSV()"
+              >
                 ⬇️ ייצוא לאקסל
               </button>
               <button
@@ -2114,8 +2226,14 @@
                   style="accent-color: #0284c7; width: 16px; height: 16px"
                   onchange="
                     window.waPromptEnabled = this.checked;
-                    localStorage.setItem('shift_wa_enabled_v1', JSON.stringify(this.checked));
-                    window.saveToCloud('settings/waPromptEnabled', this.checked);
+                    localStorage.setItem(
+                      'shift_wa_enabled_v1',
+                      JSON.stringify(this.checked),
+                    );
+                    window.saveToCloud(
+                      'settings/waPromptEnabled',
+                      this.checked,
+                    );
                   "
                 />
                 <span
@@ -2229,7 +2347,11 @@
                 >
                 <button
                   class="btn btn-contained"
-                  style="padding: 6px 14px; font-size: 0.85rem; background: #15803d"
+                  style="
+                    padding: 6px 14px;
+                    font-size: 0.85rem;
+                    background: #15803d;
+                  "
                   onclick="window.setupManagerWriteAccess()"
                 >
                   הקם הרשאת כתיבה
@@ -2256,7 +2378,14 @@
               גיבוי של הלוח נשמר אוטומטית בכל שמירה לענן (נשמרות 10 הגרסאות
               האחרונות לכל שבוע). ניתן לשחזר גרסה קודמת של השבוע שמוצג כעת.
             </p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px">
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+              "
+            >
               <button
                 class="btn btn-outlined"
                 style="border-color: #0d9488; color: #0d9488"
@@ -2312,20 +2441,21 @@
               </button>
             </div>
           </div>
-
         </div>
 
         <!-- דף דרישות כוח -->
         <div id="page-demands" class="container">
           <h1>📊 דרישות כוח — צמצום / הגברה</h1>
           <p style="color: var(--md-text-secondary); margin-top: -8px">
-            מנהל משני מגיש דרישה לשינוי כוח לפי אירוע/עבודה. המנהל הראשי רואה
-            את הדרישות ומתחשב בהן בבניית הסידור.
+            מנהל משני מגיש דרישה לשינוי כוח לפי אירוע/עבודה. המנהל הראשי רואה את
+            הדרישות ומתחשב בהן בבניית הסידור.
           </p>
           <div style="display: flex; gap: 20px; flex-wrap: wrap">
             <div style="flex: 1; min-width: 320px">
               <div class="card-paper" style="border-top: 4px solid #0d9488">
-                <h3 style="margin-top: 0; color: #0d9488">📝 הגשת דרישה חדשה</h3>
+                <h3 style="margin-top: 0; color: #0d9488">
+                  📝 הגשת דרישה חדשה
+                </h3>
                 <div style="display: flex; flex-direction: column; gap: 12px">
                   <div>
                     <label style="font-weight: bold; font-size: 0.9rem"
@@ -2464,7 +2594,10 @@
             </div>
 
             <div style="flex: 1; min-width: 320px">
-              <div class="card-paper" style="border-top: 4px solid var(--md-primary)">
+              <div
+                class="card-paper"
+                style="border-top: 4px solid var(--md-primary)"
+              >
                 <h3 style="margin-top: 0; color: var(--md-primary)">
                   📋 דרישות פעילות
                 </h3>
@@ -2477,9 +2610,20 @@
         </div>
 
         <!-- דף "עוד" — מנהל בלבד -->
-        <div id="page-more" class="container manager-only" style="padding-bottom:80px;">
-          <h1 style="margin-bottom:24px;">⋯ עוד אפשרויות</h1>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:480px;">
+        <div
+          id="page-more"
+          class="container manager-only"
+          style="padding-bottom: 80px"
+        >
+          <h1 style="margin-bottom: 24px">⋯ עוד אפשרויות</h1>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              max-width: 480px;
+            "
+          >
             <div class="more-page-card" onclick="window.showPage('staff')">
               <div class="more-page-card-icon">👥</div>
               <div class="more-page-card-label">צוות עובדים</div>
@@ -2508,7 +2652,12 @@
               <div class="more-page-card-icon">📤</div>
               <div class="more-page-card-label">ייבוא CSV</div>
             </div>
-            <div class="more-page-card" onclick="window.openEmergencyModeModal && window.openEmergencyModeModal()">
+            <div
+              class="more-page-card"
+              onclick="
+                window.openEmergencyModeModal && window.openEmergencyModeModal()
+              "
+            >
               <div class="more-page-card-icon">🚨</div>
               <div class="more-page-card-label">מצב חירום / חוסר</div>
             </div>
@@ -2518,26 +2667,75 @@
             </div>
           </div>
         </div>
-
       </main>
     </div>
 
     <!-- ניווט תחתון — מובייל בלבד -->
     <nav id="bottomNav" aria-label="ניווט תחתון">
-      <button class="bottom-nav-item active" id="btnav-schedule" onclick="window.showPage('schedule')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <button
+        class="bottom-nav-item active"
+        id="btnav-schedule"
+        onclick="window.showPage('schedule')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
         <span>לוח</span>
       </button>
-      <button class="bottom-nav-item" id="btnav-tasks" onclick="window.showPage('tasks')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <button
+        class="bottom-nav-item"
+        id="btnav-tasks"
+        onclick="window.showPage('tasks')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+        </svg>
         <span>משימות</span>
       </button>
-      <button class="bottom-nav-item" id="btnav-worker-requests" onclick="window.showPage('worker-requests')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <button
+        class="bottom-nav-item"
+        id="btnav-worker-requests"
+        onclick="window.showPage('worker-requests')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
         <span>בקשות</span>
       </button>
-      <button class="bottom-nav-item manager-only" id="btnav-more" onclick="window.showPage('more')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      <button
+        class="bottom-nav-item manager-only"
+        id="btnav-more"
+        onclick="window.showPage('more')"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+          <circle cx="5" cy="12" r="1" />
+        </svg>
         <span>עוד</span>
       </button>
     </nav>
@@ -3117,7 +3315,7 @@
     <div
       id="myWeekModal"
       class="modal"
-      onclick="if(event.target===this) window.closeMyWeekModal()"
+      onclick="if (event.target === this) window.closeMyWeekModal();"
     >
       <div class="modal-content" style="max-width: 460px">
         <h3 id="myWeekSummaryTitle" style="color: #c2410c; margin-top: 0"></h3>
@@ -3149,7 +3347,10 @@
         <div style="text-align: left; margin-top: 16px">
           <button
             class="btn btn-outlined"
-            onclick="document.getElementById('staffingCheckModal').style.display = 'none'"
+            onclick="
+              document.getElementById('staffingCheckModal').style.display =
+                'none'
+            "
           >
             סגור
           </button>
@@ -3159,9 +3360,7 @@
 
     <div id="editTaskModal" class="modal">
       <div class="modal-content" style="max-width: 500px">
-        <h3 style="color: var(--md-primary); margin-top: 0">
-          ✏️ עריכת משימה
-        </h3>
+        <h3 style="color: var(--md-primary); margin-top: 0">✏️ עריכת משימה</h3>
         <div style="display: flex; flex-direction: column; gap: 10px">
           <select id="editTaskCategory" style="width: 100%"></select>
           <input
@@ -3222,11 +3421,17 @@
           </div>
         </div>
         <div
-          style="display: flex; justify-content: space-between; margin-top: 20px"
+          style="
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+          "
         >
           <button
             class="btn btn-outlined"
-            onclick="document.getElementById('editTaskModal').style.display = 'none'"
+            onclick="
+              document.getElementById('editTaskModal').style.display = 'none'
+            "
           >
             ביטול
           </button>
@@ -3256,9 +3461,7 @@
             <option value="פסח א">פסח א'</option>
             <option value="פסח ב">פסח ב'</option>
             <option value="סוכות א">סוכות א'</option>
-            <option value="סוכות ב / שמחת תורה">
-              סוכות ב' / שמחת תורה
-            </option>
+            <option value="סוכות ב / שמחת תורה">סוכות ב' / שמחת תורה</option>
             <option value="יום כיפורים">יום כיפורים</option>
             <option value="פורים">פורים</option>
             <option value="שבועות">שבועות</option>
@@ -3279,11 +3482,17 @@
           />
         </div>
         <div
-          style="display: flex; justify-content: space-between; margin-top: 20px"
+          style="
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+          "
         >
           <button
             class="btn btn-outlined"
-            onclick="document.getElementById('editHolidayModal').style.display = 'none'"
+            onclick="
+              document.getElementById('editHolidayModal').style.display = 'none'
+            "
           >
             ביטול
           </button>
@@ -3336,88 +3545,436 @@
 
     <!-- Mode Settings Modal (Emergency / Matal Understaff dates) -->
     <div id="modeSettingsModal" class="modal">
-      <div class="modal-content" style="max-width:480px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--md-divider); padding-bottom:14px;">
-          <h3 id="modeSettingsTitle" style="margin:0; color:var(--md-primary);">⚙️ הגדרות מצב</h3>
-          <button onclick="document.getElementById('modeSettingsModal').style.display='none'; window._modeSettingsPendingActivation=false;" style="background:none; border:none; cursor:pointer; font-size:1.4rem; color:var(--md-text-secondary);">✕</button>
+      <div class="modal-content" style="max-width: 480px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--md-divider);
+            padding-bottom: 14px;
+          "
+        >
+          <h3
+            id="modeSettingsTitle"
+            style="margin: 0; color: var(--md-primary)"
+          >
+            ⚙️ הגדרות מצב
+          </h3>
+          <button
+            onclick="
+              document.getElementById('modeSettingsModal').style.display =
+                'none';
+              window._modeSettingsPendingActivation = false;
+            "
+            style="
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 1.4rem;
+              color: var(--md-text-secondary);
+            "
+          >
+            ✕
+          </button>
         </div>
-        <div style="display:flex; flex-direction:column; gap:14px;">
+        <div style="display: flex; flex-direction: column; gap: 14px">
           <div>
-            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">תאריך התחלה</label>
-            <input type="date" id="modeStartDate" style="width:100%; padding:8px; border-radius:8px; border:1px solid #e2e8f0; font-size:0.9rem; box-sizing:border-box;" />
+            <label
+              style="
+                font-size: 0.85rem;
+                font-weight: 600;
+                display: block;
+                margin-bottom: 4px;
+              "
+              >תאריך התחלה</label
+            >
+            <input
+              type="date"
+              id="modeStartDate"
+              style="
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                font-size: 0.9rem;
+                box-sizing: border-box;
+              "
+            />
           </div>
           <div>
-            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">תאריך סיום (אופציונלי)</label>
-            <input type="date" id="modeEndDate" style="width:100%; padding:8px; border-radius:8px; border:1px solid #e2e8f0; font-size:0.9rem; box-sizing:border-box;" />
+            <label
+              style="
+                font-size: 0.85rem;
+                font-weight: 600;
+                display: block;
+                margin-bottom: 4px;
+              "
+              >תאריך סיום (אופציונלי)</label
+            >
+            <input
+              type="date"
+              id="modeEndDate"
+              style="
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                font-size: 0.9rem;
+                box-sizing: border-box;
+              "
+            />
           </div>
           <!-- Emergency shift hours — shown only for emergency type -->
-          <div id="emergencyShiftHoursWrapper" style="display:none;">
-            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">משך משמרת חירום</label>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn btn-outlined" style="padding:5px 14px; font-size:0.85rem;" onclick="window.setEmergencyShiftHours(24)">24ש</button>
-              <button type="button" class="btn btn-outlined" style="padding:5px 14px; font-size:0.85rem;" onclick="window.setEmergencyShiftHours(48)">48ש</button>
-              <input type="number" id="emergencyShiftHoursInput" min="8" max="96" step="8" value="24" style="width:70px; padding:7px 10px; border-radius:8px; border:1px solid #e2e8f0; font-size:0.9rem;" />
-              <span style="font-size:0.85rem; color:var(--md-text-secondary);">שעות לסבב</span>
+          <div id="emergencyShiftHoursWrapper" style="display: none">
+            <label
+              style="
+                font-size: 0.85rem;
+                font-weight: 600;
+                display: block;
+                margin-bottom: 6px;
+              "
+              >משך משמרת חירום</label
+            >
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+              "
+            >
+              <button
+                type="button"
+                class="btn btn-outlined"
+                style="padding: 5px 14px; font-size: 0.85rem"
+                onclick="window.setEmergencyShiftHours(24)"
+              >
+                24ש
+              </button>
+              <button
+                type="button"
+                class="btn btn-outlined"
+                style="padding: 5px 14px; font-size: 0.85rem"
+                onclick="window.setEmergencyShiftHours(48)"
+              >
+                48ש
+              </button>
+              <input
+                type="number"
+                id="emergencyShiftHoursInput"
+                min="8"
+                max="96"
+                step="8"
+                value="24"
+                style="
+                  width: 70px;
+                  padding: 7px 10px;
+                  border-radius: 8px;
+                  border: 1px solid #e2e8f0;
+                  font-size: 0.9rem;
+                "
+              />
+              <span style="font-size: 0.85rem; color: var(--md-text-secondary)"
+                >שעות לסבב</span
+              >
             </div>
           </div>
-          <div id="modeSettingsNote" style="font-size:0.8rem; color:var(--md-text-secondary); background:#f0f9ff; padding:8px 12px; border-radius:8px; border:1px solid #bae6fd;"></div>
+          <div
+            id="modeSettingsNote"
+            style="
+              font-size: 0.8rem;
+              color: var(--md-text-secondary);
+              background: #f0f9ff;
+              padding: 8px 12px;
+              border-radius: 8px;
+              border: 1px solid #bae6fd;
+            "
+          ></div>
         </div>
-        <div style="display:flex; gap:8px; margin-top:20px; justify-content:flex-end;">
-          <button id="modeSettingsSaveBtn" class="btn btn-contained" style="background:#0284c7;" onclick="window.saveModeSettings()">שמור תאריכים</button>
-          <button class="btn btn-outlined" onclick="document.getElementById('modeSettingsModal').style.display='none'; window._modeSettingsPendingActivation=false;">ביטול</button>
+        <div
+          style="
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+            justify-content: flex-end;
+          "
+        >
+          <button
+            id="modeSettingsSaveBtn"
+            class="btn btn-contained"
+            style="background: #0284c7"
+            onclick="window.saveModeSettings()"
+          >
+            שמור תאריכים
+          </button>
+          <button
+            class="btn btn-outlined"
+            onclick="
+              document.getElementById('modeSettingsModal').style.display =
+                'none';
+              window._modeSettingsPendingActivation = false;
+            "
+          >
+            ביטול
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Drafts Modal -->
     <div id="draftsModal" class="modal">
-      <div class="modal-content" style="max-width:560px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--md-divider); padding-bottom:14px;">
-          <h3 style="margin:0; color:var(--md-primary);">💾 טיוטות לוח</h3>
-          <button onclick="document.getElementById('draftsModal').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:1.4rem; color:var(--md-text-secondary);">✕</button>
+      <div class="modal-content" style="max-width: 560px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--md-divider);
+            padding-bottom: 14px;
+          "
+        >
+          <h3 style="margin: 0; color: var(--md-primary)">💾 טיוטות לוח</h3>
+          <button
+            onclick="
+              document.getElementById('draftsModal').style.display = 'none'
+            "
+            style="
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 1.4rem;
+              color: var(--md-text-secondary);
+            "
+          >
+            ✕
+          </button>
         </div>
-        <div style="margin-bottom:18px; padding:14px; background:#f0f9ff; border-radius:10px; border:1px solid #bae6fd;">
-          <p style="margin:0 0 10px; font-size:0.85rem; font-weight:600; color:#0369a1;">שמור את הלוח הנוכחי כטיוטה:</p>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <input type="text" id="draftNameInput" placeholder="שם הטיוטה (לדוג׳: גרסה ראשונה)" style="flex:1; min-width:160px; padding:8px 10px; border-radius:8px; border:1px solid #bae6fd; font-size:0.85rem;" />
-            <button class="btn btn-contained" style="background:#0284c7; white-space:nowrap;" onclick="window.saveDraft()">💾 שמור</button>
+        <div
+          style="
+            margin-bottom: 18px;
+            padding: 14px;
+            background: #f0f9ff;
+            border-radius: 10px;
+            border: 1px solid #bae6fd;
+          "
+        >
+          <p
+            style="
+              margin: 0 0 10px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #0369a1;
+            "
+          >
+            שמור את הלוח הנוכחי כטיוטה:
+          </p>
+          <div
+            style="
+              display: flex;
+              gap: 8px;
+              align-items: center;
+              flex-wrap: wrap;
+            "
+          >
+            <input
+              type="text"
+              id="draftNameInput"
+              placeholder="שם הטיוטה (לדוג׳: גרסה ראשונה)"
+              style="
+                flex: 1;
+                min-width: 160px;
+                padding: 8px 10px;
+                border-radius: 8px;
+                border: 1px solid #bae6fd;
+                font-size: 0.85rem;
+              "
+            />
+            <button
+              class="btn btn-contained"
+              style="background: #0284c7; white-space: nowrap"
+              onclick="window.saveDraft()"
+            >
+              💾 שמור
+            </button>
           </div>
         </div>
-        <div id="draftsList" style="min-height:60px;">
-          <p style="color:var(--md-text-secondary); font-size:0.85rem; text-align:center;">טוען טיוטות...</p>
+        <div id="draftsList" style="min-height: 60px">
+          <p
+            style="
+              color: var(--md-text-secondary);
+              font-size: 0.85rem;
+              text-align: center;
+            "
+          >
+            טוען טיוטות...
+          </p>
         </div>
       </div>
     </div>
 
     <!-- CSV Import Modal -->
     <div id="csvImportModal" class="modal">
-      <div class="modal-content" style="max-width:580px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--md-divider); padding-bottom:16px;">
-          <h3 style="margin:0; color:var(--md-primary);">📤 ייבוא לוח מ-CSV</h3>
-          <button onclick="document.getElementById('csvImportModal').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:1.4rem; color:var(--md-text-secondary); line-height:1;">✕</button>
+      <div class="modal-content" style="max-width: 580px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--md-divider);
+            padding-bottom: 16px;
+          "
+        >
+          <h3 style="margin: 0; color: var(--md-primary)">
+            📤 ייבוא לוח מ-CSV
+          </h3>
+          <button
+            onclick="
+              document.getElementById('csvImportModal').style.display = 'none'
+            "
+            style="
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 1.4rem;
+              color: var(--md-text-secondary);
+              line-height: 1;
+            "
+          >
+            ✕
+          </button>
         </div>
-        <p style="color:var(--md-text-secondary); font-size:0.85rem; margin-top:0;">
-          בחר קובץ CSV שיוצא מהמערכת — הפורמט חייב להיות זהה לייצוא (שם, ראשון, איפה, שני, איפה...).
+        <p
+          style="
+            color: var(--md-text-secondary);
+            font-size: 0.85rem;
+            margin-top: 0;
+          "
+        >
+          בחר קובץ CSV שיוצא מהמערכת — הפורמט חייב להיות זהה לייצוא (שם, ראשון,
+          איפה, שני, איפה...).
         </p>
-        <div style="margin-bottom:16px;">
-          <input type="file" id="csvImportFile" accept=".csv" style="display:none;" onchange="window.onCSVFileSelected(this)" />
-          <button class="btn btn-outlined" onclick="document.getElementById('csvImportFile').click()">📂 בחר קובץ CSV</button>
-          <span id="csvImportFileName" style="margin-right:10px; font-size:0.85rem; color:var(--md-text-secondary);"></span>
+        <div style="margin-bottom: 16px">
+          <input
+            type="file"
+            id="csvImportFile"
+            accept=".csv"
+            style="display: none"
+            onchange="window.onCSVFileSelected(this)"
+          />
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('csvImportFile').click()"
+          >
+            📂 בחר קובץ CSV
+          </button>
+          <span
+            id="csvImportFileName"
+            style="
+              margin-right: 10px;
+              font-size: 0.85rem;
+              color: var(--md-text-secondary);
+            "
+          ></span>
         </div>
-        <div id="csvImportPreview" style="display:none;">
-          <div id="csvImportStats" style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.85rem; color:#0369a1;"></div>
-          <div id="csvImportWarnings" style="display:none; background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.82rem; color:#92400e;"></div>
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; max-height:200px; overflow-y:auto; margin-bottom:14px;">
-            <pre id="csvImportPreviewText" style="margin:0; font-size:0.72rem; direction:rtl; white-space:pre-wrap;"></pre>
+        <div id="csvImportPreview" style="display: none">
+          <div
+            id="csvImportStats"
+            style="
+              background: #f0f9ff;
+              border: 1px solid #bae6fd;
+              border-radius: 8px;
+              padding: 10px 14px;
+              margin-bottom: 14px;
+              font-size: 0.85rem;
+              color: #0369a1;
+            "
+          ></div>
+          <div
+            id="csvImportWarnings"
+            style="
+              display: none;
+              background: #fefce8;
+              border: 1px solid #fde68a;
+              border-radius: 8px;
+              padding: 10px 14px;
+              margin-bottom: 14px;
+              font-size: 0.82rem;
+              color: #92400e;
+            "
+          ></div>
+          <div
+            style="
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 10px;
+              max-height: 200px;
+              overflow-y: auto;
+              margin-bottom: 14px;
+            "
+          >
+            <pre
+              id="csvImportPreviewText"
+              style="
+                margin: 0;
+                font-size: 0.72rem;
+                direction: rtl;
+                white-space: pre-wrap;
+              "
+            ></pre>
           </div>
-          <div style="padding:12px 14px; background:#f0fdf4; border-radius:8px; border:1px solid #bbf7d0; margin-bottom:4px;">
-            <p style="margin:0 0 10px; font-size:0.85rem; color:#166534; font-weight:600;">איך להחיל?</p>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-contained" style="background:#0284c7;" onclick="window.applyCSVImport(false)">הוסף לקיים</button>
-              <button class="btn btn-contained" style="background:#dc2626;" onclick="window.applyCSVImport(true)">דרוס הכל</button>
-              <button class="btn btn-outlined" onclick="document.getElementById('csvImportModal').style.display='none'">ביטול</button>
+          <div
+            style="
+              padding: 12px 14px;
+              background: #f0fdf4;
+              border-radius: 8px;
+              border: 1px solid #bbf7d0;
+              margin-bottom: 4px;
+            "
+          >
+            <p
+              style="
+                margin: 0 0 10px;
+                font-size: 0.85rem;
+                color: #166534;
+                font-weight: 600;
+              "
+            >
+              איך להחיל?
+            </p>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <button
+                class="btn btn-contained"
+                style="background: #0284c7"
+                onclick="window.applyCSVImport(false)"
+              >
+                הוסף לקיים
+              </button>
+              <button
+                class="btn btn-contained"
+                style="background: #dc2626"
+                onclick="window.applyCSVImport(true)"
+              >
+                דרוס הכל
+              </button>
+              <button
+                class="btn btn-outlined"
+                onclick="
+                  document.getElementById('csvImportModal').style.display =
+                    'none'
+                "
+              >
+                ביטול
+              </button>
             </div>
-            <p style="margin:8px 0 0; font-size:0.75rem; color:#166534;">"הוסף לקיים" — ממלא רק תאים ריקים. "דרוס הכל" — מנקה קודם ואז מחיל.</p>
+            <p style="margin: 8px 0 0; font-size: 0.75rem; color: #166534">
+              "הוסף לקיים" — ממלא רק תאים ריקים. "דרוס הכל" — מנקה קודם ואז
+              מחיל.
+            </p>
           </div>
         </div>
       </div>
@@ -3425,41 +3982,194 @@
 
     <!-- AI Schedule Modal -->
     <div id="aiScheduleModal" class="modal">
-      <div class="modal-content" style="max-width:620px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--md-divider); padding-bottom:16px;">
-          <h3 style="margin:0; background:linear-gradient(135deg,#7c3aed,#4f46e5); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">✨ AI — הצעת לוח משמרות</h3>
-          <button onclick="document.getElementById('aiScheduleModal').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:1.4rem; color:var(--md-text-secondary); line-height:1;">✕</button>
+      <div class="modal-content" style="max-width: 620px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--md-divider);
+            padding-bottom: 16px;
+          "
+        >
+          <h3
+            style="
+              margin: 0;
+              background: linear-gradient(135deg, #7c3aed, #4f46e5);
+              -webkit-background-clip: text;
+              background-clip: text;
+              -webkit-text-fill-color: transparent;
+            "
+          >
+            ✨ AI — הצעת לוח משמרות
+          </h3>
+          <button
+            onclick="
+              document.getElementById('aiScheduleModal').style.display = 'none'
+            "
+            style="
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 1.4rem;
+              color: var(--md-text-secondary);
+              line-height: 1;
+            "
+          >
+            ✕
+          </button>
         </div>
 
         <div id="aiKeySection">
-          <p style="color:var(--md-text-secondary); font-size:0.9rem; margin-top:0;">
+          <p
+            style="
+              color: var(--md-text-secondary);
+              font-size: 0.9rem;
+              margin-top: 0;
+            "
+          >
             הזן <b>API key</b> מ-Anthropic — נשמר רק בדפדפן שלך, לא נשלח לשרת.
           </p>
-          <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <input type="password" id="aiKeyInput" placeholder="sk-ant-api03-..." style="flex:1; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; font-size:0.9rem;" />
-            <button class="btn btn-contained" style="background:#7c3aed; white-space:nowrap;" onclick="window.saveAIKey()">שמור מפתח</button>
+          <div style="display: flex; gap: 8px; margin-bottom: 10px">
+            <input
+              type="password"
+              id="aiKeyInput"
+              placeholder="sk-ant-api03-..."
+              style="
+                flex: 1;
+                padding: 8px 12px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                font-size: 0.9rem;
+              "
+            />
+            <button
+              class="btn btn-contained"
+              style="background: #7c3aed; white-space: nowrap"
+              onclick="window.saveAIKey()"
+            >
+              שמור מפתח
+            </button>
           </div>
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" style="font-size:0.8rem; color:#7c3aed; text-decoration:none;">📎 קבל API key בחינם מ-Anthropic ←</a>
+          <a
+            href="https://console.anthropic.com/settings/keys"
+            target="_blank"
+            style="font-size: 0.8rem; color: #7c3aed; text-decoration: none"
+            >📎 קבל API key בחינם מ-Anthropic ←</a
+          >
         </div>
 
-        <div id="aiRunSection" style="display:none;">
-          <p style="color:var(--md-text-secondary); font-size:0.85rem; margin-top:0;">
-            Claude יקבל את רשימת העובדים, הכללים, האילוצים, והלוח הנוכחי — ויציע לוח שבועי מאוזן.
+        <div id="aiRunSection" style="display: none">
+          <p
+            style="
+              color: var(--md-text-secondary);
+              font-size: 0.85rem;
+              margin-top: 0;
+            "
+          >
+            Claude יקבל את רשימת העובדים, הכללים, האילוצים, והלוח הנוכחי — ויציע
+            לוח שבועי מאוזן.
           </p>
-          <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
-            <button class="btn btn-contained" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);" onclick="window.generateAI()">✨ צור הצעה</button>
-            <button class="btn btn-outlined" style="font-size:0.8rem; padding:6px 12px;" onclick="window.resetAIKey()">🔑 החלף מפתח</button>
+          <div
+            style="
+              display: flex;
+              gap: 8px;
+              margin-bottom: 16px;
+              flex-wrap: wrap;
+              align-items: center;
+            "
+          >
+            <button
+              class="btn btn-contained"
+              style="background: linear-gradient(135deg, #7c3aed, #4f46e5)"
+              onclick="window.generateAI()"
+            >
+              ✨ צור הצעה
+            </button>
+            <button
+              class="btn btn-outlined"
+              style="font-size: 0.8rem; padding: 6px 12px"
+              onclick="window.resetAIKey()"
+            >
+              🔑 החלף מפתח
+            </button>
           </div>
-          <div id="aiStatus" style="margin-bottom:12px; font-size:0.9rem; min-height:22px; color:var(--md-text-secondary);"></div>
-          <pre id="aiResult" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; font-size:0.72rem; max-height:260px; overflow-y:auto; white-space:pre-wrap; direction:ltr; text-align:left; color:#334155;"></pre>
-          <div id="aiApplyBar" style="display:none; margin-top:16px; padding:14px 16px; background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
-            <p style="margin:0 0 10px; font-size:0.85rem; color:#166534; font-weight:600;">✅ ההצעה מוכנה — בחר איך להחיל:</p>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-contained" style="background:#16a34a;" onclick="window.applyAISchedule(false)">הוסף לקיים</button>
-              <button class="btn btn-contained" style="background:#dc2626;" onclick="window.applyAISchedule(true)">דרוס הכל</button>
-              <button class="btn btn-outlined" onclick="document.getElementById('aiScheduleModal').style.display='none'">ביטול</button>
+          <div
+            id="aiStatus"
+            style="
+              margin-bottom: 12px;
+              font-size: 0.9rem;
+              min-height: 22px;
+              color: var(--md-text-secondary);
+            "
+          ></div>
+          <pre
+            id="aiResult"
+            style="
+              display: none;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 12px;
+              font-size: 0.72rem;
+              max-height: 260px;
+              overflow-y: auto;
+              white-space: pre-wrap;
+              direction: ltr;
+              text-align: left;
+              color: #334155;
+            "
+          ></pre>
+          <div
+            id="aiApplyBar"
+            style="
+              display: none;
+              margin-top: 16px;
+              padding: 14px 16px;
+              background: #f0fdf4;
+              border-radius: 10px;
+              border: 1px solid #bbf7d0;
+            "
+          >
+            <p
+              style="
+                margin: 0 0 10px;
+                font-size: 0.85rem;
+                color: #166534;
+                font-weight: 600;
+              "
+            >
+              ✅ ההצעה מוכנה — בחר איך להחיל:
+            </p>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <button
+                class="btn btn-contained"
+                style="background: #16a34a"
+                onclick="window.applyAISchedule(false)"
+              >
+                הוסף לקיים
+              </button>
+              <button
+                class="btn btn-contained"
+                style="background: #dc2626"
+                onclick="window.applyAISchedule(true)"
+              >
+                דרוס הכל
+              </button>
+              <button
+                class="btn btn-outlined"
+                onclick="
+                  document.getElementById('aiScheduleModal').style.display =
+                    'none'
+                "
+              >
+                ביטול
+              </button>
             </div>
-            <p style="margin:8px 0 0; font-size:0.75rem; color:#166534;">"הוסף לקיים" — ממלא רק תאים ריקים. "דרוס הכל" — מחיק ומחליף מחדש.</p>
+            <p style="margin: 8px 0 0; font-size: 0.75rem; color: #166534">
+              "הוסף לקיים" — ממלא רק תאים ריקים. "דרוס הכל" — מחיק ומחליף מחדש.
+            </p>
           </div>
         </div>
       </div>
