@@ -897,7 +897,6 @@
       body.screenshot-mode #staffSidebar,
       body.screenshot-mode #managerToolbar,
       body.screenshot-mode #weekNavBar,
-      body.screenshot-mode #cloudSaveWarningBtn,
       body.screenshot-mode #scheduleTip {
         display: none !important;
       }
@@ -1139,18 +1138,6 @@
       .bottom-nav-item.active svg {
         filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
       }
-      /* כפתור שמירה לענן — צף מתחת לנאב העליון בדסקטופ */
-      #cloudSaveWarningBtn {
-        position: fixed;
-        top: 74px;
-        left: 16px;
-        z-index: 2000;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-      }
-      body.worker-view #cloudSaveWarningBtn {
-        display: none !important;
-      }
-
       @media (max-width: 1024px) {
         #bottomNav {
           display: flex;
@@ -1166,12 +1153,6 @@
         /* הסתר את כל הפס העליון במובייל — הניווט עבר לנאב התחתון */
         nav:not(#bottomNav) {
           display: none !important;
-        }
-        /* כפתור שמירה לענן — צף מעל הנאב התחתון */
-        #cloudSaveWarningBtn {
-          top: auto;
-          bottom: calc(68px + env(safe-area-inset-bottom));
-          left: 12px;
         }
         /* מניעת גלישה אופקית בעמודי הגדרות / משימות */
         #page-rules,

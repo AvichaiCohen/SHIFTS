@@ -8,7 +8,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715d";
+        var BUILD = "20260715e";
         var KEY = "app_build_seen_v1";
         try {
           if (sessionStorage.getItem(KEY) === BUILD) return;
@@ -326,8 +326,6 @@
               window.updateMatalUnderstaffUI();
 
             window.hasUnsavedChanges = false;
-            const saveBtn = document.getElementById("cloudSaveWarningBtn");
-            if (saveBtn) saveBtn.style.display = "none";
 
             if (typeof window.migrateOldRoles === "function")
               window.migrateOldRoles();
@@ -641,7 +639,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715d" />
+    <link rel="stylesheet" href="style.css?v=20260715e" />
   </head>
   <body>
     <div
@@ -865,22 +863,6 @@
       ✕ צא ממסך נקי
     </button>
 
-    <!-- כפתור שמירה לענן — צף, נגיש גם במובייל וגם בדסקטופ -->
-    <button
-      id="cloudSaveWarningBtn"
-      class="btn btn-contained"
-      style="
-        background: #e11d48;
-        color: white;
-        display: none;
-        animation: pulse 1.5s infinite;
-        font-weight: bold;
-      "
-      onclick="window.commitChangesToCloud()"
-    >
-      ⚠️ שמור שינויים לענן
-    </button>
-
     <div class="layout-wrapper">
       <aside class="side-panel" id="mainSidebar">
         <div
@@ -1025,7 +1007,6 @@
             display: none;
             border-top: 1px solid var(--md-divider);
             padding-top: 15px;
-            margin-top: auto;
           "
         >
           <strong
@@ -3485,6 +3466,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715d"></script>
+    <script src="script.js?v=20260715e"></script>
   </body>
 </html>

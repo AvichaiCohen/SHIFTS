@@ -309,11 +309,16 @@
       window.currentShifts = window.isEmergencyMode
         ? emergencyShifts
         : normalShifts;
-      window.holidays =
-        JSON.parse(localStorage.getItem("shift_holidays_v47")) || [];
-
+      // ימי חג באמצע השבוע (למשל רביעי שהוא חג) — מוגדרים לשבוע הנוכחי בלבד
+      // (בתוך currentSchedule.holidayDays, נשמר בענן עם שאר הלוח), לא גלובלית
+      // לכל השבועות. כל שבוע קובע בעצמו אילו ימים בו הם חג.
       window.isHoliday = (d) =>
-        !window.isEmergencyMode && window.holidays.includes(d);
+        !window.isEmergencyMode &&
+        !!(
+          window.currentSchedule &&
+          window.currentSchedule.holidayDays &&
+          window.currentSchedule.holidayDays.includes(d)
+        );
       window.isOffDay = (d) =>
         !window.isEmergencyMode &&
         (d === "שישי" || d === "שבת" || window.isHoliday(d));
@@ -432,10 +437,6 @@
 
       window.triggerUnsavedChanges = function () {
         window.hasUnsavedChanges = true;
-        const saveBtn = document.getElementById("cloudSaveWarningBtn");
-        if (saveBtn && !window.isWorkerMode) {
-          saveBtn.style.display = "inline-flex";
-        }
         if (typeof window.renderTable === "function")
           window.renderTable(window.currentSchedule, window.currentNotesLog);
       };
@@ -488,8 +489,6 @@
           if (typeof window.updateWeekendHistory === "function")
             window.updateWeekendHistory();
           window.hasUnsavedChanges = false;
-          const saveBtn = document.getElementById("cloudSaveWarningBtn");
-          if (saveBtn) saveBtn.style.display = "none";
           alert('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
         };
 
@@ -4772,8 +4771,9 @@
           if (sHC) sHC.innerHTML = timeHtml;
           if (hWrap) hWrap.classList.remove("emergency-hidden");
           let holHtml = "";
+          const _weekHolidayDays = (window.currentSchedule && window.currentSchedule.holidayDays) || [];
           days.slice(0, 5).forEach((d) => {
-            holHtml += `<label style="display:flex; align-items:center; gap:4px; font-weight:500;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--md-success);" onchange="window.toggleHoliday('${d}')" ${window.holidays.includes(d) ? "checked" : ""}> ${d}</label>`;
+            holHtml += `<label style="display:flex; align-items:center; gap:4px; font-weight:500;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--md-success);" onchange="window.toggleHoliday('${d}')" ${_weekHolidayDays.includes(d) ? "checked" : ""}> ${d}</label>`;
           });
           let hC = document.getElementById("holidaysContainer");
           if (hC) hC.innerHTML = holHtml;
@@ -4831,9 +4831,12 @@
       };
 
       window.toggleHoliday = function (day) {
-        if (window.holidays.includes(day))
-          window.holidays = window.holidays.filter((d) => d !== day);
-        else window.holidays.push(day);
+        if (!window.currentSchedule) return;
+        if (!window.currentSchedule.holidayDays) window.currentSchedule.holidayDays = [];
+        if (window.currentSchedule.holidayDays.includes(day))
+          window.currentSchedule.holidayDays = window.currentSchedule.holidayDays.filter((d) => d !== day);
+        else window.currentSchedule.holidayDays.push(day);
+        window.triggerUnsavedChanges();
       };
 
       window.saveRules = function (scope) {
@@ -4891,10 +4894,6 @@
         localStorage.setItem(
           "shift_times_byloc_v1",
           JSON.stringify(shiftTimesByLoc),
-        );
-        localStorage.setItem(
-          "shift_holidays_v47",
-          JSON.stringify(window.holidays),
         );
 
         // --- פרסור כללי המשמרות מה-UI ---
@@ -6227,6 +6226,7 @@
             matalUnderstaffStartDate: oldSched.matalUnderstaffStartDate || null,
             matalUnderstaffEndDate: oldSched.matalUnderstaffEndDate || null,
             dayHighlights: oldSched.dayHighlights || {},
+            holidayDays: oldSched.holidayDays || [],
           };
           window.currentNotesLog = {};
           window.initSchedule();
