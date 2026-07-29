@@ -2998,6 +2998,56 @@
         window.triggerUnsavedChanges();
       };
 
+      // ===== הוספת עובד למשמרת במובייל (חלופה ללחיצה-גרירה, שלא עובדת במגע) =====
+      // מפעיל בפועל את window.drop() עם draggedData מדומה (sourceDay="pool",
+      // בדיוק כמו גרירה ממאגר העובדים) — כך שכל הלוגיקה הקיימת (אזהרות שיבוץ,
+      // בלוק סופ"ש, נעילה אוטומטית) פועלת זהה לגרירה בדסקטופ.
+      window.openMobileAddEmpModal = function (day, shift, loc) {
+        if (!window.isEditMode) return;
+        window._mobileAddTarget = { day, shift, loc };
+        const activeStaff = (window.staff || [])
+          .filter((e) => e.isActive !== false)
+          .sort(
+            (a, b) =>
+              window.roleTypes.indexOf(a.type) - window.roleTypes.indexOf(b.type) ||
+              a.name.localeCompare(b.name),
+          );
+        const sel = document.getElementById("mobileAddEmpSelect");
+        if (sel) {
+          sel.innerHTML =
+            `<option value="">-- בחר עובד --</option>` +
+            activeStaff
+              .map((e) => `<option value="${e.id}">${e.name} (${e.type})</option>`)
+              .join("");
+        }
+        const modal = document.getElementById("mobileAddEmpModal");
+        if (modal) modal.style.display = "flex";
+      };
+
+      window.confirmMobileAddEmp = function () {
+        const sel = document.getElementById("mobileAddEmpSelect");
+        const empId = sel ? sel.value : "";
+        if (!empId) {
+          alert("יש לבחור עובד.");
+          return;
+        }
+        const target = window._mobileAddTarget;
+        if (!target) return;
+        window.draggedData = {
+          empId: Number(empId),
+          sourceDay: "pool",
+          sourceShift: null,
+          sourceLoc: null,
+        };
+        const fakeEvent = {
+          preventDefault: () => {},
+          currentTarget: { classList: { remove: () => {} } },
+        };
+        window.drop(fakeEvent, target.day, target.shift, target.loc);
+        const modal = document.getElementById("mobileAddEmpModal");
+        if (modal) modal.style.display = "none";
+      };
+
       window.toggleMobileMenu = function () {
         const nav = document.getElementById("navContainer");
         if (nav) nav.classList.toggle("active");
@@ -7877,6 +7927,9 @@
               // הכוכב הוסר כאן
               html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}${mWarnIcon}</div>`;
             });
+          }
+          if (window.isEditMode && !window.isWorkerMode) {
+            html += `<button class="btn btn-outlined" style="margin-top:8px; padding:6px 14px; font-size:0.85rem;" onclick="window.openMobileAddEmpModal('${d}','${r.shift}','${safeLoc}')">➕ הוסף עובד</button>`;
           }
           html += `</div></div>`;
         });

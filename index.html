@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260715h";
+        var BUILD = "20260729a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -691,7 +691,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260715h" />
+    <link rel="stylesheet" href="style.css?v=20260729a" />
   </head>
   <body>
     <div
@@ -3568,6 +3568,28 @@
       </div>
     </div>
 
+    <div id="mobileAddEmpModal" class="modal">
+      <div class="modal-content" style="max-width: 380px">
+        <h3 style="color: var(--md-primary); margin-top: 0">
+          ➕ הוספת עובד למשמרת
+        </h3>
+        <select id="mobileAddEmpSelect" style="width: 100%"></select>
+        <div
+          style="display: flex; justify-content: space-between; margin-top: 20px"
+        >
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('mobileAddEmpModal').style.display = 'none'"
+          >
+            ביטול
+          </button>
+          <button class="btn btn-contained" onclick="window.confirmMobileAddEmp()">
+            ➕ הוסף
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="commanderSelectModal" class="modal">
       <div class="modal-content" style="max-width: 420px">
         <h3 style="color: #0284c7; margin-top: 0">
@@ -4237,6 +4259,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260715h"></script>
+    <script src="script.js?v=20260729a"></script>
   </body>
 </html>
