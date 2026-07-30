@@ -4505,6 +4505,41 @@
         window.renderCommandersUI();
       };
 
+      // משימות פתוחות (ללא עובד, לא הושלמו) שתאריכן מגיע בתוך 30 יום — נועדו
+      // להזכיר משימות שנוספו מראש (למשל חודש קדימה) ונשארו בלי שיבוץ עד
+      // שהתאריך כבר קרוב
+      window._getSoonUnassignedTasks = function () {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const in30 = new Date(today);
+        in30.setDate(in30.getDate() + 30);
+        return (window.systemTasks || []).filter((t) => {
+          if (t.completed || !t.date) return false;
+          const hasAssignee = (t.assignees && t.assignees.length > 0) || t.assignee;
+          if (hasAssignee) return false;
+          const td = new Date(t.date);
+          return td >= today && td <= in30;
+        });
+      };
+
+      window._updateUnassignedTaskBadge = function () {
+        const list = window._getSoonUnassignedTasks();
+        const count = list.length;
+        [
+          document.getElementById("unassignedTaskBadge"),
+          document.getElementById("unassignedTaskBadgeMobile"),
+        ].forEach((badge) => {
+          if (!badge) return;
+          if (count > 0) {
+            badge.textContent = count > 9 ? "9+" : String(count);
+            badge.style.cssText =
+              "display:inline-block; background:#ef4444; color:#fff; border-radius:10px; font-size:0.7rem; padding:1px 6px; font-weight:bold; margin-right:4px;";
+          } else {
+            badge.style.display = "none";
+          }
+        });
+      };
+
       window.renderTasks = function () {
         let assigneeHtml = `<option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>`;
         window.staff
@@ -4530,9 +4565,26 @@
           window.renderMyTaskSwaps();
         if (typeof window.renderTaskSwapManager === "function")
           window.renderTaskSwapManager();
+        window._updateUnassignedTaskBadge();
         let html = "";
+        if (!window.isWorkerMode) {
+          const soonUnassigned = window._getSoonUnassignedTasks();
+          if (soonUnassigned.length > 0) {
+            html += `<div style="background:#fef2f2; border-right:4px solid #ef4444; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+              <b style="color:#b91c1c;">⚠️ ${soonUnassigned.length} משימות בלי שיבוץ עובד, שהתאריך שלהן מגיע תוך 30 יום:</b>
+              <ul style="margin:8px 0 0; padding-right:20px; font-size:0.88rem;">
+                ${soonUnassigned
+                  .map((t) => {
+                    const dateStr = t.date.split("-").reverse().join(".");
+                    return `<li>${dateStr} — <b>[${window.escapeHtml(t.category)}]</b>${t.desc ? " " + window.escapeHtml(t.desc) : ""}</li>`;
+                  })
+                  .join("")}
+              </ul>
+            </div>`;
+          }
+        }
         if (window.systemTasks.length === 0) {
-          html = `<div style="text-align:center; color:var(--text-muted); padding:20px;">אין משימות פתוחות כרגע.</div>`;
+          html += `<div style="text-align:center; color:var(--text-muted); padding:20px;">אין משימות פתוחות כרגע.</div>`;
         } else {
           // מיון לפי תאריך (מוקדם למאוחר); משימות ללא תאריך בסוף
           let sortedTasks = [...window.systemTasks].sort((a, b) => {

@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260730a";
+        var BUILD = "20260730b";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -512,6 +512,8 @@
                 window.currentSchedule,
                 window.currentNotesLog,
               );
+            if (typeof window._updateUnassignedTaskBadge === "function")
+              window._updateUnassignedTaskBadge();
             if (
               typeof window.renderTasks === "function" &&
               document.getElementById("page-tasks") &&
@@ -702,7 +704,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260730a" />
+    <link rel="stylesheet" href="style.css?v=20260730b" />
   </head>
   <body>
     <div
@@ -828,6 +830,7 @@
         </div>
         <div onclick="window.showPage('tasks')" id="nav-tasks">
           📋 משימות וימים מיוחדים
+          <span id="unassignedTaskBadge" class="manager-only"></span>
         </div>
         <div onclick="window.showPage('staff')" id="nav-staff">
           👥 צוות עובדים
@@ -2762,6 +2765,7 @@
         class="bottom-nav-item"
         id="btnav-tasks"
         onclick="window.showPage('tasks')"
+        style="position: relative"
       >
         <svg
           viewBox="0 0 24 24"
@@ -2772,6 +2776,24 @@
           <path d="M9 11l3 3L22 4" />
           <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
         </svg>
+        <span
+          id="unassignedTaskBadgeMobile"
+          class="manager-only"
+          style="
+            display: none;
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            margin-left: 4px;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            padding: 0 4px;
+            font-weight: bold;
+            line-height: 1.4;
+          "
+        ></span>
         <span>משימות</span>
       </button>
       <button
@@ -4411,6 +4433,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260730a"></script>
+    <script src="script.js?v=20260730b"></script>
   </body>
 </html>
