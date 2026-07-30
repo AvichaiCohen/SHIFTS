@@ -726,7 +726,9 @@
       body.view-only #shiftChangeBanner,
       body.view-only #holLogInputsWrapper,
       body.view-only #myTaskSwapsContainer,
-      body.view-only #myHolidaySwapsContainer {
+      body.view-only #myHolidaySwapsContainer,
+      body.view-only #notifBellBtn,
+      body.view-only #btnav-notifications {
         display: none !important;
       }
       /* הדגשת העובד המחובר בטבלה ובפלאפון */

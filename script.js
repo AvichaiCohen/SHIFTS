@@ -435,6 +435,132 @@
         }
       };
 
+      // ===== הודעות כלליות (מנהל → עובד/כולם) =====
+      // תיבת דואר פר-עובד תחת notifications/{empId}/{id} — כתיבה רק ע"י המנהל
+      // הראשי (הרשאת הכתיבה הכללית כבר מכסה את זה, אין צורך בכלל create-only
+      // ייעודי). "נקרא" לא נשמר בענן — נשמר מקומית (localStorage) כחותמת הזמן
+      // האחרונה שנצפתה, כדי לא לדרוש הרשאת כתיבה לעובד אנונימי.
+      window.myNotifications = [];
+
+      window._myNotifKey = function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        return me && me.id != null ? String(me.id) : null;
+      };
+
+      window.refreshMyNotifications = function () {
+        const myKey = window._myNotifKey();
+        const bucket = myKey && window._allNotifications ? window._allNotifications[myKey] : null;
+        window.myNotifications = bucket ? Object.values(bucket).filter(Boolean) : [];
+        window._updateNotifBadge();
+        if (typeof window.renderNotifications === "function") window.renderNotifications();
+        if (typeof window.renderShiftChangeBanner === "function") window.renderShiftChangeBanner();
+      };
+
+      window._updateNotifBadge = function () {
+        const myKey = window._myNotifKey();
+        let lastSeen = 0;
+        if (myKey) {
+          try {
+            lastSeen = Number(localStorage.getItem("notif_last_seen_" + myKey)) || 0;
+          } catch (e) {}
+        }
+        const unread = (window.myNotifications || []).filter((n) => (n.ts || 0) > lastSeen).length;
+        [document.getElementById("notifBadge"), document.getElementById("notifBadgeMobile")].forEach((badge) => {
+          if (!badge) return;
+          if (unread > 0) {
+            badge.textContent = unread > 9 ? "9+" : String(unread);
+            badge.style.display = "inline-block";
+          } else {
+            badge.style.display = "none";
+          }
+        });
+      };
+
+      window.toggleNotificationsPanel = function () {
+        if (typeof window._populateNotifTargets === "function") window._populateNotifTargets();
+        if (typeof window.renderNotifications === "function") window.renderNotifications();
+        const modal = document.getElementById("notificationsModal");
+        if (modal) modal.style.display = "flex";
+        // סימון "נצפה" — חותמת הזמן האחרונה שנצפתה, מקומית למכשיר הזה בלבד
+        const myKey = window._myNotifKey();
+        if (myKey) {
+          const latestTs = (window.myNotifications || []).reduce((max, n) => Math.max(max, n.ts || 0), 0);
+          if (latestTs > 0) {
+            try {
+              localStorage.setItem("notif_last_seen_" + myKey, String(latestTs));
+            } catch (e) {}
+          }
+        }
+        window._updateNotifBadge();
+      };
+
+      window.renderNotifications = function () {
+        const cont = document.getElementById("notificationsListContent");
+        if (!cont) return;
+        const sorted = [...(window.myNotifications || [])].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        if (sorted.length === 0) {
+          cont.innerHTML =
+            "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין הודעות.</p>";
+          return;
+        }
+        cont.innerHTML = sorted
+          .map((n) => {
+            const d = n.ts ? new Date(n.ts) : null;
+            const dateStr = d
+              ? `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+              : "";
+            return `<div style="border-bottom:1px solid var(--md-divider); padding:10px 4px;">
+              <div style="font-weight:bold; color:var(--md-primary);">${window.escapeHtml(n.title)}</div>
+              <div style="font-size:0.9rem; margin-top:4px; white-space:pre-wrap;">${window.escapeHtml(n.body)}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${dateStr}</div>
+            </div>`;
+          })
+          .join("");
+      };
+
+      window._populateNotifTargets = function () {
+        const sel = document.getElementById("notifTargetSelect");
+        if (!sel) return;
+        sel.innerHTML =
+          `<option value="all">📢 לכל הצוות</option>` +
+          (window.staff || [])
+            .filter((e) => e.isActive !== false)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((e) => `<option value="${e.id}">${e.name}</option>`)
+            .join("");
+      };
+
+      // שולח הודעה בפועל לרשימת empId נתונה — פונקציית ליבה, משמשת גם מקומות
+      // אחרים במערכת (למשל התראה אוטומטית כשנקבעים סוגרי סופ"ש)
+      window._sendNotificationTo = function (empIds, title, body, category) {
+        if (typeof window.saveToCloud !== "function") return;
+        if (!title || !body || !empIds || empIds.length === 0) return;
+        const id = Date.now() + Math.floor(Math.random() * 100000);
+        const notif = { id, title, body, ts: id, category: category || "general" };
+        empIds.forEach((empId) => {
+          window.saveToCloud("notifications/" + empId + "/" + id, notif);
+        });
+      };
+
+      window.sendGeneralNotification = function () {
+        const targetSel = document.getElementById("notifTargetSelect");
+        const target = targetSel ? targetSel.value : "";
+        const title = document.getElementById("notifTitleInput").value.trim();
+        const body = document.getElementById("notifBodyInput").value.trim();
+        if (!title || !body) {
+          alert("יש למלא כותרת ותוכן.");
+          return;
+        }
+        const empIds =
+          target === "all"
+            ? (window.staff || []).filter((e) => e.isActive !== false).map((e) => e.id)
+            : [Number(target)];
+        window._sendNotificationTo(empIds, title, body, "general");
+        document.getElementById("notifTitleInput").value = "";
+        document.getElementById("notifBodyInput").value = "";
+        alert("✅ ההודעה נשלחה.");
+      };
+
       window.triggerUnsavedChanges = function () {
         window.hasUnsavedChanges = true;
         if (typeof window.renderTable === "function")
@@ -917,6 +1043,45 @@
             </div>`;
           });
 
+        // 3. הודעות כלליות (מהמנהל) — נשארות גם בתיבת ה-🔔, כאן מוצגות רק
+        // הטריות (24ש) וניתנות לסגירה בנפרד, כמו שאר סוגי ההתראות בבאנר
+        const gens = window.myNotifications || [];
+        const dGen = window._getDismissed("gen");
+        gens
+          .filter(
+            (n) =>
+              n &&
+              n.ts &&
+              dGen[n.id] !== n.ts &&
+              now - n.ts < window.NOTIF_EXPIRY_MS,
+          )
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+          .forEach((n) => {
+            count++;
+            cards += `<div style="background:#fff; border-right:4px solid #7c3aed; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div><b style="color:#7c3aed;">${window.escapeHtml(n.title)}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155; white-space:pre-wrap;">${window.escapeHtml(n.body)}</div></div>
+                <button onclick="window.dismissGenNotif(${n.id})" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+              </div>
+            </div>`;
+          });
+
+        // 4. תזכורת קלה — משובץ/ת לסגור את הסופ"ש/חג הקרוב ביותר (לתמונה
+        // המלאה על כל השבועות הקדימה — "הסגירות הקרובות שלי")
+        if (window._nextWeekendClosure && window._nextWeekendClosure.weekKey) {
+          const nextWkKey = window._nextWeekendClosure.weekKey;
+          const dNext = window._getDismissed("nextwknd");
+          if (dNext[nextWkKey] !== true) {
+            count++;
+            cards += `<div style="background:#fff; border-right:4px solid #0d9488; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div><b style="color:#0d9488;">🗓️ את/ה מתוכנן/ת לסגור את הסופ"ש/חג הקרוב</b><div style="font-size:0.85rem; margin-top:4px;"><a href="#" onclick="window.showMyUpcomingClosures(); return false;" style="color:#0d9488;">לפרטים מלאים ←</a></div></div>
+                <button onclick="window.dismissNextWeekendNotif('${nextWkKey}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+              </div>
+            </div>`;
+          }
+        }
+
         if (count === 0) {
           el.style.display = "none";
           el.innerHTML = "";
@@ -947,6 +1112,18 @@
         window.renderShiftChangeBanner();
       };
 
+      window.dismissGenNotif = function (notifId) {
+        const n = (window.myNotifications || []).find((x) => x.id === notifId);
+        if (!n) return;
+        window._setDismissedItem("gen", notifId, n.ts);
+        window.renderShiftChangeBanner();
+      };
+
+      window.dismissNextWeekendNotif = function (weekKey) {
+        window._setDismissedItem("nextwknd", weekKey, true);
+        window.renderShiftChangeBanner();
+      };
+
       // סגירת כל ההתראות המוצגות בבת אחת
       window.dismissAllNotifs = function () {
         const notifs = window._myShiftNotifs || {};
@@ -964,7 +1141,54 @@
           )
             window._setDismissedItem("req", k, r.statusTs);
         });
+        (window.myNotifications || []).forEach((n) => {
+          if (n && n.ts) window._setDismissedItem("gen", n.id, n.ts);
+        });
+        if (window._nextWeekendClosure && window._nextWeekendClosure.weekKey) {
+          window._setDismissedItem("nextwknd", window._nextWeekendClosure.weekKey, true);
+        }
         window.renderShiftChangeBanner();
+      };
+
+      // בדיקה קלה וממוקדת (קריאה אחת בלבד, לא סריקה של 12 שבועות) — האם
+      // העובד המחובר משובץ לאחת ממשמרות בלוק הסופ"ש/חג של השבוע הקרוב ביותר
+      // (זה השבוע אם עוד לא עבר, אחרת השבוע הבא). לתמונה המלאה קדימה יש את
+      // "הסגירות הקרובות שלי".
+      window._checkNextWeekendClosure = async function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null || !window._fbImports || !window._firebaseDb) {
+          window._nextWeekendClosure = null;
+          return;
+        }
+        const { ref, get } = window._fbImports;
+        const todayDow = new Date().getDay();
+        // אחרי שבת השבוע (כלומר ראשון–חמישי) — הסופ"ש הקרוב הוא של השבוע
+        // המוצג כרגע (offset 0); בשישי/שבת עצמם כבר עברו/עוברים — הבא הוא +1
+        const off = todayDow === 5 || todayDow === 6 ? 1 : 0;
+        const wk = window.getWeekDbKey(window.getSunday(off));
+        try {
+          const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
+          if (!snap.exists()) {
+            window._nextWeekendClosure = null;
+            return;
+          }
+          const sched = snap.val();
+          let found = false;
+          [
+            { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
+            { loc: LOC_ZIRA, shifts: weekendShiftsZira },
+          ].forEach(({ loc, shifts }) => {
+            shifts.forEach((sk) => {
+              const [d, s] = sk.split("-");
+              const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
+              if (arr && arr.find((e) => String(e.id) === String(me.id))) found = true;
+            });
+          });
+          window._nextWeekendClosure = found ? { weekKey: wk } : null;
+        } catch (e) {
+          window._nextWeekendClosure = null;
+        }
+        if (typeof window.renderShiftChangeBanner === "function") window.renderShiftChangeBanner();
       };
 
       // רשימת הבקשות של העובד וסטטוסן (בעמוד הגשת הבקשות)
@@ -1546,6 +1770,10 @@
 
           if (typeof window.subscribeShiftNotifs === "function")
             window.subscribeShiftNotifs(emp.id);
+          if (typeof window.refreshMyNotifications === "function")
+            window.refreshMyNotifications();
+          if (typeof window._checkNextWeekendClosure === "function")
+            window._checkNextWeekendClosure();
 
           window.showPage("schedule");
           if (typeof window.renderTable === "function")
@@ -1604,6 +1832,10 @@
           (window.loggedInUser && window.loggedInUser.id);
         if (_notifId != null && typeof window.subscribeShiftNotifs === "function")
           window.subscribeShiftNotifs(_notifId);
+        if (typeof window.refreshMyNotifications === "function")
+          window.refreshMyNotifications();
+        if (window.isWorkerMode && typeof window._checkNextWeekendClosure === "function")
+          window._checkNextWeekendClosure();
 
         // מנהל — איסוף בקשות ממתינות קיימות לאינדקס הגלובלי (פעם אחת בכניסה)
         if (!window.isWorkerMode && typeof window.backfillPendingIndex === "function")
@@ -1638,6 +1870,9 @@
         }
         window._myShiftNotifs = {};
         window._myRequests = {};
+        window.myNotifications = [];
+        window._nextWeekendClosure = null;
+        if (typeof window._updateNotifBadge === "function") window._updateNotifBadge();
         if (typeof window.renderShiftChangeBanner === "function")
           window.renderShiftChangeBanner();
         if (typeof window.clearSession === "function") window.clearSession();
@@ -4029,6 +4264,33 @@
         assignBlock(finalZira, LOC_ZIRA, weekendShiftsZira);
         assignBlock(finalMatal, LOC_MATAL, weekendShiftsMATAL);
 
+        // התראה לכל מי שנקבע — כדי שכל אחד יידע מראש שהוא סוגר, גם אם השבוע
+        // הזה רחוק ולא זה שמוצג לו כרגע כברירת מחדל
+        if (typeof window._sendNotificationTo === "function") {
+          const weekSun = window.getSunday(window.currentWeekOffset || 0);
+          const fri = new Date(weekSun);
+          fri.setDate(fri.getDate() + 5);
+          const sat = new Date(weekSun);
+          sat.setDate(sat.getDate() + 6);
+          const dateLabel = `${fri.getDate()}/${fri.getMonth() + 1}–${sat.getDate()}/${sat.getMonth() + 1}`;
+          finalZira.forEach((r) =>
+            window._sendNotificationTo(
+              [r.emp.id],
+              '🗓️ נקבעת לסגור סופ"ש/חג',
+              `נקבעת לסגור את הסופ"ש/חג של ${dateLabel} בזירה.`,
+              "weekend",
+            ),
+          );
+          finalMatal.forEach((r) =>
+            window._sendNotificationTo(
+              [r.emp.id],
+              '🗓️ נקבעת לסגור סופ"ש/חג',
+              `נקבעת לסגור את הסופ"ש/חג של ${dateLabel} במת"ל.`,
+              "weekend",
+            ),
+          );
+        }
+
         window.triggerUnsavedChanges();
         if (typeof window.renderTable === "function")
           window.renderTable(window.currentSchedule, window.currentNotesLog);
@@ -4037,6 +4299,75 @@
         alert(
           '🔒 סוגרי הסופ"ש/חג נקבעו וננעלו. אפשר להמשיך לתכנן את שאר השבוע בנפרד.\nלא לשכוח "שמור לענן" כדי לשמר את השינוי.',
         );
+      };
+
+      // "הסגירות הקרובות שלי" — סורק קדימה בלוחות השמורים בענן (בניגוד
+      // ל-rebuildWeekendHistory שסורק אחורה) ומאתר עבור העובד המחובר את כל
+      // הסופ"שים/חגים שהוא כבר משובץ אליהם בשבועות הקרובים, גם אם השבוע
+      // המוצג כרגע הוא שבוע אחר. עובד גם על הכנה מוקדמת (קבע סוגרי סופ"ש)
+      // הרבה לפני שהמנהל תכנן את שאר אותו שבוע.
+      window.showMyUpcomingClosures = async function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) {
+          alert("לא מזוהה עובד מחובר.");
+          return;
+        }
+        const modal = document.getElementById("myClosuresModal");
+        const cont = document.getElementById("myClosuresContent");
+        if (modal) modal.style.display = "flex";
+        if (cont) cont.innerHTML = "<i style='color:var(--text-muted);'>טוען...</i>";
+        if (!window._fbImports || !window._firebaseDb) {
+          if (cont) cont.innerHTML = "<i style='color:var(--md-error);'>אין חיבור לענן.</i>";
+          return;
+        }
+        const { ref, get } = window._fbImports;
+        const WEEKS_AHEAD = 12;
+        const results = [];
+        for (let off = 0; off <= WEEKS_AHEAD; off++) {
+          const sun = window.getSunday(off);
+          const wk = window.getWeekDbKey(sun);
+          let sched;
+          try {
+            const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
+            if (!snap.exists()) continue;
+            sched = snap.val();
+          } catch (e) {
+            continue;
+          }
+          const daysFound = {};
+          [
+            { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
+            { loc: LOC_ZIRA, shifts: weekendShiftsZira },
+          ].forEach(({ loc, shifts }) => {
+            shifts.forEach((sk) => {
+              const [d, s] = sk.split("-");
+              const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
+              if (arr && arr.find((e) => String(e.id) === String(me.id))) {
+                if (!daysFound[d]) daysFound[d] = [];
+                daysFound[d].push(`${s} · ${window.getLocName(loc)}`);
+              }
+            });
+          });
+          if (Object.keys(daysFound).length > 0) {
+            results.push({ weekLabel: window.formatWeekString(sun), days: daysFound });
+          }
+        }
+
+        if (!cont) return;
+        if (results.length === 0) {
+          cont.innerHTML =
+            "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין סופ\"שים/חגים קרובים שאת/ה מתוכנן/ת לסגור.</p>";
+          return;
+        }
+        let html = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th></tr>`;
+        results.forEach((r) => {
+          const dayDetails = Object.entries(r.days)
+            .map(([d, arr]) => `<b>${window.escapeHtml(d)}</b>: ${window.escapeHtml(arr.join(", "))}`)
+            .join("<br>");
+          html += `<tr style="border-bottom:1px solid var(--md-divider);"><td style="padding:8px; white-space:nowrap; vertical-align:top;">${window.escapeHtml(r.weekLabel)}</td><td style="padding:8px;">${dayDetails}</td></tr>`;
+        });
+        html += `</table>`;
+        cont.innerHTML = html;
       };
 
       // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)

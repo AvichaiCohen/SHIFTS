@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260729a";
+        var BUILD = "20260730a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -675,6 +675,17 @@
               window.renderHolidaySwapManager();
           });
 
+          // הודעות כלליות — נכתבות ע"י המנהל הראשי בלבד (כתיבה מלאה), כל
+          // מכשיר מאזין לכל האוסף ומסנן בצד לקוח לפי המשתמש המחובר כרגע
+          // (כמו taskSwapRequests/holidaySwapRequests) — כך שלא צריך
+          // להירשם מחדש בכל החלפת משתמש באותו מכשיר.
+          window._allNotifications = {};
+          onValue(ref(db, "notifications"), (snapshot) => {
+            window._allNotifications = snapshot.exists() ? snapshot.val() || {} : {};
+            if (typeof window.refreshMyNotifications === "function")
+              window.refreshMyNotifications();
+          });
+
           window.onclick = function (event) {
             let editModal = document.getElementById("editModal");
             let specModal = document.getElementById("specialStatusModal");
@@ -691,7 +702,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260729a" />
+    <link rel="stylesheet" href="style.css?v=20260730a" />
   </head>
   <body>
     <div
@@ -860,6 +871,36 @@
         >
           📤 ייבוא CSV
         </button>
+        <div
+          onclick="window.toggleNotificationsPanel()"
+          id="notifBellBtn"
+          style="
+            font-size: 0.85em;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            position: relative;
+          "
+        >
+          🔔 הודעות
+          <span
+            id="notifBadge"
+            style="
+              display: none;
+              position: absolute;
+              top: -4px;
+              left: -4px;
+              background: #ef4444;
+              color: #fff;
+              border-radius: 10px;
+              font-size: 0.7rem;
+              padding: 1px 6px;
+              font-weight: bold;
+            "
+          ></span>
+        </div>
         <div
           onclick="window.toggleDarkMode()"
           id="darkModeBtn"
@@ -1357,6 +1398,13 @@
               onclick="window.showMyWeekSummary()"
             >
               📋 הסיכום השבועי שלי
+            </button>
+            <button
+              class="btn btn-contained worker-only"
+              style="background: #0d9488; flex: 1; min-width: 200px"
+              onclick="window.showMyUpcomingClosures()"
+            >
+              🗓️ הסגירות הקרובות שלי
             </button>
             <button
               class="btn btn-outlined worker-only"
@@ -2742,6 +2790,40 @@
         <span>בקשות</span>
       </button>
       <button
+        class="bottom-nav-item"
+        id="btnav-notifications"
+        onclick="window.toggleNotificationsPanel()"
+        style="position: relative"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 01-3.46 0" />
+        </svg>
+        <span
+          id="notifBadgeMobile"
+          style="
+            display: none;
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            margin-left: 4px;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            padding: 0 4px;
+            font-weight: bold;
+            line-height: 1.4;
+          "
+        ></span>
+        <span>הודעות</span>
+      </button>
+      <button
         class="bottom-nav-item manager-only"
         id="btnav-more"
         onclick="window.showPage('more')"
@@ -3590,6 +3672,76 @@
       </div>
     </div>
 
+    <div id="myClosuresModal" class="modal">
+      <div class="modal-content" style="max-width: 520px">
+        <h3 style="color: var(--md-primary); margin-top: 0">
+          🗓️ הסגירות הקרובות שלי
+        </h3>
+        <p style="font-size: 0.8rem; color: var(--md-text-secondary); margin-top: 0">
+          כל הסופ"שים/חגים שאת/ה משובץ/ת לסגור בשבועות הקרובים, כולל כאלה
+          שנקבעו מראש ועדיין לא הגיע תורם.
+        </p>
+        <div id="myClosuresContent" style="overflow-x: auto"></div>
+        <div style="text-align: left; margin-top: 16px">
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('myClosuresModal').style.display = 'none'"
+          >
+            סגור
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="notificationsModal" class="modal">
+      <div class="modal-content" style="max-width: 480px">
+        <h3 style="color: var(--md-primary); margin-top: 0">🔔 הודעות</h3>
+        <div
+          class="manager-only"
+          id="sendNotifSection"
+          style="
+            background: var(--md-bg);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          "
+        >
+          <strong style="color: var(--md-primary)">📤 שליחת הודעה</strong>
+          <select id="notifTargetSelect" style="width: 100%"></select>
+          <input
+            type="text"
+            id="notifTitleInput"
+            placeholder="כותרת..."
+            style="width: 100%"
+          />
+          <textarea
+            id="notifBodyInput"
+            placeholder="תוכן ההודעה..."
+            style="width: 100%; min-height: 60px; box-sizing: border-box"
+          ></textarea>
+          <button
+            class="btn btn-contained"
+            style="align-self: flex-start"
+            onclick="window.sendGeneralNotification()"
+          >
+            📤 שלח
+          </button>
+        </div>
+        <div id="notificationsListContent"></div>
+        <div style="text-align: left; margin-top: 16px">
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('notificationsModal').style.display = 'none'"
+          >
+            סגור
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="commanderSelectModal" class="modal">
       <div class="modal-content" style="max-width: 420px">
         <h3 style="color: #0284c7; margin-top: 0">
@@ -4259,6 +4411,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260729a"></script>
+    <script src="script.js?v=20260730a"></script>
   </body>
 </html>
