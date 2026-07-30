@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260730b";
+        var BUILD = "20260730c";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -677,6 +677,23 @@
               window.renderHolidaySwapManager();
           });
 
+          // לוח שנה של חגים — תאריכים אמיתיים, נכתב ע"י המנהל הראשי בלבד.
+          // כל שינוי מרענן את הלוח (כי isHoliday תלוי בזה) ואת בדיקת ההתנגשות
+          // בין בקשות חופש לחגים.
+          window.holidayCalendar = [];
+          onValue(ref(db, "holidayCalendar"), (snapshot) => {
+            const val = snapshot.exists() ? snapshot.val() : [];
+            window.holidayCalendar = Array.isArray(val)
+              ? val.filter(Boolean)
+              : Object.values(val || {}).filter(Boolean);
+            if (typeof window.renderHolidayCalendarList === "function")
+              window.renderHolidayCalendarList();
+            if (typeof window.renderTable === "function")
+              window.renderTable(window.currentSchedule, window.currentNotesLog);
+            if (typeof window.renderPendingRequestsManager === "function")
+              window.renderPendingRequestsManager();
+          });
+
           // הודעות כלליות — נכתבות ע"י המנהל הראשי בלבד (כתיבה מלאה), כל
           // מכשיר מאזין לכל האוסף ומסנן בצד לקוח לפי המשתמש המחובר כרגע
           // (כמו taskSwapRequests/holidaySwapRequests) — כך שלא צריך
@@ -704,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260730b" />
+    <link rel="stylesheet" href="style.css?v=20260730c" />
   </head>
   <body>
     <div
@@ -2273,6 +2290,60 @@
             ></div>
           </div>
           <div id="rulesContainer"></div>
+
+          <div
+            class="card-paper manager-only"
+            id="holidayCalendarWrapper"
+            style="border-left: 4px solid #9333ea; margin-top: 20px"
+          >
+            <h3 style="color: #9333ea; margin-top: 0">📅 לוח שנה של חגים</h3>
+            <p
+              style="
+                font-size: 0.82rem;
+                color: var(--md-text-secondary);
+                margin-top: 0;
+              "
+            >
+              הזן כאן תאריכים אמיתיים של חגים (פעם אחת בלבד) — המערכת תסמן
+              אותם אוטומטית כחג בשבוע הרלוונטי (בלי לסמן ידנית כל שבוע), ותתריע
+              אם בקשת חופש של עובד חופפת לחג.
+            </p>
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+              "
+            >
+              <input
+                type="text"
+                id="holCalName"
+                placeholder="שם החג..."
+                style="flex: 1; min-width: 140px"
+              />
+              <input
+                type="date"
+                id="holCalStart"
+                title="מתאריך"
+                style="flex: 1; min-width: 140px"
+              />
+              <input
+                type="date"
+                id="holCalEnd"
+                title="עד תאריך (השאר ריק ליום אחד)"
+                style="flex: 1; min-width: 140px"
+              />
+              <button
+                class="btn btn-contained"
+                style="background: #9333ea"
+                onclick="window.addHolidayCalendarEntry()"
+              >
+                ➕ הוסף
+              </button>
+            </div>
+            <div id="holidayCalendarList"></div>
+          </div>
 
           <div
             class="card-paper manager-only"
@@ -4433,6 +4504,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260730b"></script>
+    <script src="script.js?v=20260730c"></script>
   </body>
 </html>

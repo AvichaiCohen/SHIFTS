@@ -314,11 +314,12 @@
       // לכל השבועות. כל שבוע קובע בעצמו אילו ימים בו הם חג.
       window.isHoliday = (d) =>
         !window.isEmergencyMode &&
-        !!(
+        (!!(
           window.currentSchedule &&
           window.currentSchedule.holidayDays &&
           window.currentSchedule.holidayDays.includes(d)
-        );
+        ) ||
+          !!(typeof window._calendarHolidayForWeekDay === "function" && window._calendarHolidayForWeekDay(d)));
       window.isOffDay = (d) =>
         !window.isEmergencyMode &&
         (d === "שישי" || d === "שבת" || window.isHoliday(d));
@@ -5816,6 +5817,116 @@
       };
 
       // תאריכי חגים שאינם מנצלים יום חופש ("YYYY-MM-DD") — ניתן להוסיף לפי לוח החגים
+      // ===== לוח שנה של חגים (תאריכים אמיתיים, לא סימון ידני לפי שם יום) =====
+      window.holidayCalendar = window.holidayCalendar || [];
+
+      window._isCalendarHoliday = function (dateKey) {
+        return (
+          (window.holidayCalendar || []).find(
+            (h) => h.startDate <= dateKey && dateKey <= h.endDate,
+          ) || null
+        );
+      };
+
+      // בדיקה עבור יום מסוים (שם יום) בשבוע שמוצג כרגע — לשימוש ב-isHoliday
+      window._calendarHolidayForWeekDay = function (dayName) {
+        const idx = days.indexOf(dayName);
+        if (idx < 0) return null;
+        const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        const d = new Date(weekSun);
+        d.setDate(d.getDate() + idx);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return window._isCalendarHoliday(key);
+      };
+
+      // גוזר את vacationHolidayDates (תאריכים שלא מנצלים יום חופש) מלוח השנה —
+      // כל טווח חג הופך לרשימת תאריכים בודדים
+      window._recomputeVacationHolidayDates = function () {
+        const out = [];
+        (window.holidayCalendar || []).forEach((h) => {
+          if (!h.startDate) return;
+          const s = new Date(h.startDate);
+          const e = h.endDate ? new Date(h.endDate) : s;
+          if (isNaN(s) || isNaN(e)) return;
+          const cur = new Date(s);
+          while (cur <= e) {
+            out.push(
+              `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`,
+            );
+            cur.setDate(cur.getDate() + 1);
+          }
+        });
+        window.vacationHolidayDates = out;
+      };
+
+      window.renderHolidayCalendarList = function () {
+        window._recomputeVacationHolidayDates();
+        const cont = document.getElementById("holidayCalendarList");
+        if (!cont) return;
+        const sorted = [...(window.holidayCalendar || [])].sort((a, b) =>
+          (a.startDate || "").localeCompare(b.startDate || ""),
+        );
+        if (sorted.length === 0) {
+          cont.innerHTML =
+            "<p style='color:var(--text-muted); font-style:italic; margin:0;'>אין חגים בלוח השנה עדיין.</p>";
+          return;
+        }
+        cont.innerHTML = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.88rem;">
+          <tr style="background:var(--md-bg);"><th style="padding:6px;">חג</th><th style="padding:6px;">מתאריך</th><th style="padding:6px;">עד תאריך</th><th></th></tr>
+          ${sorted
+            .map((h) => {
+              const s = new Date(h.startDate);
+              const e = new Date(h.endDate);
+              const touchesSat = s.getDay() === 6 || e.getDay() === 6;
+              const satNote = touchesSat
+                ? `<br><small style="color:#9333ea;">🔗 צמוד לשבת</small>`
+                : "";
+              return `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td style="padding:6px;"><b>${window.escapeHtml(h.name)}</b>${satNote}</td>
+            <td style="padding:6px;">${h.startDate.split("-").reverse().join(".")}</td>
+            <td style="padding:6px;">${h.endDate.split("-").reverse().join(".")}</td>
+            <td style="padding:6px;"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.removeHolidayCalendarEntry(${h.id})">מחק</button></td>
+          </tr>`;
+            })
+            .join("")}
+        </table>`;
+      };
+
+      window.addHolidayCalendarEntry = function () {
+        const name = document.getElementById("holCalName").value.trim();
+        const start = document.getElementById("holCalStart").value;
+        const end = document.getElementById("holCalEnd").value || start;
+        if (!name || !start) {
+          alert("יש למלא שם חג ותאריך התחלה.");
+          return;
+        }
+        if (end < start) {
+          alert("תאריך הסיום לא יכול להיות לפני תאריך ההתחלה.");
+          return;
+        }
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        window.holidayCalendar = window.holidayCalendar || [];
+        window.holidayCalendar.push({ id, name, startDate: start, endDate: end });
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidayCalendar", window.holidayCalendar);
+        document.getElementById("holCalName").value = "";
+        document.getElementById("holCalStart").value = "";
+        document.getElementById("holCalEnd").value = "";
+        window.renderHolidayCalendarList();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+      };
+
+      window.removeHolidayCalendarEntry = function (id) {
+        if (!confirm("למחוק את החג הזה מלוח השנה?")) return;
+        window.holidayCalendar = (window.holidayCalendar || []).filter((h) => h.id !== id);
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidayCalendar", window.holidayCalendar);
+        window.renderHolidayCalendarList();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+      };
+
       window.vacationHolidayDates = window.vacationHolidayDates || [];
       // יום שאינו מנצל חופש: שישי(5)/שבת(6) או תאריך חג מהרשימה
       window._isVacFreeDay = function (dateObj) {
@@ -6248,7 +6359,18 @@
           else typeStr = `📍 העדפת שיבוץ (${window.getLocName(r.loc)})`;
           let shiftStr =
             r.type === "vacation" || r.type === "study" ? "-" : r.shift;
-          return `<tr style="border-bottom: 1px solid var(--md-divider);"><td><b>${r.empName}</b></td><td>${fDate}<br><small>${r.day}</small></td><td>${shiftStr}</td><td>${typeStr}</td><td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
+          // התנגשות עם חג מלוח השנה — רק לבקשות חופש/לימודים (יום שלם)
+          let conflictStr = "";
+          if (
+            (r.type === "vacation" || r.type === "study") &&
+            r.date &&
+            typeof window._isCalendarHoliday === "function"
+          ) {
+            const holMatch = window._isCalendarHoliday(r.date);
+            if (holMatch)
+              conflictStr = `<br><span style="color:#b91c1c; font-weight:bold; font-size:0.8rem;">⚠️ חופף לחג: ${window.escapeHtml(holMatch.name)}</span>`;
+          }
+          return `<tr style="border-bottom: 1px solid var(--md-divider);"><td><b>${r.empName}</b></td><td>${fDate}<br><small>${r.day}</small></td><td>${shiftStr}</td><td>${typeStr}${conflictStr}</td><td><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
         };
 
         let html = "";
