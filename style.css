@@ -998,12 +998,7 @@
       @media (max-width: 1024px) {
         .container table,
         #closuresList table,
-        #trackingContainer table,
-        #requestsTableContainer table,
-        #pendingRequestsQueue table,
-        #taskStatsContainer table,
-        #tasksList table,
-        #holidaysLogTable table {
+        #trackingContainer table {
           display: block;
           width: 100%;
           max-width: 100%;
@@ -1011,6 +1006,61 @@
           -webkit-overflow-scrolling: touch;
           white-space: nowrap;
           border-collapse: collapse;
+        }
+      }
+      /* טבלאות "בקשות" ו"משימות" — במובייל כל שורה הופכת לכרטיס מוערם
+         (label: value) במקום טבלה שגוללת הצידה ומסתירה עמודות */
+      @media (max-width: 1024px) {
+        table.mobile-card-table {
+          display: block;
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+          white-space: normal;
+          border-collapse: collapse;
+          overflow-x: visible;
+        }
+        table.mobile-card-table th {
+          display: none;
+        }
+        table.mobile-card-table tr {
+          display: block;
+          background: var(--md-surface);
+          border: 1px solid var(--md-divider);
+          border-radius: 8px;
+          padding: 8px 12px;
+          margin-bottom: 10px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        table.mobile-card-table td {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          padding: 6px 0;
+          border: none;
+          border-bottom: 1px solid var(--md-divider);
+          text-align: left;
+          white-space: normal;
+          word-break: break-word;
+        }
+        table.mobile-card-table td:last-child {
+          border-bottom: none;
+        }
+        table.mobile-card-table td::before {
+          content: attr(data-label);
+          font-weight: bold;
+          color: var(--md-text-secondary);
+          font-size: 0.78rem;
+          flex-shrink: 0;
+          text-align: right;
+        }
+        table.mobile-card-table td[data-label=""] {
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        table.mobile-card-table td[data-label=""]::before {
+          content: none;
         }
       }
       /* ===== אחידות רוחב לכל העמודים ===== */
@@ -1048,15 +1098,9 @@
       #taskStatsContainer table,
       #tasksList table,
       #holidaysLogTable table {
-        min-width: 300px;
         max-width: 100%;
       }
 
-      /* עמוד בקשות - גלילה במובייל */
-      #pendingRequestsQueue table,
-      #requestsTableContainer table {
-        min-width: 500px;
-      }
       #page-requests .card-paper {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
