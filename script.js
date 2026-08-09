@@ -59,19 +59,60 @@
 
       // הזזה בסדר בין ווידג'טים אחרים בלבד (data-widget-key), בלי לגעת
       // באלמנטים אחרים שנמצאים באותו הורה (למשל טפסים/כותרות)
-      window.widgetMoveOrder = function (key, direction) {
+      // גרירה חופשית של ווידג'ט להזזה (במקום כפתורי מעלה/מטה) — עובד בין
+      // ווידג'טים באותו עמוד המוצג כרגע (גרירה בין עמודים לא אפשרית כי רק
+      // עמוד אחד גלוי בכל רגע). לתמונה: תפיסה ב-⠿, גרירה לאן שרוצים, שחרור.
+      window._draggedWidgetKey = null;
+      window.widgetDragStart = function (ev, key) {
+        window._draggedWidgetKey = key;
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = "move";
+          try {
+            ev.dataTransfer.setData("text/plain", key);
+          } catch (e) {}
+        }
+      };
+      window.widgetDragOver = function (ev) {
+        if (!window._draggedWidgetKey) return;
+        ev.preventDefault();
+      };
+      window.widgetDrop = function (ev, targetKey) {
+        ev.preventDefault();
+        const sourceKey = window._draggedWidgetKey;
+        window._draggedWidgetKey = null;
+        if (!sourceKey || sourceKey === targetKey) return;
+        const sourceEl = document.getElementById("widget-" + sourceKey);
+        const targetEl = document.getElementById("widget-" + targetKey);
+        if (!sourceEl || !targetEl || !targetEl.parentElement) return;
+        targetEl.parentElement.insertBefore(sourceEl, targetEl);
+        window._saveWidgetOrderForParent(targetEl.parentElement);
+        // אם הגרירה גם העבירה את הווידג'ט לעמוד אחר (כי גוררים אל תוך אזור
+        // שכבר מכיל ווידג'ט שהועבר לשם) — שומרים גם את שיוך העמוד
+        const pageEl = targetEl.closest(".container");
+        if (pageEl && pageEl.id.startsWith("page-")) {
+          const pageId = pageEl.id.slice(5);
+          const prefs = window._loadWidgetPrefs();
+          prefs[sourceKey] = prefs[sourceKey] || {};
+          prefs[sourceKey].page = pageId;
+          window._saveWidgetPrefs(prefs);
+        }
+      };
+
+      // שמירת גודל שנקבע ידנית (גרירת פינת resize) — נשמר אישית למכשיר
+      window._observeWidgetResize = function (key) {
         const el = document.getElementById("widget-" + key);
-        if (!el || !el.parentElement) return;
-        const siblings = Array.from(el.parentElement.children).filter((c) =>
-          c.hasAttribute("data-widget-key"),
-        );
-        const idx = siblings.indexOf(el);
-        const targetIdx = idx + direction;
-        if (targetIdx < 0 || targetIdx >= siblings.length) return;
-        const targetEl = siblings[targetIdx];
-        if (direction < 0) el.parentElement.insertBefore(el, targetEl);
-        else el.parentElement.insertBefore(targetEl, el);
-        window._saveWidgetOrderForParent(el.parentElement);
+        if (!el || typeof ResizeObserver === "undefined") return;
+        let debounceTimer = null;
+        new ResizeObserver(() => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            const prefs = window._loadWidgetPrefs();
+            prefs[key] = prefs[key] || {};
+            prefs[key].width = el.style.width || null;
+            prefs[key].height = el.style.height || null;
+            window._saveWidgetPrefs(prefs);
+          }, 400);
+        }).observe(el);
       };
 
       // שומר את סדר הווידג'טים הנוכחי בתוך הורה נתון (לפי מיקום ב-DOM בפועל)
@@ -126,6 +167,8 @@
             if (pageEl) pageEl.appendChild(el);
           }
           if (p.collapsed) el.classList.add("widget-collapsed");
+          if (p.width) el.style.width = p.width;
+          if (p.height) el.style.height = p.height;
         });
         // סדר — אחרי שכל הווידג'טים כבר בעמוד הנכון, ממיינים כל קבוצת אחים
         // לפי order השמור
@@ -150,6 +193,9 @@
             })
             .forEach((w) => parentEl.appendChild(w));
         });
+        Object.keys(window.WIDGET_REGISTRY).forEach((key) =>
+          window._observeWidgetResize(key),
+        );
       };
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", window._applyWidgetPrefs);

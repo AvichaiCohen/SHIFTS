@@ -1089,11 +1089,41 @@
       .widget-controls button:hover {
         background: var(--md-divider);
       }
+      .widget-drag-handle {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        border: 1px solid var(--md-divider);
+        background: var(--md-bg);
+        color: var(--md-text-secondary);
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        cursor: grab;
+        user-select: none;
+      }
+      .widget-drag-handle:active {
+        cursor: grabbing;
+        background: var(--md-divider);
+      }
       .widget-collapsed .widget-body {
         display: none;
       }
       .widget-collapsed .widget-controls {
         margin-bottom: 0;
+      }
+      /* ווידג'טים ניתנים לשינוי גודל ידני (גרירת פינה) — עכבר בעיקר, לכן רק
+         מ-1025px ומעלה; במובייל נשארים בגודל טבעי לפי התוכן */
+      @media (min-width: 1025px) {
+        [data-widget-key] {
+          resize: both;
+          overflow: auto;
+          min-width: 280px;
+          min-height: 140px;
+          max-width: 100%;
+        }
       }
       /* ===== אחידות רוחב לכל העמודים ===== */
       .container {

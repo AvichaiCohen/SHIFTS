@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260809a";
+        var BUILD = "20260809b";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260809a" />
+    <link rel="stylesheet" href="style.css?v=20260809b" />
   </head>
   <body>
     <div
@@ -1783,10 +1783,11 @@
                 class="card-paper"
                 id="widget-taskStatsContainer"
                 data-widget-key="taskStatsContainer"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'taskStatsContainer')"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('taskStatsContainer',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('taskStatsContainer',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'taskStatsContainer')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskStatsContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskStatsContainer')">⇥</button>
                 </div>
@@ -1937,10 +1938,11 @@
                 class="card-paper"
                 id="widget-tasksList"
                 data-widget-key="tasksList"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'tasksList')"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('tasksList',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('tasksList',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'tasksList')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('tasksList')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('tasksList')">⇥</button>
                 </div>
@@ -1972,11 +1974,12 @@
                 class="card-paper manager-only"
                 id="widget-taskSwapManagerContainer"
                 data-widget-key="taskSwapManagerContainer"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'taskSwapManagerContainer')"
                 style="border-right: 4px solid #7c3aed"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('taskSwapManagerContainer',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('taskSwapManagerContainer',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'taskSwapManagerContainer')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskSwapManagerContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskSwapManagerContainer')">⇥</button>
                 </div>
@@ -2005,11 +2008,12 @@
                 class="card-paper"
                 id="widget-holidaysLogTable"
                 data-widget-key="holidaysLogTable"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'holidaysLogTable')"
                 style="border-top: 4px solid var(--md-secondary)"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('holidaysLogTable',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('holidaysLogTable',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'holidaysLogTable')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaysLogTable')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaysLogTable')">⇥</button>
                 </div>
@@ -2087,11 +2091,12 @@
                 class="card-paper manager-only"
                 id="widget-holidaySwapManagerContainer"
                 data-widget-key="holidaySwapManagerContainer"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'holidaySwapManagerContainer')"
                 style="border-right: 4px solid #7c3aed"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('holidaySwapManagerContainer',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('holidaySwapManagerContainer',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'holidaySwapManagerContainer')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaySwapManagerContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaySwapManagerContainer')">⇥</button>
                 </div>
@@ -2107,11 +2112,12 @@
                 class="card-paper"
                 id="widget-employeeSummaryContent"
                 data-widget-key="employeeSummaryContent"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'employeeSummaryContent')"
                 style="border-top: 4px solid var(--md-primary)"
               >
                 <div class="widget-controls">
-                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('employeeSummaryContent',-1)">▲</button>
-                  <button title="הזז למטה" onclick="window.widgetMoveOrder('employeeSummaryContent',1)">▼</button>
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'employeeSummaryContent')" title="גרור להזזה">⠿</span>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('employeeSummaryContent')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('employeeSummaryContent')">⇥</button>
                 </div>
@@ -2274,6 +2280,8 @@
             class="card-paper"
             id="widget-pendingRequestsQueue"
             data-widget-key="pendingRequestsQueue"
+            ondragover="window.widgetDragOver(event)"
+            ondrop="window.widgetDrop(event,'pendingRequestsQueue')"
             style="
               border-right: 4px solid #ea580c;
               overflow-x: auto;
@@ -2281,8 +2289,7 @@
             "
           >
             <div class="widget-controls">
-              <button title="הזז למעלה" onclick="window.widgetMoveOrder('pendingRequestsQueue',-1)">▲</button>
-              <button title="הזז למטה" onclick="window.widgetMoveOrder('pendingRequestsQueue',1)">▼</button>
+              <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'pendingRequestsQueue')" title="גרור להזזה">⠿</span>
               <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('pendingRequestsQueue')">👁</button>
               <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('pendingRequestsQueue')">⇥</button>
             </div>
@@ -2306,10 +2313,11 @@
             class="card-paper"
             id="widget-requestsTableContainer"
             data-widget-key="requestsTableContainer"
+            ondragover="window.widgetDragOver(event)"
+            ondrop="window.widgetDrop(event,'requestsTableContainer')"
           >
             <div class="widget-controls">
-              <button title="הזז למעלה" onclick="window.widgetMoveOrder('requestsTableContainer',-1)">▲</button>
-              <button title="הזז למטה" onclick="window.widgetMoveOrder('requestsTableContainer',1)">▼</button>
+              <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'requestsTableContainer')" title="גרור להזזה">⠿</span>
               <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('requestsTableContainer')">👁</button>
               <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('requestsTableContainer')">⇥</button>
             </div>
@@ -4592,6 +4600,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260809a"></script>
+    <script src="script.js?v=20260809b"></script>
   </body>
 </html>
