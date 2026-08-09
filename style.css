@@ -1114,16 +1114,23 @@
       .widget-collapsed .widget-controls {
         margin-bottom: 0;
       }
-      /* ווידג'טים ניתנים לשינוי גודל ידני (גרירת פינה) — עכבר בעיקר, לכן רק
-         מ-1025px ומעלה; במובייל נשארים בגודל טבעי לפי התוכן */
-      @media (min-width: 1025px) {
-        [data-widget-key] {
-          resize: both;
-          overflow: auto;
-          min-width: 280px;
-          min-height: 140px;
-          max-width: 100%;
-        }
+      /* רשת הווידג'טים — כמה פאנלים בשורה אחת (לא רק אחד), כל פאנל תופס X
+         משבצות ברוחב/בגובה (לא שינוי גודל חלק) לפי הכפתורים ⊞/⊟.
+         auto-fill דואג שבמובייל (צר מ-300px+רווח) זה יקרוס לטור אחד לבד. */
+      .widget-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        grid-auto-rows: 260px;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      [data-widget-key] {
+        overflow: auto;
+        min-width: 0;
+        min-height: 0;
+      }
+      .widget-collapsed {
+        grid-row: span 1 !important;
       }
       /* ===== אחידות רוחב לכל העמודים ===== */
       .container {

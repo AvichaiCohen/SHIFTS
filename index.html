@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260809b";
+        var BUILD = "20260809c";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260809b" />
+    <link rel="stylesheet" href="style.css?v=20260809c" />
   </head>
   <body>
     <div
@@ -1788,6 +1788,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'taskStatsContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('taskStatsContainer',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('taskStatsContainer',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskStatsContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskStatsContainer')">⇥</button>
                 </div>
@@ -1943,6 +1945,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'tasksList')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('tasksList',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('tasksList',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('tasksList')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('tasksList')">⇥</button>
                 </div>
@@ -1980,6 +1984,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'taskSwapManagerContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('taskSwapManagerContainer',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('taskSwapManagerContainer',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskSwapManagerContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskSwapManagerContainer')">⇥</button>
                 </div>
@@ -2014,6 +2020,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'holidaysLogTable')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('holidaysLogTable',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('holidaysLogTable',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaysLogTable')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaysLogTable')">⇥</button>
                 </div>
@@ -2097,6 +2105,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'holidaySwapManagerContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('holidaySwapManagerContainer',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('holidaySwapManagerContainer',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaySwapManagerContainer')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaySwapManagerContainer')">⇥</button>
                 </div>
@@ -2118,6 +2128,8 @@
               >
                 <div class="widget-controls">
                   <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'employeeSummaryContent')" title="גרור להזזה">⠿</span>
+                  <button title="הקטן" onclick="window.widgetResize('employeeSummaryContent',-1)">⊟</button>
+                  <button title="הגדל" onclick="window.widgetResize('employeeSummaryContent',1)">⊞</button>
                   <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('employeeSummaryContent')">👁</button>
                   <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('employeeSummaryContent')">⇥</button>
                 </div>
@@ -2290,6 +2302,8 @@
           >
             <div class="widget-controls">
               <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'pendingRequestsQueue')" title="גרור להזזה">⠿</span>
+              <button title="הקטן" onclick="window.widgetResize('pendingRequestsQueue',-1)">⊟</button>
+              <button title="הגדל" onclick="window.widgetResize('pendingRequestsQueue',1)">⊞</button>
               <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('pendingRequestsQueue')">👁</button>
               <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('pendingRequestsQueue')">⇥</button>
             </div>
@@ -2318,6 +2332,8 @@
           >
             <div class="widget-controls">
               <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'requestsTableContainer')" title="גרור להזזה">⠿</span>
+              <button title="הקטן" onclick="window.widgetResize('requestsTableContainer',-1)">⊟</button>
+              <button title="הגדל" onclick="window.widgetResize('requestsTableContainer',1)">⊞</button>
               <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('requestsTableContainer')">👁</button>
               <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('requestsTableContainer')">⇥</button>
             </div>
@@ -4600,6 +4616,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260809b"></script>
+    <script src="script.js?v=20260809c"></script>
   </body>
 </html>
