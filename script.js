@@ -34,12 +34,10 @@
         { id: "demands", label: "דרישות כוח" },
         { id: "rules", label: "הגדרות" },
       ];
-      // גדלים אפשריים (במשבצות גריד) — לא שינוי חלק, קפיצה בין קבועים
-      window.WIDGET_SIZE_PRESETS = [
-        { col: 1, row: 1 },
-        { col: 2, row: 1 },
-        { col: 2, row: 2 },
-      ];
+      // הגריד תמיד 4 עמודות רוחב, עד 2 שורות גובה — מספר קבוע וברור, לא
+      // תלוי כמה נכנס למסך (בניגוד לגרסה הקודמת עם auto-fill)
+      window.WIDGET_GRID_COLS = 4;
+      window.WIDGET_GRID_ROWS_MAX = 2;
 
       window._loadWidgetPrefs = function () {
         try {
@@ -79,28 +77,60 @@
         window._saveWidgetPrefs(prefs);
       };
 
-      // גודל בקפיצות — ⊞ מגדיל, ⊟ מקטין, לפי WIDGET_SIZE_PRESETS
-      window.widgetResize = function (key, direction) {
+      // שינוי גודל ע"י גרירת הפינה (⇲) — בדיוק כמו resize רגיל בעכבר, אבל
+      // התוצאה תמיד "נתפסת" (snap) למספר משבצות שלם בגריד, לא רוחב חופשי.
+      // עובד גם במגע (Pointer Events, לא HTML5 drag) — פעיל רק מדסקטופ ומעלה.
+      window._resizeState = null;
+      window.widgetResizeStart = function (ev, key) {
+        ev.preventDefault();
+        ev.stopPropagation();
         const el = document.getElementById("widget-" + key);
         if (!el) return;
+        const rect = el.getBoundingClientRect();
         const prefs = window._loadWidgetPrefs();
         const cur = prefs[key] || {};
-        const curIdx = window.WIDGET_SIZE_PRESETS.findIndex(
-          (p) => p.col === (cur.colSpan || 1) && p.row === (cur.rowSpan || 1),
-        );
-        const idx = Math.max(
-          0,
-          Math.min(
-            window.WIDGET_SIZE_PRESETS.length - 1,
-            (curIdx === -1 ? 0 : curIdx) + direction,
-          ),
-        );
-        const preset = window.WIDGET_SIZE_PRESETS[idx];
-        el.style.gridColumn = "span " + preset.col;
-        el.style.gridRow = "span " + preset.row;
-        prefs[key] = prefs[key] || {};
-        prefs[key].colSpan = preset.col;
-        prefs[key].rowSpan = preset.row;
+        const startCol = cur.colSpan || 2;
+        const startRow = cur.rowSpan || 1;
+        window._resizeState = {
+          key,
+          el,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startCol,
+          startRow,
+          cellW: rect.width / startCol,
+          cellH: rect.height / startRow,
+          pendingCol: startCol,
+          pendingRow: startRow,
+        };
+        document.addEventListener("pointermove", window._widgetResizeMove);
+        document.addEventListener("pointerup", window._widgetResizeEnd);
+      };
+      window._widgetResizeMove = function (ev) {
+        const st = window._resizeState;
+        if (!st) return;
+        // הידית בפינה השמאלית-תחתונה: גרירה שמאלה (dx שלילי יותר) = הרחבה
+        const dx = ev.clientX - st.startX;
+        const dy = ev.clientY - st.startY;
+        const dCols = Math.round(-dx / st.cellW);
+        const dRows = Math.round(dy / st.cellH);
+        const newCol = Math.max(1, Math.min(window.WIDGET_GRID_COLS, st.startCol + dCols));
+        const newRow = Math.max(1, Math.min(window.WIDGET_GRID_ROWS_MAX, st.startRow + dRows));
+        st.el.style.gridColumn = "span " + newCol;
+        st.el.style.gridRow = "span " + newRow;
+        st.pendingCol = newCol;
+        st.pendingRow = newRow;
+      };
+      window._widgetResizeEnd = function () {
+        const st = window._resizeState;
+        document.removeEventListener("pointermove", window._widgetResizeMove);
+        document.removeEventListener("pointerup", window._widgetResizeEnd);
+        window._resizeState = null;
+        if (!st) return;
+        const prefs = window._loadWidgetPrefs();
+        prefs[st.key] = prefs[st.key] || {};
+        prefs[st.key].colSpan = st.pendingCol;
+        prefs[st.key].rowSpan = st.pendingRow;
         window._saveWidgetPrefs(prefs);
       };
 
@@ -193,7 +223,7 @@
           const grid = window._ensureWidgetGrid(targetPage);
           if (grid) grid.appendChild(el);
           if (p.collapsed) el.classList.add("widget-collapsed");
-          const colSpan = p.colSpan || 1;
+          const colSpan = p.colSpan || 2;
           const rowSpan = p.rowSpan || 1;
           el.style.gridColumn = "span " + colSpan;
           el.style.gridRow = "span " + rowSpan;
