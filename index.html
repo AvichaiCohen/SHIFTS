@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260809d";
+        var BUILD = "20260809e";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260809d" />
+    <link rel="stylesheet" href="style.css?v=20260809e" />
   </head>
   <body>
     <div
@@ -2022,9 +2022,26 @@
                 </div>
                 <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'holidaysLogTable')" title="גרור לשינוי גודל">⇲</span>
                 <div class="widget-body">
-                <h3 style="margin-top: 0; color: var(--md-secondary)">
-                  מעקב סגירת חגים וימים מיוחדים
-                </h3>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                  "
+                >
+                  <h3 style="margin: 0; color: var(--md-secondary)">
+                    מעקב סגירת חגים וימים מיוחדים
+                  </h3>
+                  <button
+                    class="btn btn-outlined manager-only"
+                    style="padding: 4px 12px; font-size: 0.85rem"
+                    onclick="window.exportHolidaysLogToCSV()"
+                  >
+                    ⬇️ ייצוא לאקסל
+                  </button>
+                </div>
                 <p style="font-size: 0.85rem; margin-top: 0">
                   תיעוד שנתי של עובדים שסגרו משמרות בחגים. עובד יכול להשתבץ לחג
                   (יתעדכן סופית כשהמנהל הראשי מחובר) ולבקש החלפה על רישום שלו.
@@ -2042,6 +2059,20 @@
                   "
                 >
                   <select id="holLogEmp" style="width: 100%"></select>
+                  <div
+                    id="holLogEmpMulti"
+                    style="
+                      display: none;
+                      flex-direction: column;
+                      gap: 4px;
+                      max-height: 160px;
+                      overflow-y: auto;
+                      background: var(--md-surface);
+                      border: 1px solid var(--md-divider);
+                      border-radius: 6px;
+                      padding: 8px;
+                    "
+                  ></div>
                   <select
                     id="holLogType"
                     style="width: 100%"
@@ -4608,6 +4639,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260809d"></script>
+    <script src="script.js?v=20260809e"></script>
   </body>
 </html>

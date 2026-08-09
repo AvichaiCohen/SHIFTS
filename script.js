@@ -18,14 +18,14 @@
       // כותבת מצב (עמוד, מוסתר, סדר, גודל) ב-localStorage ומזיזה את אלמנט
       // ה-DOM עצמו — אין רינדור כפול, שום שינוי בפונקציות הרינדור הקיימות.
       window.WIDGET_REGISTRY = {
-        pendingRequestsQueue: { nativePage: "requests" },
-        requestsTableContainer: { nativePage: "requests" },
-        taskStatsContainer: { nativePage: "tasks" },
-        tasksList: { nativePage: "tasks" },
-        taskSwapManagerContainer: { nativePage: "tasks" },
-        holidaysLogTable: { nativePage: "tasks" },
-        holidaySwapManagerContainer: { nativePage: "tasks" },
-        employeeSummaryContent: { nativePage: "tasks" },
+        pendingRequestsQueue: { nativePage: "requests", label: "בקשות ממתינות לאישור" },
+        requestsTableContainer: { nativePage: "requests", label: "העדפות / אילוצים / ימי לימודים" },
+        taskStatsContainer: { nativePage: "tasks", label: "סטטוס משימות וחגים" },
+        tasksList: { nativePage: "tasks", label: "רשימת משימות" },
+        taskSwapManagerContainer: { nativePage: "tasks", label: "ניהול החלפות משימה" },
+        holidaysLogTable: { nativePage: "tasks", label: "מעקב סגירת חגים" },
+        holidaySwapManagerContainer: { nativePage: "tasks", label: "ניהול החלפות חג" },
+        employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
       };
       window.WIDGET_PAGES = [
         { id: "tasks", label: "משימות וימים מיוחדים" },
@@ -36,8 +36,8 @@
       ];
       // הגריד תמיד 4 עמודות רוחב, עד 2 שורות גובה — מספר קבוע וברור, לא
       // תלוי כמה נכנס למסך (בניגוד לגרסה הקודמת עם auto-fill)
-      window.WIDGET_GRID_COLS = 4;
-      window.WIDGET_GRID_ROWS_MAX = 2;
+      window.WIDGET_GRID_COLS = 5;
+      window.WIDGET_GRID_ROWS_MAX = 3;
 
       window._loadWidgetPrefs = function () {
         try {
@@ -67,6 +67,68 @@
         return grid;
       };
 
+      // כפתור "פאנלים מוסתרים" — נוצר פעם אחת מעל הגריד של עמוד נתון,
+      // מוצג/מתעדכן רק כשיש בפועל פאנל מוסתר באותו עמוד
+      window._ensureHiddenWidgetsBtn = function (pageId) {
+        const grid = window._ensureWidgetGrid(pageId);
+        if (!grid || !grid.parentElement) return null;
+        let btn = document.getElementById("hiddenWidgetsBtn-" + pageId);
+        if (!btn) {
+          btn = document.createElement("button");
+          btn.id = "hiddenWidgetsBtn-" + pageId;
+          btn.className = "btn btn-outlined hidden-widgets-btn";
+          btn.onclick = function () {
+            window.showHiddenWidgets(pageId);
+          };
+          grid.parentElement.insertBefore(btn, grid);
+        }
+        return btn;
+      };
+
+      window._updateHiddenWidgetsBtn = function (pageId) {
+        const btn = window._ensureHiddenWidgetsBtn(pageId);
+        const grid = window._ensureWidgetGrid(pageId);
+        if (!btn || !grid) return;
+        const hidden = Array.from(grid.children).filter((c) =>
+          c.classList.contains("widget-collapsed"),
+        );
+        if (hidden.length > 0) {
+          btn.style.display = "inline-flex";
+          btn.textContent = `🙈 פאנלים מוסתרים (${hidden.length})`;
+        } else {
+          btn.style.display = "none";
+        }
+      };
+
+      window.showHiddenWidgets = function (pageId) {
+        const grid = window._ensureWidgetGrid(pageId);
+        if (!grid) return;
+        const hidden = Array.from(grid.children).filter((c) =>
+          c.classList.contains("widget-collapsed"),
+        );
+        if (hidden.length === 0) return;
+        const optionsStr = hidden
+          .map((el, i) => {
+            const k = el.getAttribute("data-widget-key");
+            const label = (window.WIDGET_REGISTRY[k] || {}).label || k;
+            return `${i + 1}. ${label}`;
+          })
+          .join("\n");
+        const choice = prompt(
+          `אילו פאנלים להציג בחזרה?\n\n${optionsStr}\n\nהקלד מספר, או "הכל":`,
+        );
+        if (!choice) return;
+        if (choice.trim() === "הכל" || choice.trim().toLowerCase() === "all") {
+          hidden.forEach((el) =>
+            window.widgetToggleCollapse(el.getAttribute("data-widget-key")),
+          );
+          return;
+        }
+        const idx = parseInt(choice.trim(), 10) - 1;
+        const target = hidden[idx];
+        if (target) window.widgetToggleCollapse(target.getAttribute("data-widget-key"));
+      };
+
       window.widgetToggleCollapse = function (key) {
         const el = document.getElementById("widget-" + key);
         if (!el) return;
@@ -75,6 +137,10 @@
         prefs[key] = prefs[key] || {};
         prefs[key].collapsed = el.classList.contains("widget-collapsed");
         window._saveWidgetPrefs(prefs);
+        const pageEl = el.closest(".container");
+        if (pageEl && pageEl.id.startsWith("page-")) {
+          window._updateHiddenWidgetsBtn(pageEl.id.slice(5));
+        }
       };
 
       // שינוי גודל ע"י גרירת הפינה (⇲) — בדיוק כמו resize רגיל בעכבר, אבל
@@ -246,6 +312,13 @@
             })
             .forEach((w) => grid.appendChild(w));
         });
+        // כפתורי "פאנלים מוסתרים" — פעם אחת לכל עמוד שבו יש בפועל ווידג'ט
+        const pageIds = new Set(
+          Object.keys(window.WIDGET_REGISTRY).map(
+            (key) => (prefs[key] || {}).page || window.WIDGET_REGISTRY[key].nativePage,
+          ),
+        );
+        pageIds.forEach((pageId) => window._updateHiddenWidgetsBtn(pageId));
       };
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", window._applyWidgetPrefs);
@@ -2654,6 +2727,13 @@
         );
       };
 
+      window.exportHolidaysLogToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("holidaysLogTable"),
+          `מעקב_סגירת_חגים_${window._todayFileStamp()}.csv`,
+        );
+      };
+
       window.exportWeekendJusticeToCSV = function () {
         window._exportContainerTablesToCSV(
           document.getElementById("weekendJusticeTableContainer"),
@@ -3696,27 +3776,42 @@
         });
       };
 
+      window.setHolLogFilter = function (field, value) {
+        if (field === "year") window._holLogFilterYear = value;
+        else window._holLogFilterName = value;
+        window.renderHolidaysLog();
+      };
+
       window.renderHolidaysLog = function () {
         const tableContainer = document.getElementById("holidaysLogTable");
         const selectEmp = document.getElementById("holLogEmp");
+        const multiEmp = document.getElementById("holLogEmpMulti");
         if (!tableContainer || !selectEmp) return;
         const meForHol = window.loggedInWorker || window.loggedInUser;
-        // עובד — הרשימה נעולה על השם שלו בלבד (הוא רק משתבץ לעצמו)
+        // עובד — הרשימה נעולה על השם שלו בלבד (הוא רק משתבץ לעצמו), בחירה
+        // בודדת כרגיל. מנהל — בוחר כמה עובדים בבת אחת (צ'קבוקסים) כדי
+        // לרשום את כולם על אותו חג/אירוע בבת אחת.
         if (window.isWorkerMode && meForHol && meForHol.id !== "super") {
           const opt = `<option value="${meForHol.name}">${meForHol.name}</option>`;
           if (selectEmp.innerHTML !== opt) selectEmp.innerHTML = opt;
           selectEmp.value = meForHol.name;
           selectEmp.setAttribute("disabled", "true");
+          selectEmp.style.display = "block";
+          if (multiEmp) multiEmp.style.display = "none";
         } else {
-          let empOptions =
-            `<option value="">-- בחר עובד --</option>` +
-            window.staff
+          selectEmp.style.display = "none";
+          if (multiEmp) {
+            multiEmp.style.display = "flex";
+            const activeStaff = window.staff
               .filter((e) => e.isActive)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((e) => `<option value="${e.name}">${e.name}</option>`)
+              .sort((a, b) => a.name.localeCompare(b.name));
+            multiEmp.innerHTML = activeStaff
+              .map(
+                (e) =>
+                  `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal;"><input type="checkbox" class="hol-log-emp-cb" value="${window.escapeHtml(e.name)}"> ${window.escapeHtml(e.name)}</label>`,
+              )
               .join("");
-          if (selectEmp.innerHTML !== empOptions) selectEmp.innerHTML = empOptions;
-          selectEmp.removeAttribute("disabled");
+          }
         }
         const submitBtn = document.getElementById("holLogSubmitBtn");
         if (submitBtn)
@@ -3731,8 +3826,38 @@
           if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
           return;
         }
-        let html = `<table class="mobile-card-table" style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">בוצע</th><th class="task-action-btn">פעולה</th><th>החלפה</th></tr>`;
-        window.holidaysLog.forEach((log) => {
+        // סינון פנימי לתצוגה בלבד (לא נוגע בנתונים או בטבלאות/סטטיסטיקות
+        // אחרות שקוראות את window.holidaysLog ישירות)
+        window._holLogFilterYear = window._holLogFilterYear || "";
+        window._holLogFilterName = window._holLogFilterName || "";
+        const holYears = Array.from(
+          new Set(window.holidaysLog.map((l) => l.year).filter(Boolean)),
+        ).sort((a, b) => String(a).localeCompare(String(b)));
+        const holNames = Array.from(
+          new Set(window.holidaysLog.map((l) => l.name).filter(Boolean)),
+        ).sort((a, b) => a.localeCompare(b));
+        let filterHtml = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <select onchange="window.setHolLogFilter('year', this.value)" style="flex:1; min-width:100px;">
+            <option value="">כל השנים</option>
+            ${holYears.map((y) => `<option value="${window.escapeHtml(y)}" ${String(window._holLogFilterYear) === String(y) ? "selected" : ""}>${window.escapeHtml(y)}</option>`).join("")}
+          </select>
+          <select onchange="window.setHolLogFilter('name', this.value)" style="flex:1; min-width:120px;">
+            <option value="">כל העובדים</option>
+            ${holNames.map((n) => `<option value="${window.escapeHtml(n)}" ${window._holLogFilterName === n ? "selected" : ""}>${window.escapeHtml(n)}</option>`).join("")}
+          </select>
+        </div>`;
+        const displayLog = window.holidaysLog.filter(
+          (l) =>
+            (!window._holLogFilterYear || String(l.year) === String(window._holLogFilterYear)) &&
+            (!window._holLogFilterName || l.name === window._holLogFilterName),
+        );
+        let html =
+          filterHtml +
+          `<table class="mobile-card-table" style="width:100%;"><tr><th>שם</th><th>חג / אירוע</th><th>שנה</th><th class="task-action-btn">בוצע</th><th class="task-action-btn">פעולה</th><th>החלפה</th></tr>`;
+        if (displayLog.length === 0) {
+          html += `<tr><td colspan="6" data-label="" style="text-align:center; color:var(--text-muted); font-style:italic; padding:12px;">אין רישומים תואמים לסינון.</td></tr>`;
+        }
+        displayLog.forEach((log) => {
           const canSwap = window.isWorkerMode && meForHol && log.name === meForHol.name;
           const swapBtn = canSwap
             ? `<button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem;" onclick="window.requestHolidaySwap(${log.id})">🔄 בקש החלפה</button>`
@@ -3754,39 +3879,63 @@
       };
 
       window.addHolidayLog = function () {
-        let name = document.getElementById("holLogEmp").value;
         let type = document.getElementById("holLogType").value;
         let custom = document.getElementById("holLogCustom").value;
         let year = document.getElementById("holLogYear").value;
-        if (!name || !type || !year) {
-          alert("יש למלא שם עובד, סוג חג/אירוע ושנה.");
+        if (!type || !year) {
+          alert("יש למלא סוג חג/אירוע ושנה.");
           return;
         }
-        let log = {
-          id: Date.now(),
-          name,
-          type,
-          custom: type === "אחר" ? custom : "",
-          year,
-          completed: false,
-        };
-        // עדכון מקומי אופטימי — מוצג מיד
         window.holidaysLog = window.holidaysLog || [];
-        window.holidaysLog.push(log);
-        window.renderHolidaysLog();
+
         if (window.isWorkerMode) {
-          // עובד אנונימי לא יכול לכתוב ל-holidaysLog ישירות — נכתב כבקשה,
-          // המנהל הראשי מיישם בפועל כשהוא מחובר (כמו התנדבות למשימה)
+          // עובד — נשאר בדיוק כמו קודם: רישום יחיד לעצמו, כבקשה לאישור המנהל
+          let name = document.getElementById("holLogEmp").value;
+          if (!name) {
+            alert("יש למלא שם עובד, סוג חג/אירוע ושנה.");
+            return;
+          }
+          let log = {
+            id: Date.now(),
+            name,
+            type,
+            custom: type === "אחר" ? custom : "",
+            year,
+            completed: false,
+          };
+          window.holidaysLog.push(log);
+          window.renderHolidaysLog();
           if (typeof window.saveToCloud === "function")
             window.saveToCloud("holidaySignupRequests/" + log.id, log);
           alert("✅ נרשמת לחג! (יתעדכן סופית כשהמנהל הראשי יתחבר)");
-        } else if (typeof window.saveToCloud === "function") {
-          window.saveToCloud("holidaysLog", window.holidaysLog);
+        } else {
+          // מנהל — אפשר לבחור כמה עובדים בבת אחת; נוצר רישום נפרד לכל אחד
+          const names = Array.from(document.querySelectorAll(".hol-log-emp-cb:checked")).map(
+            (cb) => cb.value,
+          );
+          if (names.length === 0) {
+            alert("יש לבחור לפחות עובד אחד.");
+            return;
+          }
+          names.forEach((name, i) => {
+            window.holidaysLog.push({
+              id: Date.now() + i,
+              name,
+              type,
+              custom: type === "אחר" ? custom : "",
+              year,
+              completed: false,
+            });
+          });
+          // renderHolidaysLog בונה מחדש את רשימת הצ'קבוקסים מאפס, כך שהם
+          // כבר יוצאים לא-מסומנים בלי צורך לאפס אותם ידנית
+          window.renderHolidaysLog();
+          if (typeof window.saveToCloud === "function")
+            window.saveToCloud("holidaysLog", window.holidaysLog);
         }
         document.getElementById("holLogCustom").value = "";
         document.getElementById("holLogCustom").style.display = "none";
         document.getElementById("holLogType").value = "";
-        if (!window.isWorkerMode) document.getElementById("holLogEmp").value = "";
       };
 
       window.deleteHolidayLog = function (id) {
@@ -4784,6 +4933,12 @@
         });
       };
 
+      window.setTaskListFilter = function (field, value) {
+        if (field === "year") window._taskListFilterYear = value;
+        else window._taskListFilterName = value;
+        window.renderTasks();
+      };
+
       window.renderTasks = function () {
         let assigneeHtml = `<option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>`;
         window.staff
@@ -4830,20 +4985,64 @@
         if (window.systemTasks.length === 0) {
           html += `<div style="text-align:center; color:var(--text-muted); padding:20px;">אין משימות פתוחות כרגע.</div>`;
         } else {
+          // סינון פנימי לתצוגה בלבד — לא נוגע בנתונים עצמם
+          window._taskListFilterYear = window._taskListFilterYear || "";
+          window._taskListFilterName = window._taskListFilterName || "";
+          const taskYears = Array.from(
+            new Set(window.systemTasks.filter((t) => t.date).map((t) => t.date.slice(0, 4))),
+          ).sort();
+          const taskNames = Array.from(
+            new Set(
+              window.systemTasks.flatMap((t) =>
+                t.assignees && t.assignees.length > 0
+                  ? t.assignees.map((a) => a.name)
+                  : t.assignee
+                    ? [t.assignee]
+                    : [],
+              ),
+            ),
+          ).sort((a, b) => a.localeCompare(b));
+          html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <select onchange="window.setTaskListFilter('year', this.value)" style="flex:1; min-width:100px;">
+              <option value="">כל השנים</option>
+              ${taskYears.map((y) => `<option value="${y}" ${window._taskListFilterYear === y ? "selected" : ""}>${y}</option>`).join("")}
+            </select>
+            <select onchange="window.setTaskListFilter('name', this.value)" style="flex:1; min-width:120px;">
+              <option value="">כל העובדים</option>
+              ${taskNames.map((n) => `<option value="${window.escapeHtml(n)}" ${window._taskListFilterName === n ? "selected" : ""}>${window.escapeHtml(n)}</option>`).join("")}
+            </select>
+          </div>`;
           // מיון לפי תאריך (מוקדם למאוחר); משימות ללא תאריך בסוף
-          let sortedTasks = [...window.systemTasks].sort((a, b) => {
-            if (!a.date && !b.date) return 0;
-            if (!a.date) return 1;
-            if (!b.date) return -1;
-            return a.date.localeCompare(b.date);
-          });
-          html = `<table class="mobile-card-table" style="width:100%; border-collapse:collapse; text-align:right; table-layout:fixed;">
+          let sortedTasks = [...window.systemTasks]
+            .filter((t) => {
+              const tYear = t.date ? t.date.slice(0, 4) : "";
+              const tNames =
+                t.assignees && t.assignees.length > 0
+                  ? t.assignees.map((a) => a.name)
+                  : t.assignee
+                    ? [t.assignee]
+                    : [];
+              return (
+                (!window._taskListFilterYear || tYear === window._taskListFilterYear) &&
+                (!window._taskListFilterName || tNames.includes(window._taskListFilterName))
+              );
+            })
+            .sort((a, b) => {
+              if (!a.date && !b.date) return 0;
+              if (!a.date) return 1;
+              if (!b.date) return -1;
+              return a.date.localeCompare(b.date);
+            });
+          html += `<table class="mobile-card-table" style="width:100%; border-collapse:collapse; text-align:right; table-layout:fixed;">
             <tr style="background:var(--md-bg);">
               <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:70px;">תאריך</th>
               <th style="padding:8px; border-bottom:2px solid var(--md-divider);">משימה</th>
               <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:80px;">עובד</th>
               <th style="padding:8px; border-bottom:2px solid var(--md-divider); width:60px;" class="task-action-btn csv-skip-col"></th>
             </tr>`;
+          if (sortedTasks.length === 0) {
+            html += `<tr><td colspan="4" data-label="" style="text-align:center; color:var(--text-muted); font-style:italic; padding:12px;">אין משימות תואמות לסינון.</td></tr>`;
+          }
           sortedTasks.forEach((t) => {
             let dateStr = t.date ? t.date.split("-").reverse().join(".") : "—";
             if (t.endDate && t.endDate > t.date)
