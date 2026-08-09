@@ -1063,6 +1063,38 @@
           content: none;
         }
       }
+      /* ===== ווידג'טים ניתנים להזזה/הסתרה/העברה בין עמודים ===== */
+      .widget-controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-bottom: 6px;
+      }
+      .widget-controls button {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        min-width: auto;
+        border-radius: 6px;
+        border: 1px solid var(--md-divider);
+        background: var(--md-bg);
+        color: var(--md-text-secondary);
+        font-size: 0.8rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .widget-controls button:hover {
+        background: var(--md-divider);
+      }
+      .widget-collapsed .widget-body {
+        display: none;
+      }
+      .widget-collapsed .widget-controls {
+        margin-bottom: 0;
+      }
       /* ===== אחידות רוחב לכל העמודים ===== */
       .container {
         width: 100%;

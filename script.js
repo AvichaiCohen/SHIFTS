@@ -10,6 +10,153 @@
           .replace(/'/g, "&#39;");
       };
 
+      // ===== ווידג'טים ניתנים להזזה/הסתרה/העברה בין עמודים =====
+      // כל טבלה/פאנל בעמודי "משימות" ו"בקשות" עטוף ב-HTML סטטי עם
+      // id="widget-<key>" ו-data-widget-key="<key>" (ר' index.html). המערכת
+      // כאן רק קוראת/כותבת מצב (עמוד נוכחי, מוסתר, סדר) ב-localStorage
+      // ומזיזה את אלמנט ה-DOM עצמו — אין רינדור כפול, שום שינוי בפונקציות
+      // הרינדור הקיימות (renderTasks/renderRequestsPage וכו').
+      window.WIDGET_REGISTRY = {
+        pendingRequestsQueue: { nativePage: "requests" },
+        requestsTableContainer: { nativePage: "requests" },
+        taskStatsContainer: { nativePage: "tasks" },
+        tasksList: { nativePage: "tasks" },
+        taskSwapManagerContainer: { nativePage: "tasks" },
+        holidaysLogTable: { nativePage: "tasks" },
+        holidaySwapManagerContainer: { nativePage: "tasks" },
+        employeeSummaryContent: { nativePage: "tasks" },
+      };
+      window.WIDGET_PAGES = [
+        { id: "tasks", label: "משימות וימים מיוחדים" },
+        { id: "requests", label: "אישור בקשות" },
+        { id: "staff", label: "צוות עובדים" },
+        { id: "demands", label: "דרישות כוח" },
+        { id: "rules", label: "הגדרות" },
+      ];
+
+      window._loadWidgetPrefs = function () {
+        try {
+          return JSON.parse(localStorage.getItem("widget_layout_v1")) || {};
+        } catch (e) {
+          return {};
+        }
+      };
+      window._saveWidgetPrefs = function (prefs) {
+        try {
+          localStorage.setItem("widget_layout_v1", JSON.stringify(prefs));
+        } catch (e) {}
+      };
+
+      window.widgetToggleCollapse = function (key) {
+        const el = document.getElementById("widget-" + key);
+        if (!el) return;
+        el.classList.toggle("widget-collapsed");
+        const prefs = window._loadWidgetPrefs();
+        prefs[key] = prefs[key] || {};
+        prefs[key].collapsed = el.classList.contains("widget-collapsed");
+        window._saveWidgetPrefs(prefs);
+      };
+
+      // הזזה בסדר בין ווידג'טים אחרים בלבד (data-widget-key), בלי לגעת
+      // באלמנטים אחרים שנמצאים באותו הורה (למשל טפסים/כותרות)
+      window.widgetMoveOrder = function (key, direction) {
+        const el = document.getElementById("widget-" + key);
+        if (!el || !el.parentElement) return;
+        const siblings = Array.from(el.parentElement.children).filter((c) =>
+          c.hasAttribute("data-widget-key"),
+        );
+        const idx = siblings.indexOf(el);
+        const targetIdx = idx + direction;
+        if (targetIdx < 0 || targetIdx >= siblings.length) return;
+        const targetEl = siblings[targetIdx];
+        if (direction < 0) el.parentElement.insertBefore(el, targetEl);
+        else el.parentElement.insertBefore(targetEl, el);
+        window._saveWidgetOrderForParent(el.parentElement);
+      };
+
+      // שומר את סדר הווידג'טים הנוכחי בתוך הורה נתון (לפי מיקום ב-DOM בפועל)
+      window._saveWidgetOrderForParent = function (parentEl) {
+        const prefs = window._loadWidgetPrefs();
+        Array.from(parentEl.children)
+          .filter((c) => c.hasAttribute("data-widget-key"))
+          .forEach((c, i) => {
+            const k = c.getAttribute("data-widget-key");
+            prefs[k] = prefs[k] || {};
+            prefs[k].order = i;
+          });
+        window._saveWidgetPrefs(prefs);
+      };
+
+      window.widgetMoveToPage = function (key) {
+        const el = document.getElementById("widget-" + key);
+        if (!el) return;
+        const optionsStr = window.WIDGET_PAGES.map(
+          (p, i) => `${i + 1}. ${p.label}`,
+        ).join("\n");
+        const choice = prompt(`להעביר את הפאנל לאיזה עמוד?\n\n${optionsStr}\n\nהקלד מספר:`);
+        if (!choice) return;
+        const idx = parseInt(choice.trim(), 10) - 1;
+        const target = window.WIDGET_PAGES[idx];
+        if (!target) {
+          alert("בחירה לא תקינה.");
+          return;
+        }
+        const pageEl = document.getElementById("page-" + target.id);
+        if (!pageEl) return;
+        pageEl.appendChild(el);
+        window._saveWidgetOrderForParent(el.parentElement);
+        const prefs = window._loadWidgetPrefs();
+        prefs[key] = prefs[key] || {};
+        prefs[key].page = target.id;
+        window._saveWidgetPrefs(prefs);
+        alert(`✅ הועבר לעמוד "${target.label}". אפשר למצוא אותו שם מעכשיו.`);
+      };
+
+      // מריץ פעם אחת בעליית האפליקציה — מיישם עמוד/הסתרה/סדר שמורים על כל
+      // הווידג'טים לפי מה ששמור אצל המשתמש הזה במכשיר הזה (localStorage)
+      window._applyWidgetPrefs = function () {
+        const prefs = window._loadWidgetPrefs();
+        Object.keys(window.WIDGET_REGISTRY).forEach((key) => {
+          const el = document.getElementById("widget-" + key);
+          if (!el) return;
+          const p = prefs[key];
+          if (!p) return;
+          if (p.page && p.page !== window.WIDGET_REGISTRY[key].nativePage) {
+            const pageEl = document.getElementById("page-" + p.page);
+            if (pageEl) pageEl.appendChild(el);
+          }
+          if (p.collapsed) el.classList.add("widget-collapsed");
+        });
+        // סדר — אחרי שכל הווידג'טים כבר בעמוד הנכון, ממיינים כל קבוצת אחים
+        // לפי order השמור
+        const parents = new Set();
+        Object.keys(window.WIDGET_REGISTRY).forEach((key) => {
+          const el = document.getElementById("widget-" + key);
+          if (el && el.parentElement) parents.add(el.parentElement);
+        });
+        parents.forEach((parentEl) => {
+          const widgets = Array.from(parentEl.children).filter((c) =>
+            c.hasAttribute("data-widget-key"),
+          );
+          widgets
+            .slice()
+            .sort((a, b) => {
+              const oa = (prefs[a.getAttribute("data-widget-key")] || {}).order;
+              const ob = (prefs[b.getAttribute("data-widget-key")] || {}).order;
+              if (oa == null && ob == null) return 0;
+              if (oa == null) return 1;
+              if (ob == null) return -1;
+              return oa - ob;
+            })
+            .forEach((w) => parentEl.appendChild(w));
+        });
+      };
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", window._applyWidgetPrefs);
+      } else {
+        window._applyWidgetPrefs();
+      }
+
       window.getSunday = function (offset) {
         let d = new Date();
         let day = d.getDay();

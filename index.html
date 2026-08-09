@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260805a";
+        var BUILD = "20260809a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260805a" />
+    <link rel="stylesheet" href="style.css?v=20260809a" />
   </head>
   <body>
     <div
@@ -1779,11 +1779,23 @@
           <div id="myTaskSwapsContainer"></div>
           <div style="display: flex; gap: 20px; flex-wrap: wrap">
             <div style="flex: 1; min-width: 300px">
-              <div class="card-paper">
-                <h3 style="margin-top: 0; color: var(--md-primary)">
-                  🏆 סטטוס משימות וחגים
-                </h3>
-                <div id="taskStatsContainer"></div>
+              <div
+                class="card-paper"
+                id="widget-taskStatsContainer"
+                data-widget-key="taskStatsContainer"
+              >
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('taskStatsContainer',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('taskStatsContainer',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskStatsContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskStatsContainer')">⇥</button>
+                </div>
+                <div class="widget-body">
+                  <h3 style="margin-top: 0; color: var(--md-primary)">
+                    🏆 סטטוס משימות וחגים
+                  </h3>
+                  <div id="taskStatsContainer"></div>
+                </div>
               </div>
               <div
                 class="card-paper manager-only"
@@ -1921,47 +1933,69 @@
                   </div>
                 </div>
               </div>
-              <div class="card-paper">
-                <div
-                  style="
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                  "
-                >
-                  <h3 style="margin: 0; color: var(--md-primary)">
-                    📋 רשימת משימות
-                  </h3>
-                  <button
-                    class="btn btn-outlined manager-only"
-                    style="padding: 4px 12px; font-size: 0.85rem"
-                    onclick="window.exportTasksToCSV()"
-                  >
-                    ⬇️ ייצוא לאקסל
-                  </button>
+              <div
+                class="card-paper"
+                id="widget-tasksList"
+                data-widget-key="tasksList"
+              >
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('tasksList',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('tasksList',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('tasksList')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('tasksList')">⇥</button>
                 </div>
-                <div id="tasksList" class="task-list"></div>
+                <div class="widget-body">
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      flex-wrap: wrap;
+                      gap: 8px;
+                    "
+                  >
+                    <h3 style="margin: 0; color: var(--md-primary)">
+                      📋 רשימת משימות
+                    </h3>
+                    <button
+                      class="btn btn-outlined manager-only"
+                      style="padding: 4px 12px; font-size: 0.85rem"
+                      onclick="window.exportTasksToCSV()"
+                    >
+                      ⬇️ ייצוא לאקסל
+                    </button>
+                  </div>
+                  <div id="tasksList" class="task-list"></div>
+                </div>
               </div>
               <div
                 class="card-paper manager-only"
+                id="widget-taskSwapManagerContainer"
+                data-widget-key="taskSwapManagerContainer"
                 style="border-right: 4px solid #7c3aed"
               >
-                <h3 style="margin-top: 0; color: #7c3aed">
-                  🔄 בקשות החלפת משימות (ממתינות לאישורך)
-                </h3>
-                <p
-                  style="
-                    font-size: 0.85rem;
-                    margin-top: 0;
-                    color: var(--md-text-secondary);
-                  "
-                >
-                  מוצגות רק בקשות שהעובד המוזמן כבר אישר — אישור סופי שלך מבצע
-                  את ההחלפה בפועל.
-                </p>
-                <div id="taskSwapManagerContainer"></div>
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('taskSwapManagerContainer',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('taskSwapManagerContainer',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskSwapManagerContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskSwapManagerContainer')">⇥</button>
+                </div>
+                <div class="widget-body">
+                  <h3 style="margin-top: 0; color: #7c3aed">
+                    🔄 בקשות החלפת משימות (ממתינות לאישורך)
+                  </h3>
+                  <p
+                    style="
+                      font-size: 0.85rem;
+                      margin-top: 0;
+                      color: var(--md-text-secondary);
+                    "
+                  >
+                    מוצגות רק בקשות שהעובד המוזמן כבר אישר — אישור סופי שלך
+                    מבצע את ההחלפה בפועל.
+                  </p>
+                  <div id="taskSwapManagerContainer"></div>
+                </div>
               </div>
             </div>
 
@@ -1969,8 +2003,17 @@
               <div id="myHolidaySwapsContainer"></div>
               <div
                 class="card-paper"
+                id="widget-holidaysLogTable"
+                data-widget-key="holidaysLogTable"
                 style="border-top: 4px solid var(--md-secondary)"
               >
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('holidaysLogTable',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('holidaysLogTable',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaysLogTable')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaysLogTable')">⇥</button>
+                </div>
+                <div class="widget-body">
                 <h3 style="margin-top: 0; color: var(--md-secondary)">
                   מעקב סגירת חגים וימים מיוחדים
                 </h3>
@@ -2037,33 +2080,54 @@
                   </div>
                 </div>
                 <div id="holidaysLogTable"></div>
+                </div>
               </div>
 
               <div
                 class="card-paper manager-only"
+                id="widget-holidaySwapManagerContainer"
+                data-widget-key="holidaySwapManagerContainer"
                 style="border-right: 4px solid #7c3aed"
               >
-                <h3 style="margin-top: 0; color: #7c3aed">
-                  🔄 בקשות החלפת חגים (ממתינות לאישורך)
-                </h3>
-                <div id="holidaySwapManagerContainer"></div>
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('holidaySwapManagerContainer',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('holidaySwapManagerContainer',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaySwapManagerContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaySwapManagerContainer')">⇥</button>
+                </div>
+                <div class="widget-body">
+                  <h3 style="margin-top: 0; color: #7c3aed">
+                    🔄 בקשות החלפת חגים (ממתינות לאישורך)
+                  </h3>
+                  <div id="holidaySwapManagerContainer"></div>
+                </div>
               </div>
 
               <div
                 class="card-paper"
+                id="widget-employeeSummaryContent"
+                data-widget-key="employeeSummaryContent"
                 style="border-top: 4px solid var(--md-primary)"
               >
-                <h3 style="margin-top: 0; color: var(--md-primary)">
-                  👤 סיכום לפי עובד
-                </h3>
-                <select
-                  id="employeeSummarySelect"
-                  onchange="window.renderEmployeeSummary()"
-                  style="width: 100%; margin-bottom: 14px; font-weight: bold"
-                >
-                  <option value="">-- בחר עובד --</option>
-                </select>
-                <div id="employeeSummaryContent"></div>
+                <div class="widget-controls">
+                  <button title="הזז למעלה" onclick="window.widgetMoveOrder('employeeSummaryContent',-1)">▲</button>
+                  <button title="הזז למטה" onclick="window.widgetMoveOrder('employeeSummaryContent',1)">▼</button>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('employeeSummaryContent')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('employeeSummaryContent')">⇥</button>
+                </div>
+                <div class="widget-body">
+                  <h3 style="margin-top: 0; color: var(--md-primary)">
+                    👤 סיכום לפי עובד
+                  </h3>
+                  <select
+                    id="employeeSummarySelect"
+                    onchange="window.renderEmployeeSummary()"
+                    style="width: 100%; margin-bottom: 14px; font-weight: bold"
+                  >
+                    <option value="">-- בחר עובד --</option>
+                  </select>
+                  <div id="employeeSummaryContent"></div>
+                </div>
               </div>
 
               <!-- טבלת הוגנות סופ"ש -->
@@ -2208,34 +2272,58 @@
           </div>
           <div
             class="card-paper"
+            id="widget-pendingRequestsQueue"
+            data-widget-key="pendingRequestsQueue"
             style="
               border-right: 4px solid #ea580c;
               overflow-x: auto;
               -webkit-overflow-scrolling: touch;
             "
           >
-            <h3 style="color: #ea580c; margin-bottom: 12px">
-              📥 בקשות עובדים הממתינות לאישורך
-            </h3>
-            <div
-              id="pendingRequestsQueue"
-              style="
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                max-width: 100%;
-              "
-            >
-              אין בקשות ממתינות כרגע.
+            <div class="widget-controls">
+              <button title="הזז למעלה" onclick="window.widgetMoveOrder('pendingRequestsQueue',-1)">▲</button>
+              <button title="הזז למטה" onclick="window.widgetMoveOrder('pendingRequestsQueue',1)">▼</button>
+              <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('pendingRequestsQueue')">👁</button>
+              <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('pendingRequestsQueue')">⇥</button>
+            </div>
+            <div class="widget-body">
+              <h3 style="color: #ea580c; margin-bottom: 12px">
+                📥 בקשות עובדים הממתינות לאישורך
+              </h3>
+              <div
+                id="pendingRequestsQueue"
+                style="
+                  overflow-x: auto;
+                  -webkit-overflow-scrolling: touch;
+                  max-width: 100%;
+                "
+              >
+                אין בקשות ממתינות כרגע.
+              </div>
             </div>
           </div>
           <div
-            id="requestsTableContainer"
-            style="
-              overflow-x: auto;
-              -webkit-overflow-scrolling: touch;
-              max-width: 100%;
-            "
-          ></div>
+            class="card-paper"
+            id="widget-requestsTableContainer"
+            data-widget-key="requestsTableContainer"
+          >
+            <div class="widget-controls">
+              <button title="הזז למעלה" onclick="window.widgetMoveOrder('requestsTableContainer',-1)">▲</button>
+              <button title="הזז למטה" onclick="window.widgetMoveOrder('requestsTableContainer',1)">▼</button>
+              <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('requestsTableContainer')">👁</button>
+              <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('requestsTableContainer')">⇥</button>
+            </div>
+            <div class="widget-body">
+              <div
+                id="requestsTableContainer"
+                style="
+                  overflow-x: auto;
+                  -webkit-overflow-scrolling: touch;
+                  max-width: 100%;
+                "
+              ></div>
+            </div>
+          </div>
         </div>
 
         <div id="page-rules" class="container">
@@ -4504,6 +4592,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260805a"></script>
+    <script src="script.js?v=20260809a"></script>
   </body>
 </html>
