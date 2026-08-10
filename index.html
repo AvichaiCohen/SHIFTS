@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260809e";
+        var BUILD = "20260810a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260809e" />
+    <link rel="stylesheet" href="style.css?v=20260810a" />
   </head>
   <body>
     <div
@@ -3938,7 +3938,31 @@
           "
         >
           <strong style="color: var(--md-primary)">📤 שליחת הודעה</strong>
-          <select id="notifTargetSelect" style="width: 100%"></select>
+          <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; cursor: pointer">
+            <input type="checkbox" id="notifTargetAll" onchange="window._toggleNotifTargetAll(this.checked)" />
+            📢 לכל הצוות
+          </label>
+          <div id="notifTargetGroups" style="display: flex; flex-wrap: wrap; gap: 10px"></div>
+          <details>
+            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--md-text-secondary)">
+              בחירת עובדים ספציפיים
+            </summary>
+            <div
+              id="notifTargetIndividuals"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                max-height: 140px;
+                overflow-y: auto;
+                margin-top: 6px;
+                background: var(--md-surface);
+                border: 1px solid var(--md-divider);
+                border-radius: 6px;
+                padding: 8px;
+              "
+            ></div>
+          </details>
           <input
             type="text"
             id="notifTitleInput"
@@ -4639,6 +4663,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260809e"></script>
+    <script src="script.js?v=20260810a"></script>
   </body>
 </html>

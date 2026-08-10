@@ -835,16 +835,41 @@
           .join("");
       };
 
+      // בונה את בוחר היעדים: "כל הצוות" + קבוצות לפי תפקיד + עובדים ספציפיים.
+      // אפשר לשלב כמה קבוצות/עובדים יחד (לא רק ברירה אחת כמו קודם)
       window._populateNotifTargets = function () {
-        const sel = document.getElementById("notifTargetSelect");
-        if (!sel) return;
-        sel.innerHTML =
-          `<option value="all">📢 לכל הצוות</option>` +
-          (window.staff || [])
+        const groupsEl = document.getElementById("notifTargetGroups");
+        const indivEl = document.getElementById("notifTargetIndividuals");
+        const allCb = document.getElementById("notifTargetAll");
+        if (allCb) allCb.checked = false;
+        if (groupsEl) {
+          groupsEl.innerHTML = (window.roleTypes || [])
+            .map(
+              (rt) =>
+                `<label style="display:flex; align-items:center; gap:5px; font-size:0.88rem; cursor:pointer;"><input type="checkbox" class="notif-target-group-cb" value="${window.escapeHtml(rt)}"> 👥 ${window.escapeHtml(rt)}</label>`,
+            )
+            .join("");
+        }
+        if (indivEl) {
+          indivEl.innerHTML = (window.staff || [])
             .filter((e) => e.isActive !== false)
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((e) => `<option value="${e.id}">${e.name}</option>`)
+            .map(
+              (e) =>
+                `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal;"><input type="checkbox" class="notif-target-emp-cb" value="${e.id}"> ${window.escapeHtml(e.name)} <span style="color:var(--md-text-secondary); font-size:0.8rem;">(${window.escapeHtml(e.type)})</span></label>`,
+            )
             .join("");
+        }
+        window._toggleNotifTargetAll(false);
+      };
+
+      // כש"כל הצוות" מסומן, שאר הבחירות מיותרות — מנוטרלות ויזואלית
+      window._toggleNotifTargetAll = function (checked) {
+        document
+          .querySelectorAll(".notif-target-group-cb, .notif-target-emp-cb")
+          .forEach((cb) => {
+            cb.disabled = checked;
+          });
       };
 
       // שולח הודעה בפועל לרשימת empId נתונה — פונקציית ליבה, משמשת גם מקומות
@@ -860,22 +885,39 @@
       };
 
       window.sendGeneralNotification = function () {
-        const targetSel = document.getElementById("notifTargetSelect");
-        const target = targetSel ? targetSel.value : "";
         const title = document.getElementById("notifTitleInput").value.trim();
         const body = document.getElementById("notifBodyInput").value.trim();
         if (!title || !body) {
           alert("יש למלא כותרת ותוכן.");
           return;
         }
-        const empIds =
-          target === "all"
-            ? (window.staff || []).filter((e) => e.isActive !== false).map((e) => e.id)
-            : [Number(target)];
+        const allChecked = document.getElementById("notifTargetAll")?.checked;
+        let empIds;
+        if (allChecked) {
+          empIds = (window.staff || []).filter((e) => e.isActive !== false).map((e) => e.id);
+        } else {
+          const checkedGroups = Array.from(
+            document.querySelectorAll(".notif-target-group-cb:checked"),
+          ).map((cb) => cb.value);
+          const fromGroups =
+            checkedGroups.length > 0
+              ? (window.staff || [])
+                  .filter((e) => e.isActive !== false && checkedGroups.includes(e.type))
+                  .map((e) => e.id)
+              : [];
+          const fromIndividuals = Array.from(
+            document.querySelectorAll(".notif-target-emp-cb:checked"),
+          ).map((cb) => Number(cb.value));
+          empIds = Array.from(new Set([...fromGroups, ...fromIndividuals]));
+        }
+        if (empIds.length === 0) {
+          alert("יש לבחור 'לכל הצוות', קבוצה אחת לפחות, או עובד ספציפי.");
+          return;
+        }
         window._sendNotificationTo(empIds, title, body, "general");
         document.getElementById("notifTitleInput").value = "";
         document.getElementById("notifBodyInput").value = "";
-        alert("✅ ההודעה נשלחה.");
+        alert(`✅ ההודעה נשלחה ל-${empIds.length} עובדים.`);
       };
 
       window.triggerUnsavedChanges = function () {
@@ -2451,17 +2493,98 @@
       };
 
       window.clearScheduleWithPrompt = function () {
-        if (confirm("בטוח שברצונך למחוק את כל הלוח ולהתחיל מאפס?")) {
-          let pub = window.currentSchedule.isPublished;
-          window.currentSchedule = {
-            isPublished: pub,
-            special: {},
-            dailyNotes: {},
-          };
-          window.currentNotesLog = {};
-          window.initSchedule();
-          window.triggerUnsavedChanges();
+        const choice = prompt(
+          'איך למחוק את הלוח?\n\n1. מחיקה מלאה — הכל, כולל משמרות/עובדים נעולים\n2. רק תאים לא נעולים — מה שנעול (🔒) יישאר בדיוק כמו שהוא\n\nהקלד 1 או 2:',
+        );
+        if (!choice) return;
+        const trimmed = choice.trim();
+        if (trimmed === "1") {
+          if (!confirm('למחוק את כל הלוח, כולל הכל שנעול? הפעולה לא הפיכה (מלבד "בטל שינויים" לפני שמירה).'))
+            return;
+          window._clearScheduleAll();
+        } else if (trimmed === "2") {
+          if (!confirm("למחוק את כל התאים הלא נעולים? מה שנעול יישאר."))
+            return;
+          window._clearScheduleUnlockedOnly();
+        } else {
+          alert("בחירה לא תקינה — יש להקליד 1 או 2.");
         }
+      };
+
+      // מחיקה מלאה — כולל משמרות/עובדים נעולים
+      window._clearScheduleAll = function () {
+        let pub = window.currentSchedule.isPublished;
+        window.currentSchedule = {
+          isPublished: pub,
+          special: {},
+          dailyNotes: {},
+        };
+        window.currentNotesLog = {};
+        window.initSchedule();
+        window.triggerUnsavedChanges();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+      };
+
+      // מחיקה של תאים לא נעולים בלבד — אותה לוגיקת שימור נעילות כמו הצעד
+      // הראשון של generate(false) ("צור מחדש"), רק בלי שלב ההשלמה האוטומטית
+      // אחריו — כאן רוצים למחוק, לא לשבץ מחדש
+      window._clearScheduleUnlockedOnly = function () {
+        let oldSched = window.currentSchedule;
+        let pub = oldSched.isPublished;
+        window.currentSchedule = {
+          isPublished: pub,
+          special: oldSched.special || {},
+          dailyNotes: oldSched.dailyNotes || {},
+          staff: window.staff,
+          matalUnderstaff: oldSched.matalUnderstaff || false,
+          isEmergencyMode: oldSched.isEmergencyMode || false,
+          emergencyStartDate: oldSched.emergencyStartDate || null,
+          emergencyEndDate: oldSched.emergencyEndDate || null,
+          emergencyShiftHours: oldSched.emergencyShiftHours || 24,
+          matalUnderstaffStartDate: oldSched.matalUnderstaffStartDate || null,
+          matalUnderstaffEndDate: oldSched.matalUnderstaffEndDate || null,
+          dayHighlights: oldSched.dayHighlights || {},
+          holidayDays: oldSched.holidayDays || [],
+        };
+        window.currentNotesLog = {};
+        window.initSchedule();
+
+        const _oldShiftLocks = oldSched.shiftLocks || {};
+        window.currentSchedule.shiftLocks = JSON.parse(JSON.stringify(_oldShiftLocks));
+        days.forEach((d) => {
+          window.currentShifts.forEach((s) => {
+            baseLocs.forEach((loc) => {
+              if (oldSched[`${d}-${s}`] && oldSched[`${d}-${s}`][loc]) {
+                const shiftKey = `${d}-${s}-${loc}`;
+                if (_oldShiftLocks[shiftKey]) {
+                  window.currentSchedule[`${d}-${s}`][loc] = [...oldSched[`${d}-${s}`][loc]];
+                } else {
+                  let lockedEmps = oldSched[`${d}-${s}`][loc].filter((e) => e.isLocked);
+                  if (lockedEmps.length > 0) {
+                    window.currentSchedule[`${d}-${s}`][loc] = lockedEmps;
+                  }
+                }
+              }
+            });
+          });
+          if (oldSched.matalUnderstaff === true && oldSched[`${d}-24 שעות`] && oldSched[`${d}-24 שעות`][LOC_MATAL]) {
+            const shiftKey24 = `${d}-24 שעות-${LOC_MATAL}`;
+            if (_oldShiftLocks[shiftKey24]) {
+              window.currentSchedule[`${d}-24 שעות`][LOC_MATAL] = [...oldSched[`${d}-24 שעות`][LOC_MATAL]];
+            } else {
+              let lockedEmps24 = oldSched[`${d}-24 שעות`][LOC_MATAL].filter((e) => e.isLocked);
+              if (lockedEmps24.length > 0)
+                window.currentSchedule[`${d}-24 שעות`][LOC_MATAL] = lockedEmps24;
+            }
+          }
+        });
+
+        window.triggerUnsavedChanges();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        if (typeof window.renderMobileCards === "function")
+          window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
       };
 
       // מחזיר רשימת סטטוסים מיוחדים ליום נתון (לגסי + גלובלי + משימות)
