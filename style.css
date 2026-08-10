@@ -1103,10 +1103,17 @@
         line-height: 1;
         cursor: grab;
         user-select: none;
+        touch-action: none;
       }
       .widget-drag-handle:active {
         cursor: grabbing;
         background: var(--md-divider);
+      }
+      /* בזמן גרירה חופשית — מודגש מעל השאר כדי שיהיה ברור מה זז */
+      [data-widget-key].widget-dragging {
+        z-index: 5;
+        opacity: 0.85;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
       }
       /* פאנל מוסתר נעלם לגמרי מהגריד (לא תופס משבצת ריקה) — חוזר דרך כפתור
          "פאנלים מוסתרים" שמופיע מעל הגריד */
@@ -1130,6 +1137,16 @@
       @media (max-width: 1024px) {
         .widget-grid {
           grid-template-columns: 1fr;
+        }
+        /* במובייל הגריד קורס לעמודה אחת — מבטלים את המיקום המפורש
+           (colStart/rowStart) שנקבע לתצוגת דסקטופ, אחרת פאנל עם עמודה 3-4
+           היה "נעלם" ימינה מחוץ לעמודה היחידה. סדר הערימה נקבע ב-DOM. */
+        [data-widget-key] {
+          grid-column: 1 / -1 !important;
+          grid-row: auto !important;
+        }
+        .widget-drag-handle {
+          display: none;
         }
       }
       [data-widget-key] {

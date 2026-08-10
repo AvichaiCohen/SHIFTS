@@ -10,13 +10,15 @@
           .replace(/'/g, "&#39;");
       };
 
-      // ===== ווידג'טים בגריד — ניתנים להזזה/הסתרה/העברה בין עמודים/שינוי גודל =====
-      // כל טבלה/פאנל בעמודי "משימות" ו"בקשות" עטוף ב-HTML סטטי עם
-      // id="widget-<key>" ו-data-widget-key="<key>" (ר' index.html). בעליית
-      // האפליקציה כל הווידג'טים עוברים לתוך div.widget-grid (נוצר אוטומטית
-      // בעמוד היעד שלהם) — כך שאפשר כמה בשורה, לא רק אחד. המערכת רק קוראת/
-      // כותבת מצב (עמוד, מוסתר, סדר, גודל) ב-localStorage ומזיזה את אלמנט
-      // ה-DOM עצמו — אין רינדור כפול, שום שינוי בפונקציות הרינדור הקיימות.
+      // ===== ווידג'טים בגריד — מיקום חופשי (גרירה ל-2D), הסתרה, שינוי גודל,
+      // העברה בין עמודים ===== כל טבלה/פאנל בעמודי "משימות" ו"בקשות" עטוף
+      // ב-HTML סטטי עם id="widget-<key>" ו-data-widget-key="<key>" (ר'
+      // index.html). בעליית האפליקציה כל הווידג'טים עוברים לתוך div.widget-grid
+      // (נוצר אוטומטית בעמוד היעד שלהם). לכל ווידג' יש מיקום מפורש בגריד
+      // (colStart/rowStart, לא רק סדר) שנשמר ב-localStorage — כך שגרירה היא
+      // תנועה חופשית לכל משבצת, אפשר להשאיר משבצות ריקות, ואף אחד אחר לא זז
+      // אוטומטית. המערכת רק קוראת/כותבת מצב (עמוד, מוסתר, מיקום, גודל) —
+      // אין רינדור כפול, שום שינוי בפונקציות הרינדור הקיימות.
       window.WIDGET_REGISTRY = {
         pendingRequestsQueue: { nativePage: "requests", label: "בקשות ממתינות לאישור" },
         requestsTableContainer: { nativePage: "requests", label: "העדפות / אילוצים / ימי לימודים" },
@@ -36,8 +38,10 @@
         { id: "demands", label: "דרישות כוח" },
         { id: "rules", label: "הגדרות" },
       ];
-      // הגריד תמיד 4 עמודות רוחב, עד 2 שורות גובה — מספר קבוע וברור, לא
-      // תלוי כמה נכנס למסך (בניגוד לגרסה הקודמת עם auto-fill)
+      // הגריד תמיד 5 עמודות רוחב — מספר קבוע וברור, לא תלוי כמה נכנס למסך
+      // (בניגוד לגרסה הקודמת עם auto-fill). מספר השורות לא מוגבל (הגריד גדל
+      // כלפי מטה לפי הצורך) — WIDGET_GRID_ROWS_MAX הוא רק תקרה לגובה של
+      // ווידג' בודד בשינוי גודל (עד 3 שורות לפאנל אחד).
       window.WIDGET_GRID_COLS = 5;
       window.WIDGET_GRID_ROWS_MAX = 3;
 
@@ -145,15 +149,122 @@
         }
       };
 
-      // שינוי גודל ע"י גרירת הפינה (⇲) — בדיוק כמו resize רגיל בעכבר, אבל
-      // התוצאה תמיד "נתפסת" (snap) למספר משבצות שלם בגריד, לא רוחב חופשי.
-      // עובד גם במגע (Pointer Events, לא HTML5 drag) — פעיל רק מדסקטופ ומעלה.
+      // בודק אם מלבן (colStart/rowStart/colSpan/rowSpan) חופף לווידג' אחר
+      // כלשהו (חוץ מ-selfKey) שכבר יושב באותו גריד — משמש גם לגרירה חופשית
+      // וגם לשינוי גודל, כדי שלא "נדרסים" זה על זה (במקום ריבוץ אוטומטי).
+      window._widgetPositionCollides = function (
+        grid,
+        selfKey,
+        colStart,
+        rowStart,
+        colSpan,
+        rowSpan,
+      ) {
+        if (!grid) return false;
+        const prefs = window._loadWidgetPrefs();
+        const others = Array.from(grid.children).filter(
+          (c) =>
+            c.hasAttribute("data-widget-key") &&
+            c.getAttribute("data-widget-key") !== selfKey &&
+            !c.classList.contains("widget-collapsed"),
+        );
+        for (const el of others) {
+          const p = prefs[el.getAttribute("data-widget-key")] || {};
+          const oColStart = p.colStart || 1;
+          const oRowStart = p.rowStart || 1;
+          const oColSpan = p.colSpan || 2;
+          const oRowSpan = p.rowSpan || 1;
+          const overlap =
+            colStart < oColStart + oColSpan &&
+            colStart + colSpan > oColStart &&
+            rowStart < oRowStart + oRowSpan &&
+            rowStart + rowSpan > oRowStart;
+          if (overlap) return true;
+        }
+        return false;
+      };
+
+      // מיקום ראשוני (bin-packing) לכל ווידג'ט בעמוד נתון שעדיין אין לו
+      // colStart/rowStart שמור — כדי שלא ייפלו כולם על אותה משבצת. רץ פעם
+      // אחת ושומר את התוצאה, כדי שהמשתמש יוכל לגרור משם הלאה בחופשיות.
+      window._autoPlaceMissingWidgets = function (pageId) {
+        const prefs = window._loadWidgetPrefs();
+        const keys = Object.keys(window.WIDGET_REGISTRY).filter((k) => {
+          const p = prefs[k] || {};
+          return (p.page || window.WIDGET_REGISTRY[k].nativePage) === pageId;
+        });
+        const occupied = new Set();
+        const mark = (c0, r0, cs, rs) => {
+          for (let c = c0; c < c0 + cs; c++)
+            for (let r = r0; r < r0 + rs; r++) occupied.add(c + ":" + r);
+        };
+        const fits = (c0, r0, cs, rs) => {
+          if (c0 + cs - 1 > window.WIDGET_GRID_COLS) return false;
+          for (let c = c0; c < c0 + cs; c++)
+            for (let r = r0; r < r0 + rs; r++)
+              if (occupied.has(c + ":" + r)) return false;
+          return true;
+        };
+        let changed = false;
+        keys.forEach((k) => {
+          const p = prefs[k] || {};
+          const colSpan = p.colSpan || 2;
+          const rowSpan = p.rowSpan || 1;
+          if (p.colStart && p.rowStart) {
+            mark(p.colStart, p.rowStart, colSpan, rowSpan);
+            return;
+          }
+          outer: for (let r = 1; r <= 60; r++) {
+            for (let c = 1; c <= window.WIDGET_GRID_COLS - colSpan + 1; c++) {
+              if (fits(c, r, colSpan, rowSpan)) {
+                prefs[k] = prefs[k] || {};
+                prefs[k].colSpan = colSpan;
+                prefs[k].rowSpan = rowSpan;
+                prefs[k].colStart = c;
+                prefs[k].rowStart = r;
+                mark(c, r, colSpan, rowSpan);
+                changed = true;
+                break outer;
+              }
+            }
+          }
+        });
+        if (changed) window._saveWidgetPrefs(prefs);
+      };
+
+      // מסדר מחדש את סדר ה-DOM בפועל בתוך גריד נתון, לפי המיקום השמור
+      // (שורה ואז עמודה) — זה לא משפיע על התצוגה בדסקטופ (שם המיקום נקבע
+      // ע"י grid-column/grid-row מפורש), אבל כן קובע את סדר הערימה במובייל
+      // (שם הגריד קורס לעמודה אחת ומסתמך על סדר ה-DOM).
+      window._reorderDomByPosition = function (grid) {
+        if (!grid) return;
+        const prefs = window._loadWidgetPrefs();
+        const widgets = Array.from(grid.children).filter((c) =>
+          c.hasAttribute("data-widget-key"),
+        );
+        widgets
+          .slice()
+          .sort((a, b) => {
+            const pa = prefs[a.getAttribute("data-widget-key")] || {};
+            const pb = prefs[b.getAttribute("data-widget-key")] || {};
+            const ra = pa.rowStart || 0;
+            const rb = pb.rowStart || 0;
+            if (ra !== rb) return ra - rb;
+            return (pa.colStart || 0) - (pb.colStart || 0);
+          })
+          .forEach((w) => grid.appendChild(w));
+      };
+
+      // שינוי גודל ע"י גרירת הפינה (⇲) — התוצאה תמיד "נתפסת" (snap) למספר
+      // משבצות שלם בגריד. אם ההרחבה הייתה נכנסת לתוך ווידג' שכן, היא נעצרת
+      // שם במקום לדרוס אותו (אין ריבוץ אוטומטי של שכנים). Pointer Events —
+      // עובד גם במגע, פעיל רק מדסקטופ ומעלה.
       window._resizeState = null;
       window.widgetResizeStart = function (ev, key) {
         ev.preventDefault();
         ev.stopPropagation();
         const el = document.getElementById("widget-" + key);
-        if (!el) return;
+        if (!el || !el.parentElement) return;
         const rect = el.getBoundingClientRect();
         const prefs = window._loadWidgetPrefs();
         const cur = prefs[key] || {};
@@ -162,10 +273,13 @@
         window._resizeState = {
           key,
           el,
+          grid: el.parentElement,
           startX: ev.clientX,
           startY: ev.clientY,
           startCol,
           startRow,
+          colStart: cur.colStart || 1,
+          rowStart: cur.rowStart || 1,
           cellW: rect.width / startCol,
           cellH: rect.height / startRow,
           pendingCol: startCol,
@@ -182,10 +296,22 @@
         const dy = ev.clientY - st.startY;
         const dCols = Math.round(-dx / st.cellW);
         const dRows = Math.round(dy / st.cellH);
-        const newCol = Math.max(1, Math.min(window.WIDGET_GRID_COLS, st.startCol + dCols));
-        const newRow = Math.max(1, Math.min(window.WIDGET_GRID_ROWS_MAX, st.startRow + dRows));
-        st.el.style.gridColumn = "span " + newCol;
-        st.el.style.gridRow = "span " + newRow;
+        let newCol = Math.max(
+          1,
+          Math.min(window.WIDGET_GRID_COLS - st.colStart + 1, st.startCol + dCols),
+        );
+        let newRow = Math.max(1, Math.min(window.WIDGET_GRID_ROWS_MAX, st.startRow + dRows));
+        // אם ההגדלה הנוכחית חופפת שכן — מקטינים בהדרגה עד שאין חפיפה
+        // (מלבן קטן מהמקורי תמיד תקין, כי הפינה העליונה-ימנית לא זזה)
+        while (
+          (newCol > 1 || newRow > 1) &&
+          window._widgetPositionCollides(st.grid, st.key, st.colStart, st.rowStart, newCol, newRow)
+        ) {
+          if (newCol > 1) newCol--;
+          else newRow--;
+        }
+        st.el.style.gridColumn = st.colStart + " / span " + newCol;
+        st.el.style.gridRow = st.rowStart + " / span " + newRow;
         st.pendingCol = newCol;
         st.pendingRow = newRow;
       };
@@ -202,56 +328,87 @@
         window._saveWidgetPrefs(prefs);
       };
 
-      // גרירה חופשית של ווידג'ט להזזה — עובד בין ווידג'טים באותו גריד/עמוד
-      // המוצג כרגע (גרירה בין עמודים לא אפשרית כי רק עמוד אחד גלוי בכל רגע).
-      // תפיסה ב-⠿, גרירה לתא אחר, שחרור.
-      window._draggedWidgetKey = null;
-      window.widgetDragStart = function (ev, key) {
-        window._draggedWidgetKey = key;
-        if (ev.dataTransfer) {
-          ev.dataTransfer.effectAllowed = "move";
-          try {
-            ev.dataTransfer.setData("text/plain", key);
-          } catch (e) {}
-        }
-      };
-      window.widgetDragOver = function (ev) {
-        if (!window._draggedWidgetKey) return;
+      // גרירה חופשית של ווידג'ט לכל משבצת בגריד (לא רק החלפת מקום עם שכן) —
+      // אפשר להזיז ולהשאיר רווחים ריקים, אף אחד לא זז אוטומטית מלבד הנגרר.
+      // אם המקום שבו שוחרר תפוס ע"י ווידג' אחר — חוזר למקום המקורי.
+      // Pointer Events (לא HTML5 drag), פעיל רק מדסקטופ ומעלה.
+      window._moveState = null;
+      window.widgetMoveStart = function (ev, key) {
         ev.preventDefault();
-      };
-      window.widgetDrop = function (ev, targetKey) {
-        ev.preventDefault();
-        const sourceKey = window._draggedWidgetKey;
-        window._draggedWidgetKey = null;
-        if (!sourceKey || sourceKey === targetKey) return;
-        const sourceEl = document.getElementById("widget-" + sourceKey);
-        const targetEl = document.getElementById("widget-" + targetKey);
-        if (!sourceEl || !targetEl || !targetEl.parentElement) return;
-        targetEl.parentElement.insertBefore(sourceEl, targetEl);
-        window._saveWidgetOrderForParent(targetEl.parentElement);
-        // אם הגרירה גם העבירה את הווידג'ט לעמוד אחר (כי גוררים אל תוך גריד
-        // של עמוד אחר) — שומרים גם את שיוך העמוד
-        const pageEl = targetEl.closest(".container");
-        if (pageEl && pageEl.id.startsWith("page-")) {
-          const pageId = pageEl.id.slice(5);
-          const prefs = window._loadWidgetPrefs();
-          prefs[sourceKey] = prefs[sourceKey] || {};
-          prefs[sourceKey].page = pageId;
-          window._saveWidgetPrefs(prefs);
-        }
-      };
-
-      // שומר את סדר הווידג'טים הנוכחי בתוך הורה נתון (לפי מיקום ב-DOM בפועל)
-      window._saveWidgetOrderForParent = function (parentEl) {
+        ev.stopPropagation();
+        const el = document.getElementById("widget-" + key);
+        if (!el || !el.parentElement) return;
+        const grid = el.parentElement;
+        const gridRect = grid.getBoundingClientRect();
+        const gap = 16;
+        const cellW =
+          (gridRect.width - gap * (window.WIDGET_GRID_COLS - 1)) / window.WIDGET_GRID_COLS;
+        const rowH = 340 + gap;
         const prefs = window._loadWidgetPrefs();
-        Array.from(parentEl.children)
-          .filter((c) => c.hasAttribute("data-widget-key"))
-          .forEach((c, i) => {
-            const k = c.getAttribute("data-widget-key");
-            prefs[k] = prefs[k] || {};
-            prefs[k].order = i;
-          });
+        const cur = prefs[key] || {};
+        const colSpan = cur.colSpan || 2;
+        const rowSpan = cur.rowSpan || 1;
+        const origColStart = cur.colStart || 1;
+        const origRowStart = cur.rowStart || 1;
+        window._moveState = {
+          key,
+          el,
+          grid,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          cellW: cellW + gap,
+          rowH,
+          colSpan,
+          rowSpan,
+          origColStart,
+          origRowStart,
+          pendingColStart: origColStart,
+          pendingRowStart: origRowStart,
+        };
+        el.classList.add("widget-dragging");
+        document.addEventListener("pointermove", window._widgetMoveMove);
+        document.addEventListener("pointerup", window._widgetMoveEnd);
+      };
+      window._widgetMoveMove = function (ev) {
+        const st = window._moveState;
+        if (!st) return;
+        const dx = ev.clientX - st.startX;
+        const dy = ev.clientY - st.startY;
+        const dCols = Math.round(dx / st.cellW);
+        const dRows = Math.round(dy / st.rowH);
+        const maxCol = Math.max(1, window.WIDGET_GRID_COLS - st.colSpan + 1);
+        const newColStart = Math.max(1, Math.min(maxCol, st.origColStart + dCols));
+        const newRowStart = Math.max(1, st.origRowStart + dRows);
+        st.pendingColStart = newColStart;
+        st.pendingRowStart = newRowStart;
+        st.el.style.gridColumn = newColStart + " / span " + st.colSpan;
+        st.el.style.gridRow = newRowStart + " / span " + st.rowSpan;
+      };
+      window._widgetMoveEnd = function () {
+        const st = window._moveState;
+        document.removeEventListener("pointermove", window._widgetMoveMove);
+        document.removeEventListener("pointerup", window._widgetMoveEnd);
+        window._moveState = null;
+        if (!st) return;
+        st.el.classList.remove("widget-dragging");
+        const collides = window._widgetPositionCollides(
+          st.grid,
+          st.key,
+          st.pendingColStart,
+          st.pendingRowStart,
+          st.colSpan,
+          st.rowSpan,
+        );
+        const finalCol = collides ? st.origColStart : st.pendingColStart;
+        const finalRow = collides ? st.origRowStart : st.pendingRowStart;
+        st.el.style.gridColumn = finalCol + " / span " + st.colSpan;
+        st.el.style.gridRow = finalRow + " / span " + st.rowSpan;
+        const prefs = window._loadWidgetPrefs();
+        prefs[st.key] = prefs[st.key] || {};
+        prefs[st.key].colStart = finalCol;
+        prefs[st.key].rowStart = finalRow;
         window._saveWidgetPrefs(prefs);
+        window._reorderDomByPosition(st.grid);
       };
 
       window.widgetMoveToPage = function (key) {
@@ -271,17 +428,35 @@
         const grid = window._ensureWidgetGrid(target.id);
         if (!grid) return;
         grid.appendChild(el);
-        window._saveWidgetOrderForParent(grid);
         const prefs = window._loadWidgetPrefs();
         prefs[key] = prefs[key] || {};
         prefs[key].page = target.id;
+        // המיקום הישן שייך לעמוד הקודם — מאפסים כדי שימצא משבצת פנויה ביעד
+        delete prefs[key].colStart;
+        delete prefs[key].rowStart;
         window._saveWidgetPrefs(prefs);
+        window._autoPlaceMissingWidgets(target.id);
+        const p2 = window._loadWidgetPrefs()[key] || {};
+        el.style.gridColumn = (p2.colStart || 1) + " / span " + (p2.colSpan || 2);
+        el.style.gridRow = (p2.rowStart || 1) + " / span " + (p2.rowSpan || 1);
+        window._reorderDomByPosition(grid);
+        window._updateHiddenWidgetsBtn(target.id);
         alert(`✅ הועבר לעמוד "${target.label}". אפשר למצוא אותו שם מעכשיו.`);
       };
 
       // מריץ פעם אחת בעליית האפליקציה — מכניס כל ווידג'ט לגריד של העמוד
-      // שלו (מקורי או שהועבר אליו), ומיישם הסתרה/סדר/גודל שמורים
+      // שלו (מקורי או שהועבר אליו), ומיישם מיקום/הסתרה/גודל שמורים. ווידג'
+      // בלי מיקום שמור (ראשוני, או חדש שנוסף בעדכון) מקבל מיקום ע"י
+      // bin-packing פעם אחת בלבד — מכאן והלאה המשתמש שולט לגמרי בגרירה.
       window._applyWidgetPrefs = function () {
+        const prefs0 = window._loadWidgetPrefs();
+        const pagesNeeded = new Set();
+        Object.keys(window.WIDGET_REGISTRY).forEach((key) => {
+          const p = prefs0[key] || {};
+          pagesNeeded.add(p.page || window.WIDGET_REGISTRY[key].nativePage);
+        });
+        pagesNeeded.forEach((pageId) => window._autoPlaceMissingWidgets(pageId));
+
         const prefs = window._loadWidgetPrefs();
         Object.keys(window.WIDGET_REGISTRY).forEach((key) => {
           const el = document.getElementById("widget-" + key);
@@ -293,26 +468,15 @@
           if (p.collapsed) el.classList.add("widget-collapsed");
           const colSpan = p.colSpan || 2;
           const rowSpan = p.rowSpan || 1;
-          el.style.gridColumn = "span " + colSpan;
-          el.style.gridRow = "span " + rowSpan;
+          const colStart = p.colStart || 1;
+          const rowStart = p.rowStart || 1;
+          el.style.gridColumn = colStart + " / span " + colSpan;
+          el.style.gridRow = rowStart + " / span " + rowSpan;
         });
-        // סדר — אחרי שכל הווידג'טים כבר בגריד הנכון, ממיינים כל גריד לפי
-        // order השמור
+        // סדר ה-DOM בפועל — נגזר מהמיקום (שורה ואז עמודה), רלוונטי רק לתצוגת
+        // מובייל שבה הגריד קורס לעמודה אחת ומסתמך על סדר ה-DOM
         document.querySelectorAll(".widget-grid").forEach((grid) => {
-          const widgets = Array.from(grid.children).filter((c) =>
-            c.hasAttribute("data-widget-key"),
-          );
-          widgets
-            .slice()
-            .sort((a, b) => {
-              const oa = (prefs[a.getAttribute("data-widget-key")] || {}).order;
-              const ob = (prefs[b.getAttribute("data-widget-key")] || {}).order;
-              if (oa == null && ob == null) return 0;
-              if (oa == null) return 1;
-              if (ob == null) return -1;
-              return oa - ob;
-            })
-            .forEach((w) => grid.appendChild(w));
+          window._reorderDomByPosition(grid);
         });
         // כפתורי "פאנלים מוסתרים" — פעם אחת לכל עמוד שבו יש בפועל ווידג'ט
         const pageIds = new Set(
