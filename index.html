@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260810a";
+        var BUILD = "20260810b";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -721,7 +721,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260810a" />
+    <link rel="stylesheet" href="style.css?v=20260810b" />
   </head>
   <body>
     <div
@@ -1801,7 +1801,20 @@
               </div>
               <div
                 class="card-paper manager-only"
+                id="widget-taskInputsWrapper"
+                data-widget-key="taskInputsWrapper"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'taskInputsWrapper')"
+              >
+                <div class="widget-controls">
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'taskInputsWrapper')" title="גרור להזזה">⠿</span>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskInputsWrapper')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskInputsWrapper')">⇥</button>
+                </div>
+                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'taskInputsWrapper')" title="גרור לשינוי גודל">⇲</span>
+              <div
                 id="taskInputsWrapper"
+                class="widget-body"
                 style="display: flex; gap: 10px; flex-wrap: wrap"
               >
                 <div style="width: 100%; display: flex; gap: 8px">
@@ -1933,6 +1946,7 @@
                       הוסף משימה
                     </button>
                   </div>
+                </div>
                 </div>
               </div>
               <div
@@ -2176,8 +2190,19 @@
               <!-- טבלת הוגנות סופ"ש -->
               <div
                 class="card-paper manager-only"
+                id="widget-weekendJusticeTableContainer"
+                data-widget-key="weekendJusticeTableContainer"
+                ondragover="window.widgetDragOver(event)"
+                ondrop="window.widgetDrop(event,'weekendJusticeTableContainer')"
                 style="border-left: 4px solid var(--md-warning)"
               >
+                <div class="widget-controls">
+                  <span class="widget-drag-handle" draggable="true" ondragstart="window.widgetDragStart(event,'weekendJusticeTableContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('weekendJusticeTableContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('weekendJusticeTableContainer')">⇥</button>
+                </div>
+                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'weekendJusticeTableContainer')" title="גרור לשינוי גודל">⇲</span>
+                <div class="widget-body">
                 <h3 style="color: var(--md-warning); margin-top: 0">
                   ⚖️ טבלת הוגנות — מי סגר סופ"ש
                 </h3>
@@ -2220,6 +2245,7 @@
                   id="weekendJusticeTableContainer"
                   style="overflow-x: auto"
                 ></div>
+                </div>
               </div>
             </div>
           </div>
@@ -4663,6 +4689,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260810a"></script>
+    <script src="script.js?v=20260810b"></script>
   </body>
 </html>

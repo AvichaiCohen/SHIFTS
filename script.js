@@ -26,6 +26,8 @@
         holidaysLogTable: { nativePage: "tasks", label: "מעקב סגירת חגים" },
         holidaySwapManagerContainer: { nativePage: "tasks", label: "ניהול החלפות חג" },
         employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
+        taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
+        weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
       };
       window.WIDGET_PAGES = [
         { id: "tasks", label: "משימות וימים מיוחדים" },
