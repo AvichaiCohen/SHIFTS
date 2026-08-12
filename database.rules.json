@@ -58,6 +58,14 @@
           ".write": "auth != null && !data.exists()"
         }
       }
+    },
+    "weekendSwapRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()",
+        "targetResponse": {
+          ".write": "auth != null && !data.exists()"
+        }
+      }
     }
   }
 }

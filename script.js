@@ -24,9 +24,8 @@
         requestsTableContainer: { nativePage: "requests", label: "העדפות / אילוצים / ימי לימודים" },
         taskStatsContainer: { nativePage: "tasks", label: "סטטוס משימות וחגים" },
         tasksList: { nativePage: "tasks", label: "רשימת משימות" },
-        taskSwapManagerContainer: { nativePage: "tasks", label: "ניהול החלפות משימה" },
+        swapRequestsManagerContainer: { nativePage: "tasks", label: 'ניהול בקשות החלפה (משימות/חגים/סופ"שים)' },
         holidaysLogTable: { nativePage: "tasks", label: "מעקב סגירת חגים" },
-        holidaySwapManagerContainer: { nativePage: "tasks", label: "ניהול החלפות חג" },
         employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
         taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
@@ -4111,8 +4110,8 @@
             "<p style='color:#64748b; font-style:italic;'>אין רישומים במערכת.</p>";
           if (typeof window.renderHolidayStats === "function")
             window.renderHolidayStats();
-          if (typeof window.renderMyHolidaySwaps === "function") window.renderMyHolidaySwaps();
-          if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
+          if (typeof window.renderMySwapRequests === "function") window.renderMySwapRequests();
+          if (typeof window.renderSwapRequestsManager === "function") window.renderSwapRequestsManager();
           return;
         }
         // סינון פנימי לתצוגה בלבד (לא נוגע בנתונים או בטבלאות/סטטיסטיקות
@@ -4163,8 +4162,8 @@
         tableContainer.innerHTML = html;
         if (typeof window.renderHolidayStats === "function")
           window.renderHolidayStats();
-        if (typeof window.renderMyHolidaySwaps === "function") window.renderMyHolidaySwaps();
-        if (typeof window.renderHolidaySwapManager === "function") window.renderHolidaySwapManager();
+        if (typeof window.renderMySwapRequests === "function") window.renderMySwapRequests();
+        if (typeof window.renderSwapRequestsManager === "function") window.renderSwapRequestsManager();
       };
 
       window.addHolidayLog = function () {
@@ -4333,52 +4332,6 @@
         alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
       };
 
-      window.renderMyHolidaySwaps = function () {
-        const cont = document.getElementById("myHolidaySwapsContainer");
-        if (!cont) return;
-        const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { cont.innerHTML = ""; return; }
-        const all = Object.values(window.holidaySwapRequests || {}).filter(Boolean);
-        const pending = all.filter(
-          (r) => String(r.toEmpId) === String(me.id) && !r.targetResponse,
-        );
-        if (pending.length === 0) { cont.innerHTML = ""; return; }
-        let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפת חג אליי</h3>`;
-        pending.forEach((r) => {
-          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
-            <div><b>${window.escapeHtml(r.fromEmpName)}</b> מבקש/ת שתחליף/י אותו/ה בחג: ${window.escapeHtml(r.holidayLabel)}</div>
-            <div style="display:flex; gap:6px;">
-              <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', true)">✅ אשר</button>
-              <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondHolidaySwap('${r.id}', false)">❌ דחה</button>
-            </div>
-          </div>`;
-        });
-        html += `</div>`;
-        cont.innerHTML = html;
-      };
-
-      window.renderHolidaySwapManager = function () {
-        const cont = document.getElementById("holidaySwapManagerContainer");
-        if (!cont) return;
-        const all = Object.values(window.holidaySwapRequests || {}).filter(Boolean);
-        const pendingAdmin = all.filter(
-          (r) => r.targetResponse && r.targetResponse.approved === true && !r.adminDecision,
-        );
-        if (pendingAdmin.length === 0) {
-          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
-          return;
-        }
-        let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr><th>ממי</th><th>למי</th><th>חג</th><th>פעולה</th></tr>`;
-        pendingAdmin.forEach((r) => {
-          html += `<tr style="border-bottom:1px solid var(--md-divider);">
-            <td data-label="ממי"><b>${window.escapeHtml(r.fromEmpName)}</b></td><td data-label="למי"><b>${window.escapeHtml(r.toEmpName)}</b></td><td data-label="חג">${window.escapeHtml(r.holidayLabel)}</td>
-            <td data-label=""><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeHolidaySwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeHolidaySwap('${r.id}', false)">❌ דחה</button></td>
-          </tr>`;
-        });
-        html += `</table>`;
-        cont.innerHTML = html;
-      };
-
       window.finalizeHolidaySwap = function (reqId, approve) {
         const r = (window.holidaySwapRequests || {})[reqId];
         if (!r) return;
@@ -4397,6 +4350,203 @@
             ts: Date.now(),
           });
         alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+      };
+
+      // ===== החלפת סגירות סופ"ש בין טכנאים (אותו תבנית כמו החלפת משימות/חגים) =====
+      // בקשה נוצרת מתוך "הסגירות הקרובות שלי" (showMyUpcomingClosures) — לא
+      // מרשומה בודדת אלא כל ה-slots (יום+משמרת+מיקום) שהעובד משובץ אליהם
+      // באותו שבוע-סופ"ש, כך שההחלפה מזיזה את כל הסגירה כיחידה אחת.
+      window.weekendSwapRequests = window.weekendSwapRequests || {};
+
+      window.requestWeekendSwap = function (idx) {
+        const item = (window._myUpcomingClosuresResults || [])[idx];
+        if (!item) return;
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        const others = (window.staff || []).filter(
+          (e) => e.isActive !== false && e.type === "טכנאי" && String(e.id) !== String(me.id),
+        );
+        if (others.length === 0) { alert("אין טכנאים אחרים להחלפה."); return; }
+        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
+        const choice = prompt(
+          `למי לשלוח בקשת החלפת סופ"ש (${item.weekLabel})?\n\n${optionsStr}\n\nהקלד את המספר:`,
+        );
+        if (!choice) return;
+        const cIdx = parseInt(choice.trim(), 10) - 1;
+        const target = others[cIdx];
+        if (!target) { alert("בחירה לא תקינה."); return; }
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        const req = {
+          id,
+          weekKey: item.weekKey,
+          weekLabel: item.weekLabel,
+          slots: item.slots,
+          fromEmpId: me.id,
+          fromEmpName: me.name,
+          toEmpId: target.id,
+          toEmpName: target.name,
+          ts: id,
+        };
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("weekendSwapRequests/" + id, req);
+        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+      };
+
+      window.respondWeekendSwap = function (reqId, approve) {
+        if (typeof window.saveToCloud !== "function") return;
+        window.saveToCloud("weekendSwapRequests/" + reqId + "/targetResponse", {
+          approved: approve,
+          ts: Date.now(),
+        });
+        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+      };
+
+      // אישור סופי של מנהל — מחליף בפועל את העובד בכל ה-slots של הסופ"ש
+      // באותו שבוע. אם השבוע המבוקש הוא לא השבוע המוצג כרגע, קוראים אותו
+      // מהענן, מעדכנים וכותבים ישירות (בדיוק כמו processRequest לשבוע אחר).
+      window.finalizeWeekendSwap = async function (reqId, approve) {
+        const r = (window.weekendSwapRequests || {})[reqId];
+        if (!r) return;
+        if (approve) {
+          const fb = window._fbImports;
+          let sched = null;
+          if (r.weekKey === window.currentSelectedWeek) {
+            sched = window.currentSchedule;
+          } else if (fb && window._firebaseDb) {
+            try {
+              const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + r.weekKey));
+              sched = snap.exists() ? snap.val() : null;
+            } catch (e) {
+              alert("שגיאה בטעינת השבוע: " + (e.message || e));
+              return;
+            }
+          }
+          if (sched) {
+            const toEmpFull = (window.staff || []).find(
+              (e) => String(e.id) === String(r.toEmpId),
+            );
+            (r.slots || []).forEach((slot) => {
+              const arr =
+                sched[`${slot.day}-${slot.shift}`] &&
+                sched[`${slot.day}-${slot.shift}`][slot.loc];
+              if (!arr) return;
+              const i = arr.findIndex((x) => String(x.id) === String(r.fromEmpId));
+              if (i > -1) {
+                const wasLocked = !!arr[i].isLocked;
+                arr[i] = toEmpFull
+                  ? { ...toEmpFull, isLocked: wasLocked }
+                  : { ...arr[i], id: r.toEmpId, name: r.toEmpName };
+              }
+            });
+            window.saveToCloud("schedules/" + r.weekKey, sched);
+          }
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("weekendSwapRequests/" + reqId + "/adminDecision", {
+            approved: approve,
+            ts: Date.now(),
+          });
+        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+      };
+
+      // ===== תצוגה מאוחדת של כל בקשות ההחלפה (משימות + חגים + סופ"שים) =====
+      // מחליפה את מה שהיה קודם 2-3 טבלאות נפרדות — כדי שגם למשתמש שממתין
+      // לתגובה וגם למנהל שמאשר סופית יהיה מקום אחד לכל סוגי ההחלפות.
+      window._SWAP_KIND_LABELS = { task: "משימה", holiday: "חג", weekend: 'סופ"ש' };
+      window._collectMySwapItems = function () {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) return [];
+        const items = [];
+        [
+          ["task", window.taskSwapRequests],
+          ["holiday", window.holidaySwapRequests],
+          ["weekend", window.weekendSwapRequests],
+        ].forEach(([kind, pool]) => {
+          Object.values(pool || {})
+            .filter(Boolean)
+            .forEach((r) => {
+              if (String(r.toEmpId) === String(me.id) && !r.targetResponse)
+                items.push({ kind, r });
+            });
+        });
+        items.sort((a, b) => (a.r.ts || 0) - (b.r.ts || 0));
+        return items;
+      };
+      window._swapItemDetail = function (kind, r) {
+        if (kind === "task") {
+          const fDate = r.date ? r.date.split("-").reverse().join(".") : "";
+          return `${window.escapeHtml(r.taskLabel)}${fDate ? " (" + window.escapeHtml(fDate) + ")" : ""}`;
+        }
+        if (kind === "holiday") return window.escapeHtml(r.holidayLabel);
+        const daysStr = (r.slots || [])
+          .map((s) => s.day)
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .join(", ");
+        return `${window.escapeHtml(r.weekLabel)}${daysStr ? " (" + window.escapeHtml(daysStr) + ")" : ""}`;
+      };
+      window._SWAP_RESPOND_FN = { task: "respondTaskSwap", holiday: "respondHolidaySwap", weekend: "respondWeekendSwap" };
+      window._SWAP_FINALIZE_FN = { task: "finalizeTaskSwap", holiday: "finalizeHolidaySwap", weekend: "finalizeWeekendSwap" };
+
+      // רשימת בקשות החלפה שממתינות לתגובתי (אני העובד המוזמן) — כל הסוגים יחד
+      window.renderMySwapRequests = function () {
+        const cont = document.getElementById("myAllSwapsContainer");
+        if (!cont) return;
+        const items = window._collectMySwapItems();
+        if (items.length === 0) { cont.innerHTML = ""; return; }
+        let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפה אליי</h3>`;
+        items.forEach(({ kind, r }) => {
+          const kindLabel = window._SWAP_KIND_LABELS[kind];
+          const detail = window._swapItemDetail(kind, r);
+          const fn = window._SWAP_RESPOND_FN[kind];
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+            <div><span style="background:#ede9fe; color:#7c3aed; border-radius:6px; padding:1px 8px; font-size:0.72rem; margin-left:6px;">${kindLabel}</span><b>${window.escapeHtml(r.fromEmpName)}</b> מבקש/ת שתחליף/י אותו/ה ב${kindLabel}: ${detail}</div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.${fn}('${r.id}', true)">✅ אשר</button>
+              <button class="btn btn-error" style="padding:4px 12px;" onclick="window.${fn}('${r.id}', false)">❌ דחה</button>
+            </div>
+          </div>`;
+        });
+        html += `</div>`;
+        cont.innerHTML = html;
+      };
+
+      // עבור המנהל: בקשות מכל הסוגים שאושרו ע"י העובד המוזמן וממתינות לאישור סופי
+      window.renderSwapRequestsManager = function () {
+        const cont = document.getElementById("swapRequestsManagerContainer");
+        if (!cont) return;
+        const items = [];
+        [
+          ["task", window.taskSwapRequests],
+          ["holiday", window.holidaySwapRequests],
+          ["weekend", window.weekendSwapRequests],
+        ].forEach(([kind, pool]) => {
+          Object.values(pool || {})
+            .filter(Boolean)
+            .forEach((r) => {
+              if (r.targetResponse && r.targetResponse.approved === true && !r.adminDecision)
+                items.push({ kind, r });
+            });
+        });
+        if (items.length === 0) {
+          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
+          return;
+        }
+        items.sort((a, b) => (a.r.ts || 0) - (b.r.ts || 0));
+        let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr><th>סוג</th><th>ממי</th><th>למי</th><th>פרטים</th><th>פעולה</th></tr>`;
+        items.forEach(({ kind, r }) => {
+          const kindLabel = window._SWAP_KIND_LABELS[kind];
+          const detail = window._swapItemDetail(kind, r);
+          const fn = window._SWAP_FINALIZE_FN[kind];
+          html += `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td data-label="סוג">${kindLabel}</td>
+            <td data-label="ממי"><b>${window.escapeHtml(r.fromEmpName)}</b></td>
+            <td data-label="למי"><b>${window.escapeHtml(r.toEmpName)}</b></td>
+            <td data-label="פרטים">${detail}</td>
+            <td data-label=""><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.${fn}('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.${fn}('${r.id}', false)">❌ דחה</button></td>
+          </tr>`;
+        });
+        html += `</table>`;
+        cont.innerHTML = html;
       };
 
       // === טבלת הוגנות סופ"ש ===
@@ -5017,6 +5167,7 @@
             continue;
           }
           const daysFound = {};
+          const slots = [];
           [
             { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
             { loc: LOC_ZIRA, shifts: weekendShiftsZira },
@@ -5027,13 +5178,23 @@
               if (arr && arr.find((e) => String(e.id) === String(me.id))) {
                 if (!daysFound[d]) daysFound[d] = [];
                 daysFound[d].push(`${s} · ${window.getLocName(loc)}`);
+                slots.push({ day: d, shift: s, loc });
               }
             });
           });
           if (Object.keys(daysFound).length > 0) {
-            results.push({ weekLabel: window.formatWeekString(sun), days: daysFound });
+            results.push({
+              weekKey: wk,
+              weekLabel: window.formatWeekString(sun),
+              days: daysFound,
+              slots,
+            });
           }
         }
+
+        // נשמר גלובלית כדי שכפתור "בקש החלפה" בכל שורה יוכל להפנות אליו
+        // לפי אינדקס, בלי להטמיע JSON גולמי בתוך onclick
+        window._myUpcomingClosuresResults = results;
 
         if (!cont) return;
         if (results.length === 0) {
@@ -5041,12 +5202,16 @@
             "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין סופ\"שים/חגים קרובים שאת/ה מתוכנן/ת לסגור.</p>";
           return;
         }
-        let html = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th></tr>`;
-        results.forEach((r) => {
+        const canRequestSwap = me.type === "טכנאי";
+        let html = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th>${canRequestSwap ? '<th style="padding:8px;"></th>' : ""}</tr>`;
+        results.forEach((r, idx) => {
           const dayDetails = Object.entries(r.days)
             .map(([d, arr]) => `<b>${window.escapeHtml(d)}</b>: ${window.escapeHtml(arr.join(", "))}`)
             .join("<br>");
-          html += `<tr style="border-bottom:1px solid var(--md-divider);"><td style="padding:8px; white-space:nowrap; vertical-align:top;">${window.escapeHtml(r.weekLabel)}</td><td style="padding:8px;">${dayDetails}</td></tr>`;
+          const swapCell = canRequestSwap
+            ? `<td style="padding:8px; white-space:nowrap;"><button class="btn btn-outlined" style="padding:4px 10px; font-size:0.78rem;" onclick="window.requestWeekendSwap(${idx})">🔄 בקש החלפה</button></td>`
+            : "";
+          html += `<tr style="border-bottom:1px solid var(--md-divider);"><td style="padding:8px; white-space:nowrap; vertical-align:top;">${window.escapeHtml(r.weekLabel)}</td><td style="padding:8px;">${dayDetails}</td>${swapCell}</tr>`;
         });
         html += `</table>`;
         cont.innerHTML = html;
@@ -5249,10 +5414,10 @@
           window.renderHolidaysLog();
         if (typeof window.renderEmployeeSummary === "function")
           window.renderEmployeeSummary();
-        if (typeof window.renderMyTaskSwaps === "function")
-          window.renderMyTaskSwaps();
-        if (typeof window.renderTaskSwapManager === "function")
-          window.renderTaskSwapManager();
+        if (typeof window.renderMySwapRequests === "function")
+          window.renderMySwapRequests();
+        if (typeof window.renderSwapRequestsManager === "function")
+          window.renderSwapRequestsManager();
         window._updateUnassignedTaskBadge();
         let html = "";
         if (!window.isWorkerMode) {
@@ -5727,55 +5892,6 @@
         alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
       };
 
-      // רשימת בקשות החלפה שממתינות לתגובתי (אני העובד המוזמן, B)
-      window.renderMyTaskSwaps = function () {
-        const cont = document.getElementById("myTaskSwapsContainer");
-        if (!cont) return;
-        const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { cont.innerHTML = ""; return; }
-        const all = Object.values(window.taskSwapRequests || {}).filter(Boolean);
-        const pending = all.filter(
-          (r) => String(r.toEmpId) === String(me.id) && !r.targetResponse,
-        );
-        if (pending.length === 0) { cont.innerHTML = ""; return; }
-        let html = `<div class="card-paper" style="border-right:4px solid #7c3aed; margin-bottom:16px;"><h3 style="margin-top:0; color:#7c3aed;">🔄 בקשות החלפת משימה אליי</h3>`;
-        pending.forEach((r) => {
-          const fDate = r.date ? r.date.split("-").reverse().join(".") : "";
-          html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
-            <div><b>${window.escapeHtml(r.fromEmpName)}</b> מבקש/ת שתחליף/י אותו/ה במשימה: ${window.escapeHtml(r.taskLabel)}${fDate ? " (" + window.escapeHtml(fDate) + ")" : ""}</div>
-            <div style="display:flex; gap:6px;">
-              <button class="btn btn-contained" style="background:#16a34a; padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', true)">✅ אשר</button>
-              <button class="btn btn-error" style="padding:4px 12px;" onclick="window.respondTaskSwap('${r.id}', false)">❌ דחה</button>
-            </div>
-          </div>`;
-        });
-        html += `</div>`;
-        cont.innerHTML = html;
-      };
-
-      // עבור המנהל: בקשות שאושרו ע"י העובד המוזמן וממתינות לאישור סופי
-      window.renderTaskSwapManager = function () {
-        const cont = document.getElementById("taskSwapManagerContainer");
-        if (!cont) return;
-        const all = Object.values(window.taskSwapRequests || {}).filter(Boolean);
-        const pendingAdmin = all.filter(
-          (r) => r.targetResponse && r.targetResponse.approved === true && !r.adminDecision,
-        );
-        if (pendingAdmin.length === 0) {
-          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
-          return;
-        }
-        let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr><th>ממי</th><th>למי</th><th>משימה</th><th>תאריך</th><th>פעולה</th></tr>`;
-        pendingAdmin.forEach((r) => {
-          const fDate = r.date ? r.date.split("-").reverse().join(".") : "-";
-          html += `<tr style="border-bottom:1px solid var(--md-divider);">
-            <td data-label="ממי"><b>${window.escapeHtml(r.fromEmpName)}</b></td><td data-label="למי"><b>${window.escapeHtml(r.toEmpName)}</b></td><td data-label="משימה">${window.escapeHtml(r.taskLabel)}</td><td data-label="תאריך">${window.escapeHtml(fDate)}</td>
-            <td data-label=""><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.finalizeTaskSwap('${r.id}', true)">✅ אשר והחלף</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.finalizeTaskSwap('${r.id}', false)">❌ דחה</button></td>
-          </tr>`;
-        });
-        html += `</table>`;
-        cont.innerHTML = html;
-      };
 
       // אישור סופי של מנהל — מבצע את ההחלפה בפועל במשימה
       window.finalizeTaskSwap = function (reqId, approve) {

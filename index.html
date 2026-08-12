@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260810d";
+        var BUILD = "20260812a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -589,10 +589,10 @@
             window.taskSwapRequests = snapshot.exists()
               ? snapshot.val() || {}
               : {};
-            if (typeof window.renderMyTaskSwaps === "function")
-              window.renderMyTaskSwaps();
-            if (typeof window.renderTaskSwapManager === "function")
-              window.renderTaskSwapManager();
+            if (typeof window.renderMySwapRequests === "function")
+              window.renderMySwapRequests();
+            if (typeof window.renderSwapRequestsManager === "function")
+              window.renderSwapRequestsManager();
           });
 
           // התנדבות עובדים למשימות פתוחות — נכתבות ע"י עובד אנונימי (create-only),
@@ -671,10 +671,23 @@
             window.holidaySwapRequests = snapshot.exists()
               ? snapshot.val() || {}
               : {};
-            if (typeof window.renderMyHolidaySwaps === "function")
-              window.renderMyHolidaySwaps();
-            if (typeof window.renderHolidaySwapManager === "function")
-              window.renderHolidaySwapManager();
+            if (typeof window.renderMySwapRequests === "function")
+              window.renderMySwapRequests();
+            if (typeof window.renderSwapRequestsManager === "function")
+              window.renderSwapRequestsManager();
+          });
+
+          // בקשות החלפת סגירות סופ"ש בין טכנאים (אותה תבנית - A מבקש מ-B,
+          // B מאשר, מנהל מאשר סופית ומבצע את ההחלפה בפועל בלוח המשמרות)
+          window.weekendSwapRequests = {};
+          onValue(ref(db, "weekendSwapRequests"), (snapshot) => {
+            window.weekendSwapRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            if (typeof window.renderMySwapRequests === "function")
+              window.renderMySwapRequests();
+            if (typeof window.renderSwapRequestsManager === "function")
+              window.renderSwapRequestsManager();
           });
 
           // לוח שנה של חגים — תאריכים אמיתיים, נכתב ע"י המנהל הראשי בלבד.
@@ -721,7 +734,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260810d" />
+    <link rel="stylesheet" href="style.css?v=20260812a" />
   </head>
   <body>
     <div
@@ -1776,7 +1789,7 @@
 
         <div id="page-tasks" class="container">
           <h1>ניהול משימות שוטפות וימים מיוחדים</h1>
-          <div id="myTaskSwapsContainer"></div>
+          <div id="myAllSwapsContainer"></div>
           <div style="display: flex; gap: 20px; flex-wrap: wrap">
             <div style="flex: 1; min-width: 300px">
               <div
@@ -1982,19 +1995,19 @@
               </div>
               <div
                 class="card-paper manager-only"
-                id="widget-taskSwapManagerContainer"
-                data-widget-key="taskSwapManagerContainer"
+                id="widget-swapRequestsManagerContainer"
+                data-widget-key="swapRequestsManagerContainer"
                 style="border-right: 4px solid #7c3aed"
               >
                 <div class="widget-controls">
-                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'taskSwapManagerContainer')" title="גרור להזזה">⠿</span>
-                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskSwapManagerContainer')">👁</button>
-                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskSwapManagerContainer')">⇥</button>
+                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'swapRequestsManagerContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('swapRequestsManagerContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('swapRequestsManagerContainer')">⇥</button>
                 </div>
-                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'taskSwapManagerContainer')" title="גרור לשינוי גודל">⇲</span>
+                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'swapRequestsManagerContainer')" title="גרור לשינוי גודל">⇲</span>
                 <div class="widget-body">
                   <h3 style="margin-top: 0; color: #7c3aed">
-                    🔄 בקשות החלפת משימות (ממתינות לאישורך)
+                    🔄 בקשות החלפה — משימות / חגים / סופ"שים (ממתינות לאישורך)
                   </h3>
                   <p
                     style="
@@ -2006,13 +2019,12 @@
                     מוצגות רק בקשות שהעובד המוזמן כבר אישר — אישור סופי שלך
                     מבצע את ההחלפה בפועל.
                   </p>
-                  <div id="taskSwapManagerContainer"></div>
+                  <div id="swapRequestsManagerContainer"></div>
                 </div>
               </div>
             </div>
 
             <div style="flex: 1; min-width: 300px">
-              <div id="myHolidaySwapsContainer"></div>
               <div
                 class="card-paper"
                 id="widget-holidaysLogTable"
@@ -2123,26 +2135,6 @@
                   </div>
                 </div>
                 <div id="holidaysLogTable"></div>
-                </div>
-              </div>
-
-              <div
-                class="card-paper manager-only"
-                id="widget-holidaySwapManagerContainer"
-                data-widget-key="holidaySwapManagerContainer"
-                style="border-right: 4px solid #7c3aed"
-              >
-                <div class="widget-controls">
-                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'holidaySwapManagerContainer')" title="גרור להזזה">⠿</span>
-                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('holidaySwapManagerContainer')">👁</button>
-                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('holidaySwapManagerContainer')">⇥</button>
-                </div>
-                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'holidaySwapManagerContainer')" title="גרור לשינוי גודל">⇲</span>
-                <div class="widget-body">
-                  <h3 style="margin-top: 0; color: #7c3aed">
-                    🔄 בקשות החלפת חגים (ממתינות לאישורך)
-                  </h3>
-                  <div id="holidaySwapManagerContainer"></div>
                 </div>
               </div>
 
@@ -4669,6 +4661,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260810d"></script>
+    <script src="script.js?v=20260812a"></script>
   </body>
 </html>
