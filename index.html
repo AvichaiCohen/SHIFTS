@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260819a";
+        var BUILD = "20260820a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -734,7 +734,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260819a" />
+    <link rel="stylesheet" href="style.css?v=20260820a" />
   </head>
   <body>
     <div
@@ -2248,13 +2248,27 @@
                   "
                 >
                   <h3 style="margin: 0; color: #0d9488">🌴 ניהול חופשים</h3>
-                  <button
-                    class="btn btn-outlined manager-only"
-                    style="padding: 4px 12px; font-size: 0.85rem"
-                    onclick="window.exportVacationManagementToCSV()"
-                  >
-                    ⬇️ ייצוא לאקסל
-                  </button>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                    <button
+                      class="btn btn-outlined manager-only"
+                      style="
+                        padding: 4px 12px;
+                        font-size: 0.85rem;
+                        border-color: #0d9488;
+                        color: #0d9488;
+                      "
+                      onclick="window.refreshVacationFutureRequests()"
+                    >
+                      🔄 טען בקשות עתידיות מאושרות
+                    </button>
+                    <button
+                      class="btn btn-outlined manager-only"
+                      style="padding: 4px 12px; font-size: 0.85rem"
+                      onclick="window.exportVacationManagementToCSV()"
+                    >
+                      ⬇️ ייצוא לאקסל
+                    </button>
+                  </div>
                 </div>
                 <p
                   style="
@@ -2264,6 +2278,8 @@
                   "
                 >
                   טכנאים ואנשי קבע — מכסת חופש, ניצול וטווחי החופשות בפועל.
+                  לחצו "טען בקשות עתידיות" כדי להוסיף גם בקשות חופשה שכבר
+                  אושרו לשבועות קדימה (לא נכנס לחישוב הניצול).
                 </p>
                 <div id="vacationManagementTable"></div>
                 </div>
@@ -4706,6 +4722,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260819a"></script>
+    <script src="script.js?v=20260820a"></script>
   </body>
 </html>

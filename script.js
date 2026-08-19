@@ -3128,7 +3128,7 @@
                 : "var(--md-success)";
           const detail =
             vac.specEntries.length === 0
-              ? `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`
+              ? ""
               : vac.specEntries
                   .map((s) => {
                     const sd = (s.startDate || "").split("-").reverse().join(".");
@@ -3137,13 +3137,34 @@
                     return `<span style="display:inline-block; background:var(--md-bg); border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">${window.escapeHtml(s.status || "")}: ${range}</span>`;
                   })
                   .join(" ");
+          // בקשות חופשה עתידיות שכבר אושרו (ר' refreshVacationFutureRequests) —
+          // לתכנון קדימה, לא נכנסות לחישוב "נוצל" (זה נשאר כמו שהיה, כדי לא
+          // לספור פעמיים אם גם נרשם עליהן סטטוס-מיוחד ידני)
+          const futureItems =
+            (window._vacationFutureApproved &&
+              window._vacationFutureApproved[String(e.id)]) ||
+            [];
+          const futureDetail = futureItems
+            .map((item) => {
+              const first = item.dates[0];
+              const last = item.dates[item.dates.length - 1];
+              const fD = first.split("-").reverse().join(".");
+              const lD = last.split("-").reverse().join(".");
+              const label = first === last ? fD : `${fD}–${lD}`;
+              const countStr = item.dates.length > 1 ? ` (${item.dates.length} ימים)` : "";
+              return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">📥 בקשה מאושרת: ${label}${countStr}</span>`;
+            })
+            .join(" ");
+          const combinedDetail =
+            detail + futureDetail ||
+            `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`;
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
             <td data-label="שם"><b>${window.escapeHtml(e.name)}</b></td>
             <td data-label="דרג">${window.escapeHtml(e.type || "")}</td>
             <td data-label="מכסה" style="text-align:center;">${vac.quota}</td>
             <td data-label="נוצל" style="text-align:center;">${vac.used}</td>
             <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${vac.remaining}</td>
-            <td data-label="פירוט חופשות">${detail}</td>
+            <td data-label="פירוט חופשות">${combinedDetail}</td>
           </tr>`;
         });
         html += `</table>`;
@@ -3155,6 +3176,58 @@
           document.getElementById("vacationManagementTable"),
           `ניהול_חופשים_${window._todayFileStamp()}.csv`,
         );
+      };
+
+      // טוען פעם אחת (בלחיצת "רענן") את כל הבקשות המאושרות מסוג חופשה של כל
+      // עובד (myRequests — נשמר לצמיתות, לא נמחק כמו pendingRequestsIndex),
+      // מסנן לעתידיות בלבד ומקבץ לפי rangeId (טווח=פריט אחד). מוצג בטבלת
+      // "ניהול חופשים" בנוסף לרישומי specialStatuses, בלי להיכנס לחישוב המכסה.
+      window.refreshVacationFutureRequests = async function () {
+        const cont = document.getElementById("vacationManagementTable");
+        if (!window._fbImports || !window._firebaseDb) {
+          window.renderVacationManagementTable();
+          return;
+        }
+        if (cont)
+          cont.innerHTML =
+            "<i style='color:var(--text-muted);'>טוען בקשות עתידיות מהענן...</i>";
+        const { ref, get } = window._fbImports;
+        try {
+          const snap = await get(ref(window._firebaseDb, "myRequests"));
+          const all = snap.exists() ? snap.val() || {} : {};
+          const todayStr = new Date().toISOString().split("T")[0];
+          const byEmp = {};
+          Object.keys(all).forEach((empId) => {
+            const reqs = Object.values(all[empId] || {}).filter(Boolean);
+            const approved = reqs
+              .filter(
+                (r) =>
+                  r.type === "vacation" &&
+                  r.status === "approved" &&
+                  r.date &&
+                  r.date >= todayStr,
+              )
+              .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+            if (approved.length === 0) return;
+            const seenRange = new Set();
+            const items = [];
+            approved.forEach((r) => {
+              if (r.rangeId) {
+                if (seenRange.has(r.rangeId)) return;
+                seenRange.add(r.rangeId);
+                const group = approved.filter((r2) => r2.rangeId === r.rangeId);
+                items.push({ dates: group.map((g) => g.date) });
+              } else {
+                items.push({ dates: [r.date] });
+              }
+            });
+            byEmp[empId] = items;
+          });
+          window._vacationFutureApproved = byEmp;
+        } catch (e) {
+          alert("שגיאה בטעינת בקשות עתידיות: " + (e.message || e));
+        }
+        window.renderVacationManagementTable();
       };
 
       window.openSpecialStatusModal = function () {
@@ -7127,6 +7200,10 @@
           }
         }
 
+        // מזהה משותף לכל הימים שנוצרים מאותה הגשת-טווח — כדי שתור האישורים
+        // יוכל להציג אותם כשורה אחת במקום בלגן של יום-יום (ר' renderPendingRequestsManager)
+        const _rangeId = vacIsRange ? Date.now() : null;
+
         // יצירת בקשה בודדת ליום מסוים (משמש גם לחופשה מרובת-ימים)
         const _submitOneRequest = (dVal, dName, wkKey) => {
           const reqId = Date.now() + Math.floor(Math.random() * 100000);
@@ -7140,6 +7217,7 @@
             shift,
             loc,
             note,
+            rangeId: _rangeId,
             status: "pending",
           };
           // עדכון מטמון מקומי לתצוגה מיידית (רק לשבוע המוצג)
@@ -7167,6 +7245,7 @@
               shift,
               loc,
               note,
+              rangeId: _rangeId,
               weekKey: wkKey,
               status: "pending",
               ts: reqId,
@@ -7360,18 +7439,63 @@
           return `<tr style="border-bottom: 1px solid var(--md-divider);"><td data-label="עובד"><b>${r.empName}</b></td><td data-label="תאריך / יום">${fDate} · ${r.day}</td><td data-label="משמרת">${shiftStr}</td><td data-label="סוג הבקשה">${typeStr}${conflictStr}</td><td data-label=""><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequest('${id}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequest('${id}', false)">❌ דחייה</button></td></tr>`;
         };
 
+        // חופשה בטווח נוצרת כבקשה נפרדת לכל יום (ר' submitWorkerRequest) — כאן
+        // מקבצים חזרה לפי rangeId המשותף, כך שבתור האישורים זו שורה אחת עם
+        // כפתור אישור/דחייה יחיד לכל הטווח, במקום שורה נפרדת לכל יום.
+        const rangeRowHtml = (ids) => {
+          const rows = ids
+            .map((id) => pending[id])
+            .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+          const first = rows[0];
+          const last = rows[rows.length - 1];
+          const fDate = first.date ? first.date.split("-").reverse().join(".") : "";
+          const lDate = last.date ? last.date.split("-").reverse().join(".") : "";
+          const rangeLabel = fDate === lDate ? fDate : `${fDate}–${lDate}`;
+          let conflictStr = "";
+          if (typeof window._isCalendarHoliday === "function") {
+            for (const rr of rows) {
+              const holMatch = rr.date && window._isCalendarHoliday(rr.date);
+              if (holMatch) {
+                conflictStr = `<br><span style="color:#b91c1c; font-weight:bold; font-size:0.8rem;">⚠️ חופף לחג: ${window.escapeHtml(holMatch.name)}</span>`;
+                break;
+              }
+            }
+          }
+          const idsCsv = ids.join(",");
+          return `<tr style="border-bottom: 1px solid var(--md-divider);"><td data-label="עובד"><b>${first.empName}</b></td><td data-label="תאריך / יום">${rangeLabel} <span style="font-size:0.75rem; color:var(--text-muted);">(${rows.length} ימים)</span></td><td data-label="משמרת">-</td><td data-label="סוג הבקשה">🌴 חופשה (טווח)<br><small>${first.note || ""}</small>${conflictStr}</td><td data-label=""><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; margin-left:6px;" onclick="window.processRequestGroup('${idsCsv}', true)">✅ אישור</button><button class="btn btn-error" style="padding:4px 12px;" onclick="window.processRequestGroup('${idsCsv}', false)">❌ דחייה</button></td></tr>`;
+        };
+
         let html = "";
         weekKeys.forEach((wk) => {
           const isCurrent = wk === window.currentSelectedWeek;
           const label = wk === "כללי" ? "כללי" : window.weekKeyToLabel(wk);
-          const count = groups[wk].length;
+          const idsInWeek = groups[wk];
+
+          // בניית פריטי התצוגה: קיבוץ מזהי-טווח משותפים לפריט אחד, שאר
+          // הבקשות (ללא rangeId — כולל כל הנתונים הישנים) נשארות שורה לכל אחת
+          const seenRange = new Set();
+          const displayItems = [];
+          idsInWeek.forEach((id) => {
+            const rangeId = pending[id].rangeId;
+            if (rangeId) {
+              if (seenRange.has(rangeId)) return;
+              seenRange.add(rangeId);
+              const groupIds = idsInWeek.filter(
+                (id2) => pending[id2].rangeId === rangeId,
+              );
+              displayItems.push({ type: "range", ids: groupIds });
+            } else {
+              displayItems.push({ type: "single", id });
+            }
+          });
+
           html += `<div style="margin-bottom:18px; border:1px solid var(--md-divider); border-radius:10px; overflow:hidden;">
             <div style="background:${isCurrent ? "#1d4ed8" : "#475569"}; color:#fff; padding:8px 14px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
               <span>📅 שבוע ${label}${isCurrent ? " &nbsp;<span style='font-size:0.78rem; background:rgba(255,255,255,0.25); padding:2px 8px; border-radius:10px;'>השבוע המוצג</span>" : ""}</span>
-              <span style="font-size:0.85rem; background:rgba(255,255,255,0.2); padding:2px 10px; border-radius:12px;">${count} בקשות</span>
+              <span style="font-size:0.85rem; background:rgba(255,255,255,0.2); padding:2px 10px; border-radius:12px;">${displayItems.length} בקשות</span>
             </div>
             <table class="mobile-card-table" style="width:100%; text-align:right;"><tr><th>עובד</th><th>תאריך / יום</th><th>משמרת</th><th>סוג הבקשה</th><th>פעולות</th></tr>
-            ${groups[wk].map(rowHtml).join("")}
+            ${displayItems.map((item) => (item.type === "range" ? rangeRowHtml(item.ids) : rowHtml(item.id))).join("")}
             </table>
           </div>`;
         });
@@ -7418,7 +7542,7 @@
         }
       };
 
-      window.processRequest = async function (reqId, isApproved) {
+      window.processRequest = async function (reqId, isApproved, silent) {
         // מקור הבקשה: אינדקס גלובלי (כל השבועות) או השבוע הנוכחי
         const r =
           (window._allPending && window._allPending[reqId]) ||
@@ -7479,17 +7603,34 @@
             Date.now(),
           );
         }
-        alert(
-          isApproved
-            ? "✅ הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
-            : "❌ הבקשה נדחתה ונמחקה מהתור.",
-        );
+        if (!silent) {
+          alert(
+            isApproved
+              ? "✅ הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
+              : "❌ הבקשה נדחתה ונמחקה מהתור.",
+          );
+        }
         if (typeof window.renderPendingRequestsManager === "function")
           window.renderPendingRequestsManager();
         if (typeof window.renderRequestsPage === "function")
           window.renderRequestsPage();
         if (weekKey === window.currentSelectedWeek)
           window.triggerUnsavedChanges();
+      };
+
+      // מאשר/דוחה יחד את כל הבקשות ששייכות לאותה הגשת-טווח (rangeId) —
+      // מופעל מהשורה המאוחדת בתור האישורים, כדי שלא יהיה צריך ללחוץ בנפרד
+      // על כל יום בטווח. מציג התראה אחת מסכמת בסוף במקום אחת לכל יום.
+      window.processRequestGroup = async function (idsStr, isApproved) {
+        const ids = String(idsStr).split(",").filter(Boolean);
+        for (const id of ids) {
+          await window.processRequest(id, isApproved, true);
+        }
+        alert(
+          isApproved
+            ? `✅ אושרו ${ids.length} הימים בטווח והוזנו אוטומטית לתיק העובד!`
+            : `❌ נדחו ${ids.length} הימים בטווח ונמחקו מהתור.`,
+        );
       };
 
       window.addPrefRow = function (day = "", shift = "", loc = "") {
