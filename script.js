@@ -29,6 +29,7 @@
         employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
         taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
+        vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
       };
       window.WIDGET_PAGES = [
         { id: "tasks", label: "משימות וימים מיוחדים" },
@@ -3037,6 +3038,40 @@
       };
 
       // ייצוא רשימת הצוות — נבנה ישירות מהנתונים (לא סריקת DOM) כדי לא לכלול סיסמה/פרטים רגישים
+      // חישוב ניצול ימי חופש לעובד: מכסה, ימי אילוץ-יום-שלם בשבוע הנוכחי +
+      // טווחי סטטוס-מיוחד גלובליים (חופש/חופשה/מחלה) מכל השבועות. מוחזר גם
+      // specEntries הגולמיים (ממוינים) לשימוש בטבלת "ניהול חופשים" המפורטת.
+      window._computeVacUsage = function (e) {
+        const empConst = e.constraints || [];
+        const uniqueDaysOff = new Set(
+          empConst
+            .filter((c) => {
+              const d = c.split("-")[0];
+              return (
+                empConst.includes(`${d}-בוקר`) &&
+                empConst.includes(`${d}-ערב`) &&
+                empConst.includes(`${d}-לילה`)
+              );
+            })
+            .map((c) => c.split("-")[0]),
+        ).size;
+        const specEntries = (window.specialStatuses || [])
+          .filter(
+            (s) =>
+              String(s.empId) === String(e.id) &&
+              ["חופש", "חופשה", "מחלה"].some((v) => (s.status || "").includes(v)),
+          )
+          .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+        let specVacDays = 0;
+        specEntries.forEach((s) => {
+          if (s.startDate && s.endDate)
+            specVacDays += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
+        });
+        const quota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
+        const used = uniqueDaysOff + specVacDays;
+        return { quota, used, remaining: quota - used, uniqueDaysOff, specEntries };
+      };
+
       window.exportStaffToCSV = function () {
         const esc = (v) => {
           const s = String(v == null ? "" : v).trim().replace(/\s+/g, " ");
@@ -3046,40 +3081,15 @@
           ["שם", "דרג", 'מס"א', "מיקום קבוע", "מכסת חופש", "חופש מנוצל", "חופש נותר", "פעיל בשיבוץ"],
         ];
         (window.staff || []).forEach((e) => {
-          const empConst = e.constraints || [];
-          const uniqueDaysOff = new Set(
-            empConst
-              .filter((c) => {
-                const d = c.split("-")[0];
-                return (
-                  empConst.includes(`${d}-בוקר`) &&
-                  empConst.includes(`${d}-ערב`) &&
-                  empConst.includes(`${d}-לילה`)
-                );
-              })
-              .map((c) => c.split("-")[0]),
-          ).size;
-          let specVacDays = 0;
-          (window.specialStatuses || [])
-            .filter(
-              (s) =>
-                String(s.empId) === String(e.id) &&
-                ["חופש", "חופשה", "מחלה"].some((v) => (s.status || "").includes(v)),
-            )
-            .forEach((s) => {
-              if (s.startDate && s.endDate)
-                specVacDays += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
-            });
-          const vacQuota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
-          const vacUsed = uniqueDaysOff + specVacDays;
+          const vac = window._computeVacUsage(e);
           rows.push([
             e.name,
             e.type,
             e.personalId || "",
             window.getLocName ? window.getLocName(e.fixedLoc) : e.fixedLoc || "רנדומלי",
-            vacQuota,
-            vacUsed,
-            vacQuota - vacUsed,
+            vac.quota,
+            vac.used,
+            vac.remaining,
             e.isActive === false ? "לא" : "כן",
           ]);
         });
@@ -3091,6 +3101,60 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+      };
+
+      // ===== ניהול חופשים — טבלה מרוכזת לטכנאים + קבע: מכסה/נוצל/נותר לכל
+      // עובד, יחד עם פירוט טווחי החופשות עצמם (מ-specialStatuses הגלובלי) =====
+      window.renderVacationManagementTable = function () {
+        const cont = document.getElementById("vacationManagementTable");
+        if (!cont) return;
+        const list = (window.staff || [])
+          .filter((e) => e.type === "טכנאי" || e.type === "קבע")
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (list.length === 0) {
+          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/אנשי קבע במאגר.</p>`;
+          return;
+        }
+        let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr>
+          <th>שם</th><th>דרג</th><th>מכסה</th><th>נוצל</th><th>נותר</th><th>פירוט חופשות</th>
+        </tr>`;
+        list.forEach((e) => {
+          const vac = window._computeVacUsage(e);
+          const remainingColor =
+            vac.remaining < 0
+              ? "var(--md-error)"
+              : vac.remaining === 0
+                ? "var(--md-warning)"
+                : "var(--md-success)";
+          const detail =
+            vac.specEntries.length === 0
+              ? `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`
+              : vac.specEntries
+                  .map((s) => {
+                    const sd = (s.startDate || "").split("-").reverse().join(".");
+                    const ed = (s.endDate || "").split("-").reverse().join(".");
+                    const range = !s.endDate || s.startDate === s.endDate ? sd : `${sd}–${ed}`;
+                    return `<span style="display:inline-block; background:var(--md-bg); border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">${window.escapeHtml(s.status || "")}: ${range}</span>`;
+                  })
+                  .join(" ");
+          html += `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td data-label="שם"><b>${window.escapeHtml(e.name)}</b></td>
+            <td data-label="דרג">${window.escapeHtml(e.type || "")}</td>
+            <td data-label="מכסה" style="text-align:center;">${vac.quota}</td>
+            <td data-label="נוצל" style="text-align:center;">${vac.used}</td>
+            <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${vac.remaining}</td>
+            <td data-label="פירוט חופשות">${detail}</td>
+          </tr>`;
+        });
+        html += `</table>`;
+        cont.innerHTML = html;
+      };
+
+      window.exportVacationManagementToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("vacationManagementTable"),
+          `ניהול_חופשים_${window._todayFileStamp()}.csv`,
+        );
       };
 
       window.openSpecialStatusModal = function () {
@@ -3275,16 +3339,10 @@
                   .map((c) => c.split("-")[0]),
               ).size;
               let hasPartial = empConst.length > uniqueDaysOff * 3;
-              const _vacQuota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
-              // גם ימים מסטטוס מיוחד מסוג חופש
-              let _specVacDays = 0;
-              (window.specialStatuses || []).filter(s => String(s.empId) === String(e.id) && ["חופש","חופשה","מחלה"].some(v => (s.status||"").includes(v))).forEach(s => {
-                if (s.startDate && s.endDate) {
-                  _specVacDays += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
-                }
-              });
-              const _vacUsed = uniqueDaysOff + _specVacDays;
-              const _vacRemaining = _vacQuota - _vacUsed;
+              const _vac = window._computeVacUsage(e);
+              const _vacQuota = _vac.quota;
+              const _vacUsed = _vac.used;
+              const _vacRemaining = _vac.remaining;
 
               let roleName =
                 e.systemRole === "superAdmin"
@@ -3843,6 +3901,88 @@
         }
         window.recomputeNotesFromSchedule();
         window.triggerUnsavedChanges();
+      };
+
+      // ===== הערה חופשית על שיבוץ ספציפי (למשל "מגיע ב-14") =====
+      // נשמרת ישירות על ה-entry בתא (emp.note) — נקראת גם בדסקטופ (extraNote)
+      // וגם במובייל (ליד השם), בלי צורך בשינוי אחר בכל פונקציות הרינדור.
+      window.setShiftNote = function (day, shift, loc, empId) {
+        if (!window.isEditMode) return;
+        const arr =
+          window.currentSchedule[`${day}-${shift}`] &&
+          window.currentSchedule[`${day}-${shift}`][loc];
+        const entry = arr && arr.find((e) => String(e.id) === String(empId));
+        if (!entry) return;
+        const val = prompt(
+          `הערה למשמרת של ${entry.name} (למשל: "מגיע ב-14")\nהשאר ריק כדי למחוק:`,
+          entry.note || "",
+        );
+        if (val === null) return; // בוטל
+        const trimmed = val.trim();
+        if (trimmed === "") delete entry.note;
+        else entry.note = trimmed;
+        window.triggerUnsavedChanges();
+      };
+
+      // ===== החלפת 2 עובדים בין המשמרות שלהם (מובייל) — תפיסה בשני שלבים:
+      // לוחצים 🔀 על עובד/ת ראשון/ה (נשמר כ"ממתין"), ואז 🔀 על שני/יה באותו
+      // יום — ההחלפה מבוצעת (כולל הערה/נעילה שעל כל אחד, שנוסעות איתו).
+      // לחיצה חוזרת על אותו עובד מבטלת; מעבר ליום אחר לפני שהושלם מתחיל
+      // בחירה חדשה מהעובד שנלחץ (כדי לא ליצור החלפה חוצה-ימים בטעות). =====
+      window._pendingSwapSource = null;
+      window.cancelShiftSwap = function () {
+        window._pendingSwapSource = null;
+        if (typeof window.renderMobileCards === "function")
+          window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
+      };
+      window.startShiftSwap = function (day, shift, loc, empId) {
+        if (!window.isEditMode) return;
+        const arr =
+          window.currentSchedule[`${day}-${shift}`] &&
+          window.currentSchedule[`${day}-${shift}`][loc];
+        const entry = arr && arr.find((e) => String(e.id) === String(empId));
+        if (!entry) return;
+        const src = window._pendingSwapSource;
+        const isSameSpot =
+          src &&
+          src.day === day &&
+          src.shift === shift &&
+          src.loc === loc &&
+          String(src.empId) === String(empId);
+        if (isSameSpot) {
+          window.cancelShiftSwap();
+          return;
+        }
+        if (!src || src.day !== day) {
+          window._pendingSwapSource = { day, shift, loc, empId, empName: entry.name };
+          if (typeof window.renderMobileCards === "function")
+            window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
+          return;
+        }
+        // יש מקור פעיל מאותו יום, ולחצו על עובד שני — מבצעים את ההחלפה בפועל
+        const srcArr =
+          window.currentSchedule[`${src.day}-${src.shift}`] &&
+          window.currentSchedule[`${src.day}-${src.shift}`][src.loc];
+        if (!srcArr) { window._pendingSwapSource = null; return; }
+        const srcIdx = srcArr.findIndex((e) => String(e.id) === String(src.empId));
+        const tgtIdx = arr.findIndex((e) => String(e.id) === String(empId));
+        if (srcIdx === -1 || tgtIdx === -1) { window._pendingSwapSource = null; return; }
+        const srcEntry = srcArr[srcIdx];
+        const tgtEntry = arr[tgtIdx];
+        const srcName = srcEntry.name;
+        const tgtName = tgtEntry.name;
+        // גרירה/שיבוץ ידני נועל אוטומטית — אותו כלל חל גם כאן
+        if (srcArr === arr) {
+          arr[srcIdx] = { ...tgtEntry, isLocked: true };
+          arr[tgtIdx] = { ...srcEntry, isLocked: true };
+        } else {
+          srcArr.splice(srcIdx, 1, { ...tgtEntry, isLocked: true });
+          arr.splice(tgtIdx, 1, { ...srcEntry, isLocked: true });
+        }
+        window._pendingSwapSource = null;
+        window.recomputeNotesFromSchedule();
+        window.triggerUnsavedChanges();
+        alert(`✅ הוחלפו: ${srcName} ⇄ ${tgtName}`);
       };
 
       // ===== הוספת עובד למשמרת במובייל (חלופה ללחיצה-גרירה, שלא עובדת במגע) =====
@@ -7046,7 +7186,7 @@
                 const dName = days[cur.getDay()];
                 const dVal = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
                 const wkSun = new Date(cur);
-                wkSun.setDate(cur.getDate() - dow);
+                wkSun.setDate(cur.getDate() - cur.getDay());
                 const wkKey = window.getWeekDbKey(wkSun);
                 _submitOneRequest(dVal, dName, wkKey);
               }
@@ -9038,11 +9178,14 @@
                 const removeBtn = window.isEditMode
                   ? `<a class="remove-btn" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${e.id})">✕</a>`
                   : "";
+                const noteBtn = window.isEditMode && !window.isWorkerMode
+                  ? `<a class="remove-btn" style="color:#0d9488;" onclick="window.setShiftNote('${d}','${r.shift}','${safeLoc}',${e.id})" title="הערה למשמרת">✏️</a>`
+                  : "";
                 const dragAttr = window.isEditMode
                   ? `draggable="true" ondragstart="window.dragStart(event, ${e.id}, '${d}', '${r.shift}', '${safeLoc}')"`
                   : "";
                 const extraNote = e.note
-                  ? ` <span style="font-size:0.75em; color:var(--md-text-secondary); margin-right:4px;">(${e.note})</span>`
+                  ? ` <span style="font-size:0.75em; color:var(--md-text-secondary); margin-right:4px;">(${window.escapeHtml(e.note)})</span>`
                   : "";
                 let t = e.type || "";
                 let isMe =
@@ -9055,7 +9198,7 @@
                 const warnIcon = _warns.length
                   ? ` <span class="assign-warn-icon" title="${_warns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
                   : "";
-                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
+                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${noteBtn}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
               });
             } else {
               html += `<span style="color:transparent;">.</span>`;
@@ -9131,6 +9274,8 @@
           window.selectMobileDay(window.currentMobileDay);
         if (typeof window.renderPendingRequestsManager === "function")
           window.renderPendingRequestsManager();
+        if (typeof window.renderVacationManagementTable === "function")
+          window.renderVacationManagementTable();
       };
 
       // אתחול החלקה (swipe) למעבר בין ימים בנייד — פעם אחת, על המיכל הקבוע
@@ -9190,7 +9335,17 @@
         const _mCellDate = new Date(_mWeekSun);
         _mCellDate.setDate(_mCellDate.getDate() + (mobileDayIdx - 1));
         const _mDateStr = `${_mCellDate.getDate()}/${_mCellDate.getMonth() + 1}/${_mCellDate.getFullYear()}`;
-        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${noteHtml}<div style="margin-bottom:15px;"></div>`;
+        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${noteHtml}`;
+
+        // באנר החלפה ממתינה — מוצג כשנבחר עובד ראשון להחלפה, עד שנבחר שני
+        // (או עד ביטול). מוצג רק למנהלים, זהה בין ימים כל עוד לא הוחלף היום.
+        if (window._pendingSwapSource && !window.isWorkerMode) {
+          html += `<div style="background:#fef3c7; color:#92400e; border:1px dashed #f59e0b; border-radius:8px; padding:8px 12px; margin-top:8px; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span>🔀 נבחר/ה <b>${window.escapeHtml(window._pendingSwapSource.empName)}</b> להחלפה — לחצ/י על 🔀 של עובד/ת אחר/ת באותו יום כדי להשלים</span>
+            <button class="btn btn-outlined" style="padding:2px 10px; font-size:0.78rem;" onclick="window.cancelShiftSwap()">ביטול</button>
+          </div>`;
+        }
+        html += `<div style="margin-bottom:15px;"></div>`;
 
         const _matalUnderstaff = window.currentSchedule && window.currentSchedule.matalUnderstaff === true;
         const _weekSunForRows = window.getSunday(window.currentWeekOffset || 0);
@@ -9276,8 +9431,27 @@
               const mWarnIcon = _mWarns.length
                 ? ` <span class="assign-warn-icon" title="${_mWarns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
                 : "";
+              // כפתור החלפה — פעיל רק במצב עריכה, למנהל בלבד. מדגיש בצהוב
+              // את מי שכבר נבחר כ"צד א'" של ההחלפה הממתינה (ר' הבאנר למעלה)
+              const _isPendingSwapSrc =
+                window._pendingSwapSource &&
+                window._pendingSwapSource.day === d &&
+                window._pendingSwapSource.shift === r.shift &&
+                window._pendingSwapSource.loc === r.loc &&
+                String(window._pendingSwapSource.empId) === String(emp.id);
+              const swapBtn =
+                window.isEditMode && !window.isWorkerMode
+                  ? `<span class="mobile-swap-btn" style="margin-right:8px; color:${_isPendingSwapSrc ? "#f59e0b" : "#2563eb"}; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.startShiftSwap('${d}','${r.shift}','${safeLoc}',${emp.id})" title="החלף עם עובד/ת אחר/ת">🔀</span>`
+                  : "";
+              const noteBtn =
+                window.isEditMode && !window.isWorkerMode
+                  ? `<span class="mobile-note-btn" style="margin-right:8px; color:#0d9488; cursor:pointer; padding:2px 6px;" onclick="window.setShiftNote('${d}','${r.shift}','${safeLoc}',${emp.id})" title="הערה למשמרת">✏️</span>`
+                  : "";
+              const chipShadow = _isPendingSwapSrc
+                ? "0 0 0 2px #f59e0b"
+                : "0 1px 2px rgba(0,0,0,0.02)";
               // הכוכב הוסר כאן
-              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${emp.note})</small>` : ""}${mWarnIcon}</div>`;
+              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow:${chipShadow};">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${swapBtn}${noteBtn}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${window.escapeHtml(emp.note)})</small>` : ""}${mWarnIcon}</div>`;
             });
           }
           if (window.isEditMode && !window.isWorkerMode) {
