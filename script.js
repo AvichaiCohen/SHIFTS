@@ -42,26 +42,29 @@
         { id: "demands", label: "דרישות כוח" },
         { id: "rules", label: "הגדרות" },
       ];
-      // הגריד רחב (30 עמודות) כדי לאפשר מיקום/גודל עדין הרבה יותר. ווידג'
-      // ברירת מחדל תופס WIDGET_DEFAULT_COL_SPAN עמודות (כ-שליש רוחב). מספר
-      // השורות לא מוגבל (הגריד גדל כלפי מטה) — WIDGET_GRID_ROWS_MAX הוא רק
-      // תקרה לגובה של ווידג' בודד בשינוי גודל.
+      // הגריד עדין בשני הצירים: 30 עמודות ברוחב, ושורות נמוכות (WIDGET_ROW_PX
+      // פיקסלים כל אחת) כדי שגם הגובה יהיה עדין ולא "קפיצות" של 340px. ווידג'
+      // ברירת מחדל תופס WIDGET_DEFAULT_COL_SPAN עמודות ו-WIDGET_DEFAULT_ROW_SPAN
+      // שורות. WIDGET_GRID_ROWS_MAX = תקרת שורות לווידג' בודד בשינוי גודל.
+      // WIDGET_ROW_PX חייב להיות זהה ל-grid-auto-rows ב-style.css.
       window.WIDGET_GRID_COLS = 30;
       window.WIDGET_DEFAULT_COL_SPAN = 10;
-      window.WIDGET_GRID_ROWS_MAX = 3;
+      window.WIDGET_ROW_PX = 40;
+      window.WIDGET_DEFAULT_ROW_SPAN = 6;
+      window.WIDGET_GRID_ROWS_MAX = 40;
 
-      // v2: מפתח חדש כי מעברנו מ-5 ל-30 עמודות — מיקומים ישנים (colStart/
-      // colSpan ל-5 עמודות) אינם תקפים בגריד החדש, ולכן מתחילים סידור נקי.
+      // v3: מפתח חדש כי גם השורות הפכו לעדינות (יחידת שורה 40px במקום 340px) —
+      // ערכי rowSpan/rowStart ישנים אינם תקפים ביחידה החדשה, ולכן סידור נקי.
       window._loadWidgetPrefs = function () {
         try {
-          return JSON.parse(localStorage.getItem("widget_layout_v2")) || {};
+          return JSON.parse(localStorage.getItem("widget_layout_v3")) || {};
         } catch (e) {
           return {};
         }
       };
       window._saveWidgetPrefs = function (prefs) {
         try {
-          localStorage.setItem("widget_layout_v2", JSON.stringify(prefs));
+          localStorage.setItem("widget_layout_v3", JSON.stringify(prefs));
         } catch (e) {}
       };
 
@@ -180,7 +183,7 @@
           const oColStart = p.colStart || 1;
           const oRowStart = p.rowStart || 1;
           const oColSpan = p.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
-          const oRowSpan = p.rowSpan || 1;
+          const oRowSpan = p.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
           const overlap =
             colStart < oColStart + oColSpan &&
             colStart + colSpan > oColStart &&
@@ -219,12 +222,12 @@
             (window.WIDGET_REGISTRY[k] && window.WIDGET_REGISTRY[k].defaultColSpan) ||
             window.WIDGET_DEFAULT_COL_SPAN;
           const colSpan = Math.min(window.WIDGET_GRID_COLS, p.colSpan || regDefault);
-          const rowSpan = p.rowSpan || 1;
+          const rowSpan = p.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
           if (p.colStart && p.rowStart) {
             mark(p.colStart, p.rowStart, colSpan, rowSpan);
             return;
           }
-          outer: for (let r = 1; r <= 60; r++) {
+          outer: for (let r = 1; r <= 600; r++) {
             for (let c = 1; c <= window.WIDGET_GRID_COLS - colSpan + 1; c++) {
               if (fits(c, r, colSpan, rowSpan)) {
                 prefs[k] = prefs[k] || {};
@@ -279,7 +282,7 @@
         const prefs = window._loadWidgetPrefs();
         const cur = prefs[key] || {};
         const startCol = cur.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
-        const startRow = cur.rowSpan || 1;
+        const startRow = cur.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
         window._resizeState = {
           key,
           el,
@@ -353,11 +356,11 @@
         const gap = 16;
         const cellW =
           (gridRect.width - gap * (window.WIDGET_GRID_COLS - 1)) / window.WIDGET_GRID_COLS;
-        const rowH = 340 + gap;
+        const rowH = window.WIDGET_ROW_PX + gap;
         const prefs = window._loadWidgetPrefs();
         const cur = prefs[key] || {};
         const colSpan = cur.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
-        const rowSpan = cur.rowSpan || 1;
+        const rowSpan = cur.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
         const origColStart = cur.colStart || 1;
         const origRowStart = cur.rowStart || 1;
         // בגריד RTL עמודה 1 היא הימנית ביותר — לכן תזוזת עכבר ימינה צריכה
@@ -452,7 +455,7 @@
         window._autoPlaceMissingWidgets(target.id);
         const p2 = window._loadWidgetPrefs()[key] || {};
         el.style.gridColumn = (p2.colStart || 1) + " / span " + (p2.colSpan || window.WIDGET_DEFAULT_COL_SPAN);
-        el.style.gridRow = (p2.rowStart || 1) + " / span " + (p2.rowSpan || 1);
+        el.style.gridRow = (p2.rowStart || 1) + " / span " + (p2.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN);
         window._reorderDomByPosition(grid);
         window._updateHiddenWidgetsBtn(target.id);
         alert(`✅ הועבר לעמוד "${target.label}". אפשר למצוא אותו שם מעכשיו.`);
@@ -481,7 +484,7 @@
           if (grid) grid.appendChild(el);
           if (p.collapsed) el.classList.add("widget-collapsed");
           const colSpan = p.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
-          const rowSpan = p.rowSpan || 1;
+          const rowSpan = p.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
           const colStart = p.colStart || 1;
           const rowStart = p.rowStart || 1;
           el.style.gridColumn = colStart + " / span " + colSpan;
