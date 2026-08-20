@@ -1133,15 +1133,24 @@
         margin-bottom: 20px;
       }
       @media (max-width: 1024px) {
+        /* במובייל הגריד קורס לעמודה אחת. חובה גם לבטל את grid-auto-rows של
+           40px — אחרת כל פאנל (עם grid-row:auto) מקבל שורה אחת של 40px בלבד,
+           והמעטפת (overflow:hidden) חותכת את כל התוכן. auto = גובה לפי תוכן. */
         .widget-grid {
           grid-template-columns: 1fr;
+          grid-auto-rows: auto;
         }
-        /* במובייל הגריד קורס לעמודה אחת — מבטלים את המיקום המפורש
-           (colStart/rowStart) שנקבע לתצוגת דסקטופ, אחרת פאנל עם עמודה 3-4
-           היה "נעלם" ימינה מחוץ לעמודה היחידה. סדר הערימה נקבע ב-DOM. */
+        /* מבטלים את המיקום/הגודל המפורש שנקבע לדסקטופ; סדר הערימה נקבע ב-DOM.
+           התוכן מוצג במלואו (העמוד גולל), לא נחתך ולא גולל בתוך הכרטיס. */
         [data-widget-key] {
           grid-column: 1 / -1 !important;
           grid-row: auto !important;
+          overflow: visible !important;
+        }
+        [data-widget-key] > .widget-body {
+          overflow: visible !important;
+          flex: none !important;
+          min-height: 0;
         }
         .widget-drag-handle {
           display: none;
