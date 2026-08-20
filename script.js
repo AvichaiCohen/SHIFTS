@@ -612,6 +612,110 @@
       window.roleTypes =
         JSON.parse(localStorage.getItem("shift_roles_v48")) || defaultRoleTypes;
 
+      // ===== קונפיגורציית הרשאות/כפתורים לפי סוג עובד =====
+      // במקום לקודד בקוד "if type === טכנאי" לכל פעולה, כל סוג עובד מקבל
+      // אובייקט הגדרות שנשלט מעמוד ההגדרות. נשמר בענן (roleConfig) כדי שיחול
+      // על כל העובדים בכל מכשיר. getRoleConfig ממזג ברירת-מחדל + מה שנשמר,
+      // כך שסוגים/דגלים חדשים לא שוברים כלום (fallback לברירת המחדל).
+      // requestLimit: 0 = ללא הגבלה. שאר הדגלים בוליאניים.
+      window.ROLE_CONFIG_FLAGS = [
+        { key: "canRequestVacation", label: "רשאי לבקש חופשה" },
+        { key: "canRequestConstraint", label: "רשאי לבקש אילוץ" },
+        { key: "canRequestPreference", label: "רשאי לבקש העדפת מיקום/שיבוץ" },
+        { key: "canRequestStudy", label: "רשאי לבקש יום לימודים" },
+        { key: "canSwapTasks", label: "כפתור החלפת משימה" },
+        { key: "canSwapHoliday", label: "כפתור החלפת חג" },
+        { key: "canSwapWeekend", label: 'כפתור החלפת סופ"ש' },
+        { key: "canVolunteerTask", label: "כפתור התנדבות למשימה פתוחה" },
+      ];
+      window.roleConfig = window.roleConfig || {};
+      window._defaultRoleConfig = function (role) {
+        const base = {
+          requestLimit: 2,
+          canRequestVacation: true,
+          canRequestConstraint: true,
+          canRequestPreference: true,
+          canRequestStudy: false,
+          canSwapTasks: true,
+          canSwapHoliday: true,
+          canSwapWeekend: false,
+          canVolunteerTask: false,
+        };
+        const presets = {
+          "קבינט בכיר": {},
+          קבע: { requestLimit: 0, canRequestStudy: true },
+          מילואים: { requestLimit: 0 },
+          טכנאי: { canSwapWeekend: true, canVolunteerTask: true },
+          נחפף: { canVolunteerTask: true },
+        };
+        return Object.assign({}, base, presets[role] || {});
+      };
+      window.getRoleConfig = function (role) {
+        const stored = (window.roleConfig && window.roleConfig[role]) || {};
+        return Object.assign({}, window._defaultRoleConfig(role), stored);
+      };
+      window.roleCan = function (role, flag) {
+        return window.getRoleConfig(role)[flag] === true;
+      };
+
+      // בונה את פאנל ההגדרות (עמוד הגדרות) — כרטיס לכל סוג עובד עם מכסת בקשות
+      // ותיבות סימון לכל דגל. הערכים נטענים מ-getRoleConfig (ברירת מחדל + שמור).
+      window.renderRoleConfigUI = function () {
+        const cont = document.getElementById("roleConfigList");
+        if (!cont) return;
+        const roles = window.roleTypes || [];
+        let html = "";
+        roles.forEach((role) => {
+          const cfg = window.getRoleConfig(role);
+          const safeRole = window.escapeHtml(role);
+          const flagsHtml = window.ROLE_CONFIG_FLAGS.map((f) => {
+            const checked = cfg[f.key] === true ? "checked" : "";
+            return `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+              <input type="checkbox" data-role="${safeRole}" data-flag="${f.key}" ${checked} />
+              <span>${f.label}</span>
+            </label>`;
+          }).join("");
+          html += `<div class="card-paper" style="border:1px solid var(--md-divider); box-shadow:none; margin-bottom:14px; padding:14px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+              <b style="font-size:1rem; color:#2563eb;">${safeRole}</b>
+              <label style="display:flex; align-items:center; gap:6px; font-size:0.88rem;">
+                <span>מכסת בקשות לשבוע:</span>
+                <input type="number" min="0" data-role="${safeRole}" data-flag="requestLimit" value="${Number(cfg.requestLimit) || 0}" style="width:64px; padding:4px 6px;" />
+                <span style="color:var(--text-muted); font-size:0.78rem;">(0 = ללא הגבלה)</span>
+              </label>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:8px;">
+              ${flagsHtml}
+            </div>
+          </div>`;
+        });
+        cont.innerHTML = html;
+      };
+
+      // אוסף את הערכים מהפאנל, כותב ל-roleConfig בענן (כל העובדים בכל מכשיר)
+      window.saveRoleConfig = function () {
+        const cont = document.getElementById("roleConfigList");
+        if (!cont) return;
+        const cfg = {};
+        (window.roleTypes || []).forEach((role) => (cfg[role] = {}));
+        cont.querySelectorAll("input[data-role]").forEach((inp) => {
+          const role = inp.getAttribute("data-role");
+          const flag = inp.getAttribute("data-flag");
+          if (!cfg[role]) cfg[role] = {};
+          if (inp.type === "checkbox") cfg[role][flag] = inp.checked;
+          else if (flag === "requestLimit")
+            cfg[role][flag] = Math.max(0, parseInt(inp.value, 10) || 0);
+        });
+        window.roleConfig = cfg;
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("roleConfig", cfg);
+        // רענון תצוגות שתלויות בהרשאות
+        if (typeof window.renderTasks === "function") window.renderTasks();
+        if (typeof window.renderHolidaysLog === "function")
+          window.renderHolidaysLog();
+        alert("✅ ההרשאות נשמרו והוחלו על כל העובדים.");
+      };
+
       window.promptNewRole = function () {
         let nr = prompt("הכנס שם דרג חדש:");
         if (nr && nr.trim() !== "" && !window.roleTypes.includes(nr.trim())) {
@@ -4190,6 +4294,8 @@
           }
           if (typeof window.renderBackupsList === "function")
             window.renderBackupsList();
+          if (typeof window.renderRoleConfigUI === "function")
+            window.renderRoleConfigUI();
         }
         if (p === "staff" && typeof window.renderStaff === "function")
           window.renderStaff();
@@ -4380,7 +4486,11 @@
           html += `<tr><td colspan="6" data-label="" style="text-align:center; color:var(--text-muted); font-style:italic; padding:12px;">אין רישומים תואמים לסינון.</td></tr>`;
         }
         displayLog.forEach((log) => {
-          const canSwap = window.isWorkerMode && meForHol && log.name === meForHol.name;
+          const canSwap =
+            window.isWorkerMode &&
+            meForHol &&
+            log.name === meForHol.name &&
+            window.roleCan(meForHol.type, "canSwapHoliday");
           const swapBtn = canSwap
             ? `<button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem;" onclick="window.requestHolidaySwap(${log.id})">🔄 בקש החלפה</button>`
             : "";
@@ -4598,9 +4708,12 @@
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
         const others = (window.staff || []).filter(
-          (e) => e.isActive !== false && e.type === "טכנאי" && String(e.id) !== String(me.id),
+          (e) =>
+            e.isActive !== false &&
+            window.roleCan(e.type, "canSwapWeekend") &&
+            String(e.id) !== String(me.id),
         );
-        if (others.length === 0) { alert("אין טכנאים אחרים להחלפה."); return; }
+        if (others.length === 0) { alert("אין עובדים מתאימים להחלפת סופ\"ש."); return; }
         const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
         const choice = prompt(
           `למי לשלוח בקשת החלפת סופ"ש (${item.weekLabel})?\n\n${optionsStr}\n\nהקלד את המספר:`,
@@ -5436,7 +5549,7 @@
             "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין סופ\"שים/חגים קרובים שאת/ה מתוכנן/ת לסגור.</p>";
           return;
         }
-        const canRequestSwap = me.type === "טכנאי";
+        const canRequestSwap = window.roleCan(me.type, "canSwapWeekend");
         let html = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th>${canRequestSwap ? '<th style="padding:8px;"></th>' : ""}</tr>`;
         results.forEach((r, idx) => {
           const dayDetails = Object.entries(r.days)
@@ -5750,7 +5863,8 @@
               window.isWorkerMode &&
               !t.completed &&
               _meForSwap &&
-              _participantNames.includes(_meForSwap.name);
+              _participantNames.includes(_meForSwap.name) &&
+              window.roleCan(_meForSwap.type, "canSwapTasks");
             const swapBtn = _canSwap
               ? `<br><button class="btn btn-outlined" style="padding:2px 8px; font-size:0.72rem; margin-top:4px;" onclick="window.requestTaskSwap(${t.id})">🔄 בקש החלפה</button>`
               : "";
@@ -5760,7 +5874,7 @@
               !t.completed &&
               _participantNames.length === 0 &&
               _meForSwap &&
-              (_meForSwap.type === "טכנאי" || _meForSwap.type === "נחפף");
+              window.roleCan(_meForSwap.type, "canVolunteerTask");
             const volunteerBtn = _canVolunteer
               ? `<button class="btn btn-contained" style="background:#16a34a; padding:2px 8px; font-size:0.72rem;" onclick="window.volunteerForTask(${t.id})">🙋 התנדב</button>`
               : "";
@@ -7132,8 +7246,22 @@
         reqSunday.setDate(reqDateObj.getDate() - reqDayOfWeek);
         const targetWeekKey = window.getWeekDbKey(reqSunday);
 
-        // קבע ומילואים — ללא מגבלת בקשות (אילוצים/חופשים)
-        const _noLimit = emp.type === "קבע" || emp.type === "מילואים";
+        // הרשאות ומכסה לפי סוג העובד (נשלט מעמוד ההגדרות → roleConfig)
+        const _roleCfg = window.getRoleConfig(emp.type);
+        const _reqLimit = _roleCfg.requestLimit || 0; // 0 = ללא הגבלה
+        const _noLimit = _reqLimit <= 0;
+        // חסימת סוגי בקשה שלא מותרים לסוג העובד הזה
+        const _permByType = {
+          vacation: "canRequestVacation",
+          constraint: "canRequestConstraint",
+          shift: "canRequestPreference",
+          study: "canRequestStudy",
+        };
+        const _permFlag = _permByType[type];
+        if (_permFlag && !_roleCfg[_permFlag]) {
+          alert("סוג הבקשה הזה אינו זמין עבור " + (emp.type || "סוג עובד זה") + ".");
+          return;
+        }
 
         // חופשה — יום בודד או טווח תאריכים; שישי/שבת אינם נספרים כימי חופש
         const vacSingle =
@@ -7155,12 +7283,8 @@
           return;
         }
 
-        // יום לימודים — רק לקבע, ופעם אחת בשבוע
+        // יום לימודים — פעם אחת בשבוע (ההרשאה לסוג העובד כבר נבדקה למעלה)
         if (type === "study") {
-          if (emp.type !== "קבע") {
-            alert("יום לימודים ניתן לבקשה רק עבור אנשי קבע.");
-            return;
-          }
           let studyThisWeek = 0;
           if (targetWeekKey === window.currentSelectedWeek) {
             (emp.constraints || []).forEach(() => {});
@@ -7211,8 +7335,8 @@
               }
             });
           }
-          if (existingCount >= 2) {
-            alert(`🚨 חסימה: ${emp.name}, הגעת למכסה המקסימלית של 2 בקשות לשבוע זה!`);
+          if (existingCount >= _reqLimit) {
+            alert(`🚨 חסימה: ${emp.name}, הגעת למכסה המקסימלית של ${_reqLimit} בקשות לשבוע זה!`);
             return;
           }
           if (type === "shift" && (loc === LOC_ZIRA || loc === LOC_MATAL) && locationCount >= 1) {

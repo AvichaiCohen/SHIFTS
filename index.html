@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260820b";
+        var BUILD = "20260820c";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -428,6 +428,25 @@
             }
           });
 
+          // האזנה לקונפיגורציית הרשאות/כפתורים לפי סוג עובד (מנהל שולט,
+          // חל על כל העובדים בכל מכשיר)
+          onValue(ref(db, "roleConfig"), (snapshot) => {
+            window.roleConfig = snapshot.exists() ? snapshot.val() || {} : {};
+            if (typeof window.renderRoleConfigUI === "function")
+              try {
+                window.renderRoleConfigUI();
+              } catch (e) {}
+            // רענון תצוגות שתלויות בהרשאות
+            if (typeof window.renderTasks === "function")
+              try {
+                window.renderTasks();
+              } catch (e) {}
+            if (typeof window.renderHolidaysLog === "function")
+              try {
+                window.renderHolidaysLog();
+              } catch (e) {}
+          });
+
           // האזנה לשעות משמרות גלובליות
           onValue(ref(db, "globalShiftTimes"), (snapshot) => {
             if (snapshot.exists()) {
@@ -734,7 +753,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260820b" />
+    <link rel="stylesheet" href="style.css?v=20260820c" />
   </head>
   <body>
     <div
@@ -2537,6 +2556,45 @@
               </button>
             </div>
             <div id="holidayCalendarList"></div>
+          </div>
+
+          <div
+            class="card-paper super-only"
+            id="roleConfigWrapper"
+            style="border-left: 4px solid #2563eb; margin-top: 20px"
+          >
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+              "
+            >
+              <h3 style="color: #2563eb; margin-top: 0; margin-bottom: 0">
+                🧩 הרשאות וכפתורים לפי סוג עובד
+              </h3>
+              <button
+                class="btn btn-contained"
+                style="background: #2563eb"
+                onclick="window.saveRoleConfig()"
+              >
+                💾 שמור הרשאות
+              </button>
+            </div>
+            <p
+              style="
+                font-size: 0.82rem;
+                color: var(--md-text-secondary);
+                margin-top: 6px;
+              "
+            >
+              לכל סוג עובד — כמה בקשות מותר לו לשבוע (0 = ללא הגבלה), אילו סוגי
+              בקשות מותרים לו, ואילו כפתורי פעולה יופיעו לו באתר. השינויים חלים
+              על כל העובדים בכל מכשיר לאחר שמירה.
+            </p>
+            <div id="roleConfigList"></div>
           </div>
 
           <div
@@ -4722,6 +4780,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260820b"></script>
+    <script src="script.js?v=20260820c"></script>
   </body>
 </html>
