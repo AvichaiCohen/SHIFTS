@@ -1123,12 +1123,11 @@
         margin-bottom: 12px;
         display: none;
       }
-      /* רשת הווידג'טים — מספר משבצות קבוע וברור: תמיד 4 עמודות ברוחב (לא
-         תלוי כמה נכנס, כמו קודם) על 2 שורות גובה אפשריות. כל פאנל תופס בין
-         1 ל-4 עמודות ובין 1 ל-2 שורות. במסך צר (מובייל) קורס לעמודה אחת. */
+      /* רשת הווידג'טים — 30 עמודות דקות למיקום/גודל עדין. כל פאנל תופס טווח
+         עמודות (ברירת מחדל ~10 = שליש רוחב). במסך צר (מובייל) קורס לעמודה אחת. */
       .widget-grid {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(30, 1fr);
         grid-auto-rows: 340px;
         gap: 16px;
         margin-bottom: 20px;
@@ -1154,7 +1153,7 @@
         overflow: hidden;
         min-width: 0;
         min-height: 0;
-        grid-column: span 2;
+        grid-column: span 10;
         grid-row: span 1;
         position: relative;
         display: flex;
