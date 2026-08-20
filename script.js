@@ -30,7 +30,7 @@
         taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
         vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
-        trackingTable: { nativePage: "tracking", label: "נוכחות שבועית", defaultColSpan: 30 },
+        trackingTable: { nativePage: "tracking", label: "נוכחות שבועית", defaultColSpan: 16 },
         demandsListContainer: { nativePage: "demands", label: "דרישות פעילות", defaultColSpan: 18 },
       };
       window.WIDGET_PAGES = [
@@ -68,8 +68,12 @@
         } catch (e) {}
       };
 
-      // מוצא/יוצר את מיכל הגריד של עמוד נתון — נכנס מיד אחרי האלמנט הראשון
-      // של העמוד (בד"כ הכותרת, או שורה שעוטפת אותה עם כפתור ייצוא וכו')
+      // עמודים שיש בהם תוכן קבוע חשוב בראש (לוח המשמרות, טבלת נוכחות, טופס
+      // דרישות, כרטיסי צוות/הגדרות) — הגריד של הפאנלים ה"מועברים" נכנס בתחתית
+      // העמוד כדי לא לדחוף את התוכן הקבוע למטה. בעמודי הפאנלים הטהורים
+      // (משימות/בקשות) הגריד נשאר בראש (מיד אחרי הכותרת).
+      window._WIDGET_GRID_AT_END = ["schedule", "tracking", "demands", "staff", "rules"];
+      // מוצא/יוצר את מיכל הגריד של עמוד נתון
       window._ensureWidgetGrid = function (pageId) {
         const pageEl = document.getElementById("page-" + pageId);
         if (!pageEl) return null;
@@ -77,8 +81,12 @@
         if (!grid) {
           grid = document.createElement("div");
           grid.className = "widget-grid";
-          const anchor = pageEl.children[1] || null;
-          pageEl.insertBefore(grid, anchor);
+          if (window._WIDGET_GRID_AT_END.indexOf(pageId) !== -1) {
+            pageEl.appendChild(grid);
+          } else {
+            const anchor = pageEl.children[1] || null;
+            pageEl.insertBefore(grid, anchor);
+          }
         }
         return grid;
       };
@@ -458,7 +466,25 @@
         el.style.gridRow = (p2.rowStart || 1) + " / span " + (p2.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN);
         window._reorderDomByPosition(grid);
         window._updateHiddenWidgetsBtn(target.id);
-        alert(`✅ הועבר לעמוד "${target.label}". אפשר למצוא אותו שם מעכשיו.`);
+        // מעבר אוטומטי לעמוד היעד — כדי שהפאנל לא "ייעלם" (חלק מהעמודים,
+        // כמו נוכחות שבועית, לא נגישים מכל תפריט, אז המשתמש היה מאבד אותם)
+        if (typeof window.showPage === "function") window.showPage(target.id);
+        alert(`✅ הפאנל הועבר לעמוד "${target.label}" (הועברת לשם עכשיו).`);
+      };
+
+      // שחזור: מחזיר את כל הפאנלים למקומם המקורי ולסידור ברירת המחדל —
+      // כלי הצלה למקרה שפאנל "אבד" בעמוד שקשה להגיע אליו.
+      window.resetWidgetLayout = function () {
+        if (
+          !confirm(
+            "להחזיר את כל הפאנלים למיקום ולגודל ברירת המחדל?\nכל סידור אישי נוכחי יימחק.",
+          )
+        )
+          return;
+        try {
+          localStorage.removeItem("widget_layout_v3");
+        } catch (e) {}
+        location.reload();
       };
 
       // מריץ פעם אחת בעליית האפליקציה — מכניס כל ווידג'ט לגריד של העמוד

@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260820g";
+        var BUILD = "20260820h";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -753,7 +753,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260820g" />
+    <link rel="stylesheet" href="style.css?v=20260820h" />
   </head>
   <body>
     <div
@@ -889,6 +889,9 @@
         </div>
         <div onclick="window.showPage('demands')" id="nav-demands">
           📊 דרישות כוח
+        </div>
+        <div onclick="window.showPage('tracking')" id="nav-tracking">
+          🗓️ מעקב נוכחות
         </div>
         <div onclick="window.showPage('rules')" id="nav-rules">⚙️ הגדרות</div>
 
@@ -2610,6 +2613,40 @@
               על כל העובדים בכל מכשיר לאחר שמירה.
             </p>
             <div id="roleConfigList"></div>
+          </div>
+
+          <div
+            class="card-paper manager-only"
+            style="border-left: 4px solid #64748b; margin-top: 20px"
+          >
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+              "
+            >
+              <h3 style="color: #64748b; margin: 0">🧩 סידור פאנלים</h3>
+              <button
+                class="btn btn-outlined"
+                onclick="window.resetWidgetLayout()"
+              >
+                ♻️ החזר פאנלים לברירת מחדל
+              </button>
+            </div>
+            <p
+              style="
+                font-size: 0.82rem;
+                color: var(--md-text-secondary);
+                margin-top: 6px;
+                margin-bottom: 0;
+              "
+            >
+              אם פאנל "אבד" (הועבר לעמוד שקשה להגיע אליו) — הכפתור מחזיר את כל
+              הפאנלים למיקום ולגודל ברירת המחדל.
+            </p>
           </div>
 
           <div
@@ -4805,6 +4842,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260820g"></script>
+    <script src="script.js?v=20260820h"></script>
   </body>
 </html>
