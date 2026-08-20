@@ -3220,7 +3220,7 @@
           return;
         }
         let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr>
-          <th>שם</th><th>דרג</th><th>מכסה</th><th>נוצל</th><th>נותר</th><th>פירוט חופשות</th>
+          <th>שם</th><th>דרג</th><th>מכסה</th><th>נוצל</th><th>נותר</th><th>נותר לאחר בקשות</th><th>פירוט חופשות</th>
         </tr>`;
         list.forEach((e) => {
           const vac = window._computeVacUsage(e);
@@ -3262,12 +3262,29 @@
           const combinedDetail =
             detail + futureDetail ||
             `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`;
+          // סך ימי הבקשות העתידיות המאושרות → "נותר לאחר בקשות" = נותר פחות אלה
+          const futureDaysCount = futureItems.reduce(
+            (sum, item) => sum + (item.dates ? item.dates.length : 0),
+            0,
+          );
+          const afterReq = vac.remaining - futureDaysCount;
+          const afterReqColor =
+            afterReq < 0
+              ? "var(--md-error)"
+              : afterReq === 0
+                ? "var(--md-warning)"
+                : "var(--md-success)";
+          const afterReqCell =
+            futureDaysCount > 0
+              ? `${afterReq} <span style="color:var(--text-muted); font-weight:normal; font-size:0.75rem;">(−${futureDaysCount})</span>`
+              : `${afterReq}`;
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
             <td data-label="שם"><b>${window.escapeHtml(e.name)}</b></td>
             <td data-label="דרג">${window.escapeHtml(e.type || "")}</td>
             <td data-label="מכסה" style="text-align:center;">${vac.quota}</td>
             <td data-label="נוצל" style="text-align:center;">${vac.used}</td>
             <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${vac.remaining}</td>
+            <td data-label="נותר לאחר בקשות" style="text-align:center; font-weight:bold; color:${afterReqColor};">${afterReqCell}</td>
             <td data-label="פירוט חופשות">${combinedDetail}</td>
           </tr>`;
         });
