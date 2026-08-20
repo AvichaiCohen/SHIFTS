@@ -30,6 +30,8 @@
         taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
         vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
+        trackingTable: { nativePage: "tracking", label: "נוכחות שבועית", defaultColSpan: 30 },
+        demandsListContainer: { nativePage: "demands", label: "דרישות פעילות", defaultColSpan: 18 },
       };
       window.WIDGET_PAGES = [
         { id: "schedule", label: "לוח משמרות" },
@@ -213,7 +215,10 @@
         let changed = false;
         keys.forEach((k) => {
           const p = prefs[k] || {};
-          const colSpan = p.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
+          const regDefault =
+            (window.WIDGET_REGISTRY[k] && window.WIDGET_REGISTRY[k].defaultColSpan) ||
+            window.WIDGET_DEFAULT_COL_SPAN;
+          const colSpan = Math.min(window.WIDGET_GRID_COLS, p.colSpan || regDefault);
           const rowSpan = p.rowSpan || 1;
           if (p.colStart && p.rowStart) {
             mark(p.colStart, p.rowStart, colSpan, rowSpan);

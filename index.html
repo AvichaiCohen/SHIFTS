@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260820e";
+        var BUILD = "20260820f";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -753,7 +753,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260820e" />
+    <link rel="stylesheet" href="style.css?v=20260820f" />
   </head>
   <body>
     <div
@@ -2374,7 +2374,22 @@
             <option value="שישי">יום שישי</option>
             <option value="שבת">יום שבת</option>
           </select>
-          <div id="fullTrackingTableContainer"></div>
+          <div
+            class="card-paper"
+            id="widget-trackingTable"
+            data-widget-key="trackingTable"
+            style="border-top: 4px solid var(--md-primary)"
+          >
+            <div class="widget-controls">
+              <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'trackingTable')" title="גרור להזזה">⠿</span>
+              <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('trackingTable')">👁</button>
+              <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('trackingTable')">⇥</button>
+            </div>
+            <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'trackingTable')" title="גרור לשינוי גודל">⇲</span>
+            <div class="widget-body">
+              <div id="fullTrackingTableContainer"></div>
+            </div>
+          </div>
         </div>
 
         <div id="page-requests" class="container">
@@ -2990,13 +3005,23 @@
             <div style="flex: 1; min-width: 320px">
               <div
                 class="card-paper"
+                id="widget-demandsListContainer"
+                data-widget-key="demandsListContainer"
                 style="border-top: 4px solid var(--md-primary)"
               >
-                <h3 style="margin-top: 0; color: var(--md-primary)">
-                  📋 דרישות פעילות
-                </h3>
-                <div id="demandsListContainer">
-                  <i style="color: var(--md-text-secondary)">טוען...</i>
+                <div class="widget-controls">
+                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'demandsListContainer')" title="גרור להזזה">⠿</span>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('demandsListContainer')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('demandsListContainer')">⇥</button>
+                </div>
+                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'demandsListContainer')" title="גרור לשינוי גודל">⇲</span>
+                <div class="widget-body">
+                  <h3 style="margin-top: 0; color: var(--md-primary)">
+                    📋 דרישות פעילות
+                  </h3>
+                  <div id="demandsListContainer">
+                    <i style="color: var(--md-text-secondary)">טוען...</i>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4780,6 +4805,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260820e"></script>
+    <script src="script.js?v=20260820f"></script>
   </body>
 </html>
