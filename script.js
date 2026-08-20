@@ -3209,18 +3209,39 @@
               )
               .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
             if (approved.length === 0) return;
+            // קיבוץ: קודם לפי rangeId (בקשות טווח חדשות). בקשות ישנות ללא
+            // rangeId — מיזוג ריצה של ימים סמוכים (עד 3 ימי פער, כדי לגשר על
+            // שישי/שבת) לטווח אחד, כך שגם חופשה ישנה של 10 ימים תוצג כטווח
+            // ולא כ-10 שורות בודדות.
             const seenRange = new Set();
             const items = [];
+            const legacy = [];
             approved.forEach((r) => {
-              if (r.rangeId) {
+              if (r.rangeId != null) {
                 if (seenRange.has(r.rangeId)) return;
                 seenRange.add(r.rangeId);
                 const group = approved.filter((r2) => r2.rangeId === r.rangeId);
-                items.push({ dates: group.map((g) => g.date) });
+                items.push({ dates: group.map((g) => g.date), _first: group[0].date });
               } else {
-                items.push({ dates: [r.date] });
+                legacy.push(r);
               }
             });
+            let run = [];
+            const flushRun = () => {
+              if (run.length) {
+                items.push({ dates: run.map((g) => g.date), _first: run[0].date });
+                run = [];
+              }
+            };
+            legacy.forEach((r) => {
+              if (run.length === 0) { run.push(r); return; }
+              const prev = run[run.length - 1];
+              const gap = (new Date(r.date) - new Date(prev.date)) / 86400000;
+              if (gap >= 1 && gap <= 3) run.push(r);
+              else { flushRun(); run.push(r); }
+            });
+            flushRun();
+            items.sort((a, b) => (a._first || "").localeCompare(b._first || ""));
             byEmp[empId] = items;
           });
           window._vacationFutureApproved = byEmp;
@@ -7399,18 +7420,52 @@
           return;
         }
 
-        // חלוקת הבקשות לפי שבוע — כל שבוע בקבוצה נפרדת עם כותרת טווח התאריכים
-        const groups = {};
+        // קיבוץ חופשות-טווח לפי rangeId המשותף — טווח שלם (גם אם חוצה שבועות)
+        // מוצג כפריט אחד, מעוגן לשבוע של יום ההתחלה. שאר הבקשות (יום בודד/
+        // אילוץ/העדפה, וכן נתונים ישנים ללא rangeId) נשארות פריט לכל אחת.
+        const rangeGroups = {};
         keys.forEach((id) => {
-          const wk = pending[id].weekKey || window.currentSelectedWeek || "כללי";
-          (groups[wk] = groups[wk] || []).push(id);
+          const rid = pending[id].rangeId;
+          if (rid != null) (rangeGroups[rid] = rangeGroups[rid] || []).push(id);
         });
-        // מיון השבועות כרונולוגית
-        const weekKeys = Object.keys(groups).sort((a, b) => {
+        const idToRange = {};
+        Object.keys(rangeGroups).forEach((rid) => {
+          rangeGroups[rid].sort((a, b) =>
+            (pending[a].date || "").localeCompare(pending[b].date || ""),
+          );
+          rangeGroups[rid].forEach((id) => (idToRange[id] = rid));
+        });
+
+        // פריטי תצוגה מקובצים לפי שבוע-עוגן (טווח מעוגן לשבוע של יום ההתחלה)
+        const weekItems = {};
+        keys.forEach((id) => {
+          if (idToRange[id] != null) return; // מטופל כטווח
+          const wk = pending[id].weekKey || window.currentSelectedWeek || "כללי";
+          (weekItems[wk] = weekItems[wk] || []).push({
+            type: "single",
+            id,
+            sortDate: pending[id].date || "",
+          });
+        });
+        Object.keys(rangeGroups).forEach((rid) => {
+          const ids = rangeGroups[rid];
+          const anchorWk =
+            pending[ids[0]].weekKey || window.currentSelectedWeek || "כללי";
+          (weekItems[anchorWk] = weekItems[anchorWk] || []).push({
+            type: "range",
+            ids,
+            sortDate: pending[ids[0]].date || "",
+          });
+        });
+        // מיון השבועות כרונולוגית + מיון פריטים בתוך כל שבוע לפי תאריך
+        const weekKeys = Object.keys(weekItems).sort((a, b) => {
           const sa = window.weekKeyToSunday(a);
           const sb = window.weekKeyToSunday(b);
           return (sa ? sa.getTime() : 0) - (sb ? sb.getTime() : 0);
         });
+        weekKeys.forEach((wk) =>
+          weekItems[wk].sort((a, b) => a.sortDate.localeCompare(b.sortDate)),
+        );
 
         const rowHtml = (id) => {
           const r = pending[id];
@@ -7469,25 +7524,7 @@
         weekKeys.forEach((wk) => {
           const isCurrent = wk === window.currentSelectedWeek;
           const label = wk === "כללי" ? "כללי" : window.weekKeyToLabel(wk);
-          const idsInWeek = groups[wk];
-
-          // בניית פריטי התצוגה: קיבוץ מזהי-טווח משותפים לפריט אחד, שאר
-          // הבקשות (ללא rangeId — כולל כל הנתונים הישנים) נשארות שורה לכל אחת
-          const seenRange = new Set();
-          const displayItems = [];
-          idsInWeek.forEach((id) => {
-            const rangeId = pending[id].rangeId;
-            if (rangeId) {
-              if (seenRange.has(rangeId)) return;
-              seenRange.add(rangeId);
-              const groupIds = idsInWeek.filter(
-                (id2) => pending[id2].rangeId === rangeId,
-              );
-              displayItems.push({ type: "range", ids: groupIds });
-            } else {
-              displayItems.push({ type: "single", id });
-            }
-          });
+          const displayItems = weekItems[wk];
 
           html += `<div style="margin-bottom:18px; border:1px solid var(--md-divider); border-radius:10px; overflow:hidden;">
             <div style="background:${isCurrent ? "#1d4ed8" : "#475569"}; color:#fff; padding:8px 14px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
