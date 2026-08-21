@@ -6612,7 +6612,7 @@
                 <strong>${scen.name}:</strong>
                 <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                   <div><span style="font-size:0.8rem; color:var(--text-muted);">כמות:</span><br><input type="number" id="count_${safeLocId}_${safeKey}" value="${r.count}" style="width:60px; margin-top:4px;"></div>
-                  <div style="flex:1; min-width:150px;"><span style="font-size:0.8rem; color:var(--text-muted);">הערה / סיבה מיוחדת:</span><br><input type="text" id="note_${safeLocId}_${safeKey}" value="${noteVal}" placeholder="לדוג': צורך מיוחד הזמנת..." style="width:100%; margin-top:4px; font-size:0.85rem;"></div>
+                  <div style="flex:1; min-width:150px;"><span style="font-size:0.8rem; color:var(--text-muted);">הערה / סיבה מיוחדת:</span><br><input type="text" id="note_${safeLocId}_${safeKey}" value="${window.escapeHtml(noteVal)}" placeholder="לדוג': צורך מיוחד הזמנת..." style="width:100%; margin-top:4px; font-size:0.85rem;"></div>
                 </div>
                 <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;"><span style="display:block; width:100%; color:var(--text-muted); font-size:0.85em; margin-bottom:4px;">מורשים וחובת שיבוץ:</span>${window.roleTypes
                   .map((rt) => {
@@ -9477,7 +9477,7 @@
             data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
           let noteHtml = "";
           if (!window.isWorkerMode) {
-            noteHtml = `<br><input type="text" class="day-note-display" value="${note}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
+            noteHtml = `<br><input type="text" class="day-note-display" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
           } else if (note) {
             noteHtml = `<br><span class="day-note-display" style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
           }
@@ -9688,7 +9688,7 @@
           data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
         let noteHtml = "";
         if (!window.isWorkerMode) {
-          noteHtml = `<input type="text" value="${note}" placeholder="📝 הערת יום מיוחד..." onchange="window.updateDailyNote('${d}', this.value)" style="width:100%; margin-top:5px; font-size:0.85rem; padding:6px; border:1px dashed #cbd5e1; background:#f8fafc; border-radius:6px;">`;
+          noteHtml = `<input type="text" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום מיוחד..." onchange="window.updateDailyNote('${d}', this.value)" style="width:100%; margin-top:5px; font-size:0.85rem; padding:6px; border:1px dashed #cbd5e1; background:#f8fafc; border-radius:6px;">`;
         } else if (note) {
           noteHtml = `<div style="font-size:0.85rem; color:#ea580c; background:#ffedd5; padding:6px 10px; border-radius:6px; margin-top:6px; font-weight:bold;">📌 ${note}</div>`;
         }
@@ -9765,7 +9765,7 @@
 
           html += `<div class="mobile-shift-card" style="margin-bottom: 16px;"><div class="mobile-shift-header" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;"><div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span style="font-size:1.1rem;"><b style="color:var(--md-primary);">${window.getLocName(r.loc)}</b> | ${r.label || r.shift}</span><span style="font-size:0.85rem; background:#cbd5e1; padding:4px 10px; border-radius:12px; font-weight:bold; color:#0f172a;">${empsInShift.length}</span></div>`;
           if (!window.isWorkerMode) {
-            html += `<input type="text" placeholder="✍️ תן שם/הערה למשמרת זו..." value="${shiftCustomName}" style="width:100%; font-size:0.85rem; padding:8px; margin-top:4px; border:1px dashed #94a3b8; border-radius:6px; background:#f8fafc;" onchange="window.updateShiftCustomName('${d}','${r.shift}','${safeLoc}', this.value)">`;
+            html += `<input type="text" placeholder="✍️ תן שם/הערה למשמרת זו..." value="${window.escapeHtml(shiftCustomName)}" style="width:100%; font-size:0.85rem; padding:8px; margin-top:4px; border:1px dashed #94a3b8; border-radius:6px; background:#f8fafc;" onchange="window.updateShiftCustomName('${d}','${r.shift}','${safeLoc}', this.value)">`;
           } else if (shiftCustomName) {
             html += `<span style="font-size:0.85rem; color:var(--md-primary); font-weight:700; background:rgba(25,118,210,0.08); padding:4px 8px; border-radius:4px; width:100%;">📌 ${shiftCustomName}</span>`;
           }
