@@ -2443,10 +2443,16 @@
         }
 
         // 2. התחברות לכל שאר העובדים או המנהלים המשניים (כולל סיסמה שעודכנה ע"י העובד)
-        let emp = window.globalStaff.find(
-          (e) =>
-            e.personalId === uid && window.getEffectivePassword(e) === pass,
-        );
+        let emp = null;
+        for (const e of window.globalStaff) {
+          if (
+            e.personalId === uid &&
+            (await window.verifyPassword(pass, window.getEffectivePassword(e)))
+          ) {
+            emp = e;
+            break;
+          }
+        }
         if (emp) {
           window.loggedInUser = emp;
           window.currentUserRole = emp.systemRole || "worker";
@@ -2503,8 +2509,45 @@
         return emp.password || "1234";
       };
 
+      // ===== גיבוב סיסמאות עובדים (SHA-256) =====
+      // כדי שמי שקורא את ה-DB באופן אנונימי לא יראה סיסמה בטקסט גלוי. סיסמה
+      // מגובבת נשמרת עם הקידומת "sha256:". תאימות לאחור מלאה: סיסמה ישנה
+      // (ללא קידומת) מושווית כטקסט גלוי, עד שהמנהל הראשי ממיר את כולן
+      // (migratePasswordsToHash). כך אף עובד לא ננעל בזמן המעבר.
+      window.hashPassword = async function (plain) {
+        return "sha256:" + (await window._sha256Hex(String(plain)));
+      };
+      window._isHashedPassword = function (v) {
+        return typeof v === "string" && v.slice(0, 7) === "sha256:";
+      };
+      window.verifyPassword = async function (entered, stored) {
+        if (stored == null) return false;
+        if (window._isHashedPassword(stored))
+          return (await window.hashPassword(entered)) === stored;
+        return String(entered) === String(stored); // ישן: טקסט גלוי
+      };
+      // המרה חד-פעמית של כל הסיסמאות הגלויות ל-hash — רץ אצל המנהל הראשי בלבד
+      // (הוא היחיד עם הרשאת כתיבה). כתיבה אחת ל-staffMaster בסוף.
+      window.migratePasswordsToHash = async function () {
+        if (window.currentUserRole !== "superAdmin") return;
+        if (!Array.isArray(window.globalStaff)) return;
+        let changed = false;
+        for (const e of window.globalStaff) {
+          if (!e) continue;
+          if (e.password == null || e.password === "") {
+            e.password = await window.hashPassword("1234");
+            changed = true;
+          } else if (!window._isHashedPassword(e.password)) {
+            e.password = await window.hashPassword(e.password);
+            changed = true;
+          }
+        }
+        if (changed && typeof window.saveToCloud === "function")
+          window.saveToCloud("staffMaster", window.globalStaff);
+      };
+
       // שינוי סיסמה עצמי לעובד — תקף מיידית; המנהל הראשי רואה אותה ומטמיע ל-staffMaster
-      window.changeMyPassword = function () {
+      window.changeMyPassword = async function () {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id === "super" || me.id === "viewer") {
           window.toast("רק עובד מחובר יכול לשנות סיסמה.");
@@ -2512,7 +2555,7 @@
         }
         const cur = prompt("הסיסמה הנוכחית שלך:");
         if (cur === null) return;
-        if (window.getEffectivePassword(me) !== cur.trim()) {
+        if (!(await window.verifyPassword(cur.trim(), window.getEffectivePassword(me)))) {
           window.toast("הסיסמה הנוכחית שגויה.");
           return;
         }
@@ -2527,24 +2570,26 @@
           window.toast("שגיאת חיבור — נסה שוב מאוחר יותר.");
           return;
         }
+        // הסיסמה נשמרת מגובבת — הטקסט הגלוי לעולם לא נכתב ל-DB.
+        const hashed = await window.hashPassword(np);
         // עדכון מקומי אופטימי — תקף מיידית להמשך השימוש במכשיר הזה.
         // הכתיבה בפועל ל-passwordOverrides נעשית ע"י המנהל הראשי (כמו תכונות
         // אחרות של עובד אנונימי) כדי שמשתמש אנונימי לא יוכל לכתוב ישירות לנתיב
         // שמשותף לכל העובדים ולדרוס סיסמה של עובד אחר.
         window.passwordOverrides = window.passwordOverrides || {};
-        window.passwordOverrides[me.id] = { password: np, ts: Date.now() };
-        me.password = np;
+        window.passwordOverrides[me.id] = { password: hashed, ts: Date.now() };
+        me.password = hashed;
         const id = Date.now() + Math.floor(Math.random() * 10000);
         window.saveToCloud("passwordChangeRequests/" + id, {
           id,
           empId: me.id,
-          password: np,
+          password: hashed,
           ts: id,
         });
         window.toast("✅ הסיסמה עודכנה!\nמהכניסה הבאה היכנס עם הסיסמה החדשה.");
       };
 
-      window.doWorkerLogin = function () {
+      window.doWorkerLogin = async function () {
         let empId = document.getElementById("loginWorkerSelect").value;
         let passInput = document.getElementById("loginWorkerPass").value;
         if (!empId) {
@@ -2555,7 +2600,7 @@
         let emp = window.globalStaff.find((e) => e.id == empId);
         let actualPass = window.getEffectivePassword(emp);
 
-        if (passInput === actualPass) {
+        if (await window.verifyPassword(passInput, actualPass)) {
           window.isWorkerMode = true;
           window.loggedInWorker = emp;
           window.loggedInUser = emp;
@@ -2612,6 +2657,16 @@
           typeof window.saveToCloud === "function"
         ) {
           window.saveToCloud("systemTasks", window.systemTasks, { silent: true });
+        }
+
+        // מיגרציית סיסמאות ל-hash — פעם אחת אצל המנהל הראשי (מחכה שה-staff ייטען)
+        if (window.currentUserRole === "superAdmin" && !window._pwMigrationDone) {
+          window._pwMigrationDone = true;
+          setTimeout(() => {
+            try {
+              window.migratePasswordsToHash();
+            } catch (e) {}
+          }, 2500);
         }
 
         if (window.currentUserRole === "worker") {
@@ -3753,6 +3808,9 @@
                     : "עובד";
               let pId = e.personalId || "לא הוגדר";
               let pass = window.getEffectivePassword(e);
+              // סיסמאות מאוחסנות מגובבות ולא ניתנות לשחזור — לא חושפים את ה-hash.
+              // (סיסמה ישנה בטקסט גלוי עדיין תוצג עד המרה, לתאימות לאחור.)
+              let passDisplay = window._isHashedPassword(pass) ? "מגובבת 🔒" : pass;
 
               return `<div class="emp-card chip-${(e.type || "").replace(/\s+/g, "-")} ${isInactive}" onclick="window.openModal(${e.id})">
                         <div style="width:100%;">
@@ -3768,7 +3826,7 @@
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
                                     <span>מ.אישי: <b>${pId}</b></span>
                                     <span style="display:flex; align-items:center; gap:5px;">סיסמה: <b id="staff_pass_${e.id}" style="letter-spacing: 2px;">****</b> 
-                                        <span style="cursor:pointer; font-size:1.1em;" title="הצג/הסתר" onclick="let el=document.getElementById('staff_pass_${e.id}'); el.innerText = el.innerText === '****' ? '${pass}' : '****'; el.style.letterSpacing = el.innerText === '****' ? '2px' : '0px'; event.stopPropagation();">👁️</span>
+                                        <span style="cursor:pointer; font-size:1.1em;" title="הצג/הסתר" onclick="let el=document.getElementById('staff_pass_${e.id}'); el.innerText = el.innerText === '****' ? '${passDisplay}' : '****'; el.style.letterSpacing = '0px'; event.stopPropagation();">👁️</span>
                                     </span>
                                 </div>
                                 <div style="margin-top:4px; color:#c2410c;">הרשאה: <b>${roleName}</b></div>
@@ -8079,8 +8137,11 @@
 
         // שדות מנהל על
         document.getElementById("editPersonalId").value = emp.personalId || "";
-        document.getElementById("editPassword").value =
-          window.getEffectivePassword(emp);
+        // הסיסמה מאוחסנת מגובבת ולכן לא ניתן/רצוי להציגה — משאירים ריק;
+        // ריק בשמירה = הסיסמה הקיימת נשמרת, טקסט חדש = מגובב ונשמר.
+        const _pwEl = document.getElementById("editPassword");
+        _pwEl.value = "";
+        _pwEl.placeholder = "סיסמה חדשה (השאר ריק לשמירת הקיימת)";
 
         // נעילת תפקיד "מנהל ראשי" רק לאביחי
         let sysRoleSelect = document.getElementById("editSystemRole");
@@ -8188,7 +8249,7 @@
         document.getElementById(`con_${day}_לילה`).checked = isFull;
       };
 
-      window.closeModal = function () {
+      window.closeModal = async function () {
         const emp = window.staff.find((e) => e.id === window.currentId);
 
         // הגנה נוספת: מניעת שיוך המספר האישי של המנהל הראשי לעובד אחר
@@ -8262,7 +8323,9 @@
           emp.personalId = document
             .getElementById("editPersonalId")
             .value.trim();
-          emp.password = document.getElementById("editPassword").value.trim();
+          // סיסמה חדשה (אם הוקלדה) נשמרת מגובבת; ריק = שומרים את הקיימת
+          const _newPw = document.getElementById("editPassword").value.trim();
+          if (_newPw) emp.password = await window.hashPassword(_newPw);
           emp.systemRole = document.getElementById("editSystemRole").value;
         }
 
