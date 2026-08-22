@@ -10,6 +10,141 @@
           .replace(/'/g, "&#39;");
       };
 
+      // ===== מערכת דיאלוגים מעוצבת (מחליפה alert/confirm/prompt) =====
+      // toast: הודעה לא-חוסמת שנעלמת לבד. confirmDialog/choiceDialog:
+      // גרסאות מעוצבות ואסינכרוניות (Promise) של confirm/prompt. הכל מעוצב
+      // ב-tokens כך שעובד גם ב-dark mode, ונגיש (Escape לביטול, פוקוס).
+      window._toastTypeFromMsg = function (msg) {
+        const s = String(msg || "");
+        if (/[🚨❌⛔]/.test(s)) return "error";
+        if (/⚠️/.test(s)) return "warning";
+        if (/[✅🎉]/.test(s)) return "success";
+        return "info";
+      };
+      window._toastIcons = { success: "✅", error: "⛔", warning: "⚠️", info: "ℹ️" };
+      window.toast = function (message, type) {
+        if (message == null || message === "") return;
+        let layer = document.getElementById("toastLayer");
+        if (!layer) {
+          layer = document.createElement("div");
+          layer.id = "toastLayer";
+          document.body.appendChild(layer);
+        }
+        const t = type || window._toastTypeFromMsg(message);
+        // אם ההודעה כבר פותחת באייקון סטטוס — לא מוסיפים כפילות
+        const hasLeadIcon = /^\s*[✅🎉🚨❌⛔⚠️ℹ️]/.test(String(message));
+        const el = document.createElement("div");
+        el.className = "toast " + t;
+        el.innerHTML =
+          (hasLeadIcon ? "" : `<span class="toast-icon">${window._toastIcons[t]}</span>`) +
+          `<span>${window.escapeHtml(message)}</span>`;
+        const remove = () => {
+          el.classList.add("leaving");
+          setTimeout(() => el.remove(), 180);
+        };
+        el.addEventListener("click", remove);
+        layer.appendChild(el);
+        // משך לפי אורך הטקסט (זמן קריאה) — מינימום 3.8ש, שגיאות ארוכות יותר,
+        // תקרה של ~10ש. לחיצה מסירה תמיד.
+        const base = t === "error" ? 5500 : 3800;
+        const dur = Math.min(10000, Math.max(base, String(message).length * 55));
+        setTimeout(remove, dur);
+      };
+
+      // הודעת toast ששורדת reload (למשל אחרי איפוס שדורש טעינה מחדש)
+      window.toastAfterReload = function (message, type) {
+        try {
+          sessionStorage.setItem("_pendingToast", JSON.stringify({ message, type }));
+        } catch (e) {}
+      };
+      window._flushPendingToast = function () {
+        try {
+          const raw = sessionStorage.getItem("_pendingToast");
+          if (!raw) return;
+          sessionStorage.removeItem("_pendingToast");
+          const p = JSON.parse(raw);
+          window.toast(p.message, p.type);
+        } catch (e) {}
+      };
+
+      window._closeAppDialog = function (overlay, resolve, value) {
+        if (!overlay) return;
+        document.removeEventListener("keydown", overlay._onKey);
+        overlay.remove();
+        resolve(value);
+      };
+      // confirm מעוצב → Promise<boolean>
+      window.confirmDialog = function (opts) {
+        opts = opts || {};
+        return new Promise((resolve) => {
+          const overlay = document.createElement("div");
+          overlay.className = "app-dialog-overlay";
+          const danger = opts.danger === true;
+          overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+            ${opts.title ? `<h3>${window.escapeHtml(opts.title)}</h3>` : ""}
+            <p class="app-dialog-msg">${window.escapeHtml(opts.message || "")}</p>
+            <div class="app-dialog-actions">
+              <button class="btn btn-outlined" data-act="cancel">${window.escapeHtml(opts.cancelText || "ביטול")}</button>
+              <button class="btn ${danger ? "btn-error" : "btn-contained"}" data-act="ok">${window.escapeHtml(opts.confirmText || "אישור")}</button>
+            </div>
+          </div>`;
+          overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) window._closeAppDialog(overlay, resolve, false);
+          });
+          overlay.querySelector('[data-act="cancel"]').onclick = () =>
+            window._closeAppDialog(overlay, resolve, false);
+          overlay.querySelector('[data-act="ok"]').onclick = () =>
+            window._closeAppDialog(overlay, resolve, true);
+          overlay._onKey = (e) => {
+            if (e.key === "Escape") window._closeAppDialog(overlay, resolve, false);
+          };
+          document.addEventListener("keydown", overlay._onKey);
+          document.body.appendChild(overlay);
+          overlay.querySelector('[data-act="ok"]').focus();
+        });
+      };
+      // בורר מעוצב (מחליף prompt לבחירה מרשימה) → Promise<value|null>
+      // options: [{ label, value }]
+      window.choiceDialog = function (opts) {
+        opts = opts || {};
+        return new Promise((resolve) => {
+          const overlay = document.createElement("div");
+          overlay.className = "app-dialog-overlay";
+          const choices = (opts.options || [])
+            .map(
+              (o, i) =>
+                `<button class="app-dialog-choice" data-idx="${i}">${window.escapeHtml(o.label)}</button>`,
+            )
+            .join("");
+          overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+            ${opts.title ? `<h3>${window.escapeHtml(opts.title)}</h3>` : ""}
+            ${opts.message ? `<p class="app-dialog-msg">${window.escapeHtml(opts.message)}</p>` : ""}
+            <div class="app-dialog-choices">${choices}</div>
+            <div class="app-dialog-actions">
+              <button class="btn btn-outlined" data-act="cancel">ביטול</button>
+            </div>
+          </div>`;
+          overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) window._closeAppDialog(overlay, resolve, null);
+          });
+          overlay.querySelector('[data-act="cancel"]').onclick = () =>
+            window._closeAppDialog(overlay, resolve, null);
+          overlay.querySelectorAll(".app-dialog-choice").forEach((btn) => {
+            btn.onclick = () => {
+              const idx = parseInt(btn.getAttribute("data-idx"), 10);
+              window._closeAppDialog(overlay, resolve, opts.options[idx].value);
+            };
+          });
+          overlay._onKey = (e) => {
+            if (e.key === "Escape") window._closeAppDialog(overlay, resolve, null);
+          };
+          document.addEventListener("keydown", overlay._onKey);
+          document.body.appendChild(overlay);
+          const first = overlay.querySelector(".app-dialog-choice");
+          if (first) first.focus();
+        });
+      };
+
       // ===== ווידג'טים בגריד — מיקום חופשי (גרירה ל-2D), הסתרה, שינוי גודל,
       // העברה בין עמודים ===== כל טבלה/פאנל בעמודי "משימות" ו"בקשות" עטוף
       // ב-HTML סטטי עם id="widget-<key>" ו-data-widget-key="<key>" (ר'
@@ -124,33 +259,31 @@
         }
       };
 
-      window.showHiddenWidgets = function (pageId) {
+      window.showHiddenWidgets = async function (pageId) {
         const grid = window._ensureWidgetGrid(pageId);
         if (!grid) return;
         const hidden = Array.from(grid.children).filter((c) =>
           c.classList.contains("widget-collapsed"),
         );
         if (hidden.length === 0) return;
-        const optionsStr = hidden
-          .map((el, i) => {
-            const k = el.getAttribute("data-widget-key");
-            const label = (window.WIDGET_REGISTRY[k] || {}).label || k;
-            return `${i + 1}. ${label}`;
-          })
-          .join("\n");
-        const choice = prompt(
-          `אילו פאנלים להציג בחזרה?\n\n${optionsStr}\n\nהקלד מספר, או "הכל":`,
-        );
+        const options = hidden.map((el) => {
+          const k = el.getAttribute("data-widget-key");
+          return { label: (window.WIDGET_REGISTRY[k] || {}).label || k, value: k };
+        });
+        options.push({ label: "↩︎ הצג את כולם", value: "__all__" });
+        const choice = await window.choiceDialog({
+          title: "פאנלים מוסתרים",
+          message: "אילו פאנלים להציג בחזרה?",
+          options,
+        });
         if (!choice) return;
-        if (choice.trim() === "הכל" || choice.trim().toLowerCase() === "all") {
+        if (choice === "__all__") {
           hidden.forEach((el) =>
             window.widgetToggleCollapse(el.getAttribute("data-widget-key")),
           );
           return;
         }
-        const idx = parseInt(choice.trim(), 10) - 1;
-        const target = hidden[idx];
-        if (target) window.widgetToggleCollapse(target.getAttribute("data-widget-key"));
+        window.widgetToggleCollapse(choice);
       };
 
       window.widgetToggleCollapse = function (key) {
@@ -436,20 +569,15 @@
         window._reorderDomByPosition(st.grid);
       };
 
-      window.widgetMoveToPage = function (key) {
+      window.widgetMoveToPage = async function (key) {
         const el = document.getElementById("widget-" + key);
         if (!el) return;
-        const optionsStr = window.WIDGET_PAGES.map(
-          (p, i) => `${i + 1}. ${p.label}`,
-        ).join("\n");
-        const choice = prompt(`להעביר את הפאנל לאיזה עמוד?\n\n${optionsStr}\n\nהקלד מספר:`);
-        if (!choice) return;
-        const idx = parseInt(choice.trim(), 10) - 1;
-        const target = window.WIDGET_PAGES[idx];
-        if (!target) {
-          alert("בחירה לא תקינה.");
-          return;
-        }
+        const target = await window.choiceDialog({
+          title: "העברת פאנל",
+          message: "לאיזה עמוד להעביר את הפאנל?",
+          options: window.WIDGET_PAGES.map((p) => ({ label: p.label, value: p })),
+        });
+        if (!target) return;
         const grid = window._ensureWidgetGrid(target.id);
         if (!grid) return;
         grid.appendChild(el);
@@ -469,21 +597,24 @@
         // מעבר אוטומטי לעמוד היעד — כדי שהפאנל לא "ייעלם" (חלק מהעמודים,
         // כמו נוכחות שבועית, לא נגישים מכל תפריט, אז המשתמש היה מאבד אותם)
         if (typeof window.showPage === "function") window.showPage(target.id);
-        alert(`✅ הפאנל הועבר לעמוד "${target.label}" (הועברת לשם עכשיו).`);
+        window.toast(`✅ הפאנל הועבר לעמוד "${target.label}" (הועברת לשם עכשיו).`);
       };
 
       // שחזור: מחזיר את כל הפאנלים למקומם המקורי ולסידור ברירת המחדל —
       // כלי הצלה למקרה שפאנל "אבד" בעמוד שקשה להגיע אליו.
-      window.resetWidgetLayout = function () {
-        if (
-          !confirm(
+      window.resetWidgetLayout = async function () {
+        const ok = await window.confirmDialog({
+          title: "איפוס סידור פאנלים",
+          message:
             "להחזיר את כל הפאנלים למיקום ולגודל ברירת המחדל?\nכל סידור אישי נוכחי יימחק.",
-          )
-        )
-          return;
+          confirmText: "אפס",
+          danger: true,
+        });
+        if (!ok) return;
         try {
           localStorage.removeItem("widget_layout_v3");
         } catch (e) {}
+        window.toastAfterReload("✅ הפאנלים הוחזרו לברירת המחדל.");
         location.reload();
       };
 
@@ -531,8 +662,10 @@
       };
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", window._applyWidgetPrefs);
+        document.addEventListener("DOMContentLoaded", window._flushPendingToast);
       } else {
         window._applyWidgetPrefs();
+        window._flushPendingToast();
       }
 
       window.getSunday = function (offset) {
@@ -756,7 +889,7 @@
         if (typeof window.renderTasks === "function") window.renderTasks();
         if (typeof window.renderHolidaysLog === "function")
           window.renderHolidaysLog();
-        alert("✅ ההרשאות נשמרו והוחלו על כל העובדים.");
+        window.toast("✅ ההרשאות נשמרו והוחלו על כל העובדים.");
       };
 
       window.promptNewRole = function () {
@@ -768,7 +901,7 @@
             JSON.stringify(window.roleTypes),
           );
           window.renderRoleFilters();
-          alert("דרג חדש נוסף. כעת ניתן לשייך עובדים לדרג זה.");
+          window.toast("דרג חדש נוסף. כעת ניתן לשייך עובדים לדרג זה.");
         }
       };
 
@@ -1003,7 +1136,7 @@
             }
           });
         } else if (Notification.permission === "denied") {
-          alert("⚠️ התראות חסומות בדפדפן.\nכדי להפעיל: לחץ על המנעול בשורת הכתובת ← אשר התראות.");
+          window.toast("⚠️ התראות חסומות בדפדפן.\nכדי להפעיל: לחץ על המנעול בשורת הכתובת ← אשר התראות.");
         } else if (Notification.permission === "granted") {
           // Already granted — send a test notification
           new Notification("🔔 התראות פעילות", {
@@ -1015,7 +1148,7 @@
 
       window.testNotification = function () {
         if (!("Notification" in window)) {
-          alert("הדפדפן שלך אינו תומך בהתראות.");
+          window.toast("הדפדפן שלך אינו תומך בהתראות.");
           return;
         }
         if (Notification.permission !== "granted") {
@@ -1201,7 +1334,7 @@
         const title = document.getElementById("notifTitleInput").value.trim();
         const body = document.getElementById("notifBodyInput").value.trim();
         if (!title || !body) {
-          alert("יש למלא כותרת ותוכן.");
+          window.toast("יש למלא כותרת ותוכן.");
           return;
         }
         const allChecked = document.getElementById("notifTargetAll")?.checked;
@@ -1224,13 +1357,13 @@
           empIds = Array.from(new Set([...fromGroups, ...fromIndividuals]));
         }
         if (empIds.length === 0) {
-          alert("יש לבחור 'לכל הצוות', קבוצה אחת לפחות, או עובד ספציפי.");
+          window.toast("יש לבחור 'לכל הצוות', קבוצה אחת לפחות, או עובד ספציפי.");
           return;
         }
         window._sendNotificationTo(empIds, title, body, "general");
         document.getElementById("notifTitleInput").value = "";
         document.getElementById("notifBodyInput").value = "";
-        alert(`✅ ההודעה נשלחה ל-${empIds.length} עובדים.`);
+        window.toast(`✅ ההודעה נשלחה ל-${empIds.length} עובדים.`);
       };
 
       window.triggerUnsavedChanges = function () {
@@ -1288,7 +1421,7 @@
           if (typeof window.updateWeekendHistory === "function")
             window.updateWeekendHistory();
           window.hasUnsavedChanges = false;
-          alert('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
+          window.toast('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
         };
 
         // התראות שינוי משמרת — משווים מול המצב ששמור בענן (אמין), לפני הדריסה
@@ -1984,7 +2117,7 @@
         get(ref(window._firebaseDb, `backups/${weekKey}/${ts}`))
           .then((snap) => {
             if (!snap.exists()) {
-              alert("הגיבוי לא נמצא.");
+              window.toast("הגיבוי לא נמצא.");
               return;
             }
             const data = snap.val();
@@ -1998,17 +2131,17 @@
             if (typeof window.renderTable === "function")
               window.renderTable(window.currentSchedule, window.currentNotesLog);
             window.showPage("schedule");
-            alert(
+            window.toast(
               "✅ הגרסה שוחזרה למסך.\nבדוק שהכל תקין ולחץ 'שמור לענן' כדי להחיל.",
             );
           })
-          .catch((e) => alert("שגיאה בשחזור: " + (e.message || e)));
+          .catch((e) => window.toast("שגיאה בשחזור: " + (e.message || e)));
       };
 
       // הורדת גיבוי מלא של כל הנתונים לקובץ JSON (גיבוי חיצוני)
       window.downloadFullBackup = function () {
         if (!window._fbImports || !window._firebaseDb) {
-          alert("רכיב הענן לא נטען.");
+          window.toast("רכיב הענן לא נטען.");
           return;
         }
         const { ref, get } = window._fbImports;
@@ -2027,7 +2160,7 @@
             a.click();
             document.body.removeChild(a);
           })
-          .catch((e) => alert("שגיאה בהורדת הגיבוי: " + (e.message || e)));
+          .catch((e) => window.toast("שגיאה בהורדת הגיבוי: " + (e.message || e)));
       };
 
       window.loggedInUser = null;
@@ -2157,7 +2290,7 @@
 
       window.changeAdminPassword = async function () {
         if (window.currentUserRole !== "superAdmin") {
-          alert("רק מנהל ראשי יכול להחליף את סיסמת המנהל.");
+          window.toast("רק מנהל ראשי יכול להחליף את סיסמת המנהל.");
           return;
         }
         const cur = prompt("הסיסמה הנוכחית:");
@@ -2167,12 +2300,12 @@
         );
         const effective = window.adminHashOverride || ADMIN_HASH_FALLBACK;
         if (curHash !== effective) {
-          alert("הסיסמה הנוכחית שגויה.");
+          window.toast("הסיסמה הנוכחית שגויה.");
           return;
         }
         const next = prompt("סיסמה חדשה (לפחות 8 תווים, רצוי אותיות ומספרים):");
         if (!next || next.trim().length < 8) {
-          alert("הסיסמה החדשה קצרה מדי — נדרשים לפחות 8 תווים.");
+          window.toast("הסיסמה החדשה קצרה מדי — נדרשים לפחות 8 תווים.");
           return;
         }
         const nextHash = await window._sha256Hex(
@@ -2195,17 +2328,17 @@
         window.adminHashOverride = nextHash;
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("settings/adminHash", nextHash);
-        alert("✅ סיסמת המנהל הוחלפה ונשמרה בענן." + fbMsg);
+        window.toast("✅ סיסמת המנהל הוחלפה ונשמרה בענן." + fbMsg);
       };
 
       // הקמה חד-פעמית של חשבון המנהל ב-Firebase (מקנה הרשאת כתיבה לענן)
       window.setupManagerWriteAccess = async function () {
         if (window.currentUserRole !== "superAdmin") {
-          alert("רק מנהל ראשי יכול להקים הרשאת כתיבה.");
+          window.toast("רק מנהל ראשי יכול להקים הרשאת כתיבה.");
           return;
         }
         if (typeof window.fbCreateAdmin !== "function") {
-          alert("שגיאה: רכיב ההזדהות לא נטען.");
+          window.toast("שגיאה: רכיב ההזדהות לא נטען.");
           return;
         }
         const pw = prompt(
@@ -2213,7 +2346,7 @@
             "זו תהיה הסיסמה שלך לכניסה למערכת מעכשיו:",
         );
         if (!pw || pw.trim().length < 8) {
-          alert("הסיסמה קצרה מדי — נדרשים לפחות 8 תווים.");
+          window.toast("הסיסמה קצרה מדי — נדרשים לפחות 8 תווים.");
           return;
         }
         const pass = pw.trim();
@@ -2226,20 +2359,20 @@
             try {
               await window.fbAdminSignIn(pass);
             } catch (e2) {
-              alert(
+              window.toast(
                 "חשבון המנהל כבר קיים אך הסיסמה שהוזנה אינה תואמת.\n" +
                   "הזן את הסיסמה הקיימת של החשבון, או אפס אותה בקונסולת Firebase.",
               );
               return;
             }
           } else if (e && e.code === "auth/operation-not-allowed") {
-            alert(
+            window.toast(
               "יש להפעיל קודם את שיטת ההתחברות 'Email/Password' בקונסולת Firebase\n" +
                 "(Authentication → Sign-in method → Email/Password → Enable).",
             );
             return;
           } else {
-            alert("שגיאה בהקמת חשבון המנהל: " + (e && (e.code || e.message)));
+            window.toast("שגיאה בהקמת חשבון המנהל: " + (e && (e.code || e.message)));
             return;
           }
         }
@@ -2250,7 +2383,7 @@
         window.adminHashOverride = nextHash;
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("settings/adminHash", nextHash);
-        alert(
+        window.toast(
           "✅ הרשאת הכתיבה הוקמה!\n\n" +
             "מעכשיו תיכנס עם המספר האישי והסיסמה החדשה.\n" +
             "השלב האחרון: הדבק את חוקי האבטחה המעודכנים בקונסולה (database.rules.json).",
@@ -2261,7 +2394,7 @@
         let uid = document.getElementById("loginUsername").value.trim();
         let pass = document.getElementById("loginPassword").value.trim();
         if (!uid || !pass) {
-          alert("נא להזין שם משתמש וסיסמה.");
+          window.toast("נא להזין שם משתמש וסיסמה.");
           return;
         }
 
@@ -2320,7 +2453,7 @@
           window.saveSession({ kind: "manager", uid });
           finishLogin();
         } else {
-          alert(
+          window.toast(
             "שם משתמש או סיסמה שגויים.\nשים לב: שם המשתמש הוא המספר האישי שלך.",
           );
         }
@@ -2374,24 +2507,24 @@
       window.changeMyPassword = function () {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id === "super" || me.id === "viewer") {
-          alert("רק עובד מחובר יכול לשנות סיסמה.");
+          window.toast("רק עובד מחובר יכול לשנות סיסמה.");
           return;
         }
         const cur = prompt("הסיסמה הנוכחית שלך:");
         if (cur === null) return;
         if (window.getEffectivePassword(me) !== cur.trim()) {
-          alert("הסיסמה הנוכחית שגויה.");
+          window.toast("הסיסמה הנוכחית שגויה.");
           return;
         }
         const next = prompt("סיסמה חדשה (לפחות 4 תווים):");
         if (next === null) return;
         const np = (next || "").trim();
         if (np.length < 4) {
-          alert("הסיסמה החדשה קצרה מדי — נדרשים לפחות 4 תווים.");
+          window.toast("הסיסמה החדשה קצרה מדי — נדרשים לפחות 4 תווים.");
           return;
         }
         if (typeof window.saveToCloud !== "function") {
-          alert("שגיאת חיבור — נסה שוב מאוחר יותר.");
+          window.toast("שגיאת חיבור — נסה שוב מאוחר יותר.");
           return;
         }
         // עדכון מקומי אופטימי — תקף מיידית להמשך השימוש במכשיר הזה.
@@ -2408,14 +2541,14 @@
           password: np,
           ts: id,
         });
-        alert("✅ הסיסמה עודכנה!\nמהכניסה הבאה היכנס עם הסיסמה החדשה.");
+        window.toast("✅ הסיסמה עודכנה!\nמהכניסה הבאה היכנס עם הסיסמה החדשה.");
       };
 
       window.doWorkerLogin = function () {
         let empId = document.getElementById("loginWorkerSelect").value;
         let passInput = document.getElementById("loginWorkerPass").value;
         if (!empId) {
-          alert("אנא בחר את שמך מהרשימה!");
+          window.toast("אנא בחר את שמך מהרשימה!");
           return;
         }
 
@@ -2451,7 +2584,7 @@
           if (typeof window.renderTable === "function")
             window.renderTable(window.currentSchedule, window.currentNotesLog);
         } else {
-          alert(
+          window.toast(
             "סיסמה שגויה! (ברירת המחדל לכולם היא 1234. אם שכחת, פנה למנהל)",
           );
         }
@@ -2805,22 +2938,32 @@
         }
       };
 
-      window.clearScheduleWithPrompt = function () {
-        const choice = prompt(
-          'איך למחוק את הלוח?\n\n1. מחיקה מלאה — הכל, כולל משמרות/עובדים נעולים\n2. רק תאים לא נעולים — מה שנעול (🔒) יישאר בדיוק כמו שהוא\n\nהקלד 1 או 2:',
-        );
-        if (!choice) return;
-        const trimmed = choice.trim();
-        if (trimmed === "1") {
-          if (!confirm('למחוק את כל הלוח, כולל הכל שנעול? הפעולה לא הפיכה (מלבד "בטל שינויים" לפני שמירה).'))
-            return;
-          window._clearScheduleAll();
-        } else if (trimmed === "2") {
-          if (!confirm("למחוק את כל התאים הלא נעולים? מה שנעול יישאר."))
-            return;
-          window._clearScheduleUnlockedOnly();
+      window.clearScheduleWithPrompt = async function () {
+        const mode = await window.choiceDialog({
+          title: "מחיקת הלוח",
+          message: "איך למחוק את הלוח?",
+          options: [
+            { label: "🗑️ מחיקה מלאה — הכל, כולל נעול", value: "all" },
+            { label: "🔓 רק תאים לא נעולים — מה שנעול (🔒) יישאר", value: "unlocked" },
+          ],
+        });
+        if (!mode) return;
+        if (mode === "all") {
+          const ok = await window.confirmDialog({
+            title: "מחיקה מלאה",
+            message: 'למחוק את כל הלוח, כולל הכל שנעול? הפעולה לא הפיכה (מלבד "בטל שינויים" לפני שמירה).',
+            confirmText: "מחק הכל",
+            danger: true,
+          });
+          if (ok) window._clearScheduleAll();
         } else {
-          alert("בחירה לא תקינה — יש להקליד 1 או 2.");
+          const ok = await window.confirmDialog({
+            title: "מחיקת תאים לא נעולים",
+            message: "למחוק את כל התאים הלא נעולים? מה שנעול יישאר.",
+            confirmText: "מחק לא נעולים",
+            danger: true,
+          });
+          if (ok) window._clearScheduleUnlockedOnly();
         }
       };
 
@@ -3108,9 +3251,9 @@
       // ייצוא כללי לאקסל — כל טבלת <table> בתוך container (אחת או יותר), עם כותרת סעיף
       // (מה-h2/h3 שלפני הטבלה) ודילוג על עמודות "פעולה" (מסומנות ב-class csv-skip-col).
       window._exportContainerTablesToCSV = function (container, filename) {
-        if (!container) { alert("אין נתונים לייצוא."); return; }
+        if (!container) { window.toast("אין נתונים לייצוא."); return; }
         const tables = Array.from(container.querySelectorAll("table"));
-        if (tables.length === 0) { alert("אין נתונים לייצוא."); return; }
+        if (tables.length === 0) { window.toast("אין נתונים לייצוא."); return; }
         const esc = (v) => {
           const s = String(v == null ? "" : v).trim().replace(/\s+/g, " ");
           return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -3410,7 +3553,7 @@
           });
           window._vacationFutureApproved = byEmp;
         } catch (e) {
-          alert("שגיאה בטעינת בקשות עתידיות: " + (e.message || e));
+          window.toast("שגיאה בטעינת בקשות עתידיות: " + (e.message || e));
         }
         window.renderVacationManagementTable();
       };
@@ -3475,7 +3618,7 @@
               if (e) emps.push(e);
             }
           });
-          if (emps.length === 0) { alert("יש לבחור לפחות עובד אחד!"); return; }
+          if (emps.length === 0) { window.toast("יש לבחור לפחות עובד אחד!"); return; }
         } else {
           const empId = document.getElementById("specEmpSelector").value;
           if (!empId) return;
@@ -4240,7 +4383,7 @@
         window._pendingSwapSource = null;
         window.recomputeNotesFromSchedule();
         window.triggerUnsavedChanges();
-        alert(`✅ הוחלפו: ${srcName} ⇄ ${tgtName}`);
+        window.toast(`✅ הוחלפו: ${srcName} ⇄ ${tgtName}`);
       };
 
       // ===== הוספת עובד למשמרת במובייל (חלופה ללחיצה-גרירה, שלא עובדת במגע) =====
@@ -4273,7 +4416,7 @@
         const sel = document.getElementById("mobileAddEmpSelect");
         const empId = sel ? sel.value : "";
         if (!empId) {
-          alert("יש לבחור עובד.");
+          window.toast("יש לבחור עובד.");
           return;
         }
         const target = window._mobileAddTarget;
@@ -4575,7 +4718,7 @@
         let custom = document.getElementById("holLogCustom").value;
         let year = document.getElementById("holLogYear").value;
         if (!type || !year) {
-          alert("יש למלא סוג חג/אירוע ושנה.");
+          window.toast("יש למלא סוג חג/אירוע ושנה.");
           return;
         }
         window.holidaysLog = window.holidaysLog || [];
@@ -4584,7 +4727,7 @@
           // עובד — נשאר בדיוק כמו קודם: רישום יחיד לעצמו, כבקשה לאישור המנהל
           let name = document.getElementById("holLogEmp").value;
           if (!name) {
-            alert("יש למלא שם עובד, סוג חג/אירוע ושנה.");
+            window.toast("יש למלא שם עובד, סוג חג/אירוע ושנה.");
             return;
           }
           let log = {
@@ -4599,14 +4742,14 @@
           window.renderHolidaysLog();
           if (typeof window.saveToCloud === "function")
             window.saveToCloud("holidaySignupRequests/" + log.id, log);
-          alert("✅ נרשמת לחג! (יתעדכן סופית כשהמנהל הראשי יתחבר)");
+          window.toast("✅ נרשמת לחג! (יתעדכן סופית כשהמנהל הראשי יתחבר)");
         } else {
           // מנהל — אפשר לבחור כמה עובדים בבת אחת; נוצר רישום נפרד לכל אחד
           const names = Array.from(document.querySelectorAll(".hol-log-emp-cb:checked")).map(
             (cb) => cb.value,
           );
           if (names.length === 0) {
-            alert("יש לבחור לפחות עובד אחד.");
+            window.toast("יש לבחור לפחות עובד אחד.");
             return;
           }
           names.forEach((name, i) => {
@@ -4680,7 +4823,7 @@
         const custom = document.getElementById("editHolCustom").value;
         const year = document.getElementById("editHolYear").value;
         if (!name || !type || !year) {
-          alert("יש למלא שם עובד, סוג חג/אירוע ושנה.");
+          window.toast("יש למלא שם עובד, סוג חג/אירוע ושנה.");
           return;
         }
         log.name = name;
@@ -4698,19 +4841,19 @@
 
       window.requestHolidaySwap = function (logId) {
         const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const log = (window.holidaysLog || []).find((l) => l.id === logId);
         if (!log) return;
         const others = (window.staff || []).filter(
           (e) => e.isActive !== false && String(e.id) !== String(me.id),
         );
-        if (others.length === 0) { alert("אין עובדים אחרים להחלפה."); return; }
+        if (others.length === 0) { window.toast("אין עובדים אחרים להחלפה."); return; }
         const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
         const choice = prompt(`למי לשלוח בקשת החלפת חג?\n\n${optionsStr}\n\nהקלד את המספר:`);
         if (!choice) return;
         const idx = parseInt(choice.trim(), 10) - 1;
         const target = others[idx];
-        if (!target) { alert("בחירה לא תקינה."); return; }
+        if (!target) { window.toast("בחירה לא תקינה."); return; }
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -4724,7 +4867,7 @@
         };
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("holidaySwapRequests/" + id, req);
-        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+        window.toast(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
       };
 
       window.respondHolidaySwap = function (reqId, approve) {
@@ -4733,7 +4876,7 @@
           approved: approve,
           ts: Date.now(),
         });
-        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
       };
 
       window.finalizeHolidaySwap = function (reqId, approve) {
@@ -4753,7 +4896,7 @@
             approved: approve,
             ts: Date.now(),
           });
-        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
       };
 
       // ===== החלפת סגירות סופ"ש בין טכנאים (אותו תבנית כמו החלפת משימות/חגים) =====
@@ -4766,14 +4909,14 @@
         const item = (window._myUpcomingClosuresResults || [])[idx];
         if (!item) return;
         const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const others = (window.staff || []).filter(
           (e) =>
             e.isActive !== false &&
             window.roleCan(e.type, "canSwapWeekend") &&
             String(e.id) !== String(me.id),
         );
-        if (others.length === 0) { alert("אין עובדים מתאימים להחלפת סופ\"ש."); return; }
+        if (others.length === 0) { window.toast("אין עובדים מתאימים להחלפת סופ\"ש."); return; }
         const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
         const choice = prompt(
           `למי לשלוח בקשת החלפת סופ"ש (${item.weekLabel})?\n\n${optionsStr}\n\nהקלד את המספר:`,
@@ -4781,7 +4924,7 @@
         if (!choice) return;
         const cIdx = parseInt(choice.trim(), 10) - 1;
         const target = others[cIdx];
-        if (!target) { alert("בחירה לא תקינה."); return; }
+        if (!target) { window.toast("בחירה לא תקינה."); return; }
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -4796,7 +4939,7 @@
         };
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("weekendSwapRequests/" + id, req);
-        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+        window.toast(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
       };
 
       window.respondWeekendSwap = function (reqId, approve) {
@@ -4805,7 +4948,7 @@
           approved: approve,
           ts: Date.now(),
         });
-        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
       };
 
       // אישור סופי של מנהל — מחליף בפועל את העובד בכל ה-slots של הסופ"ש
@@ -4824,7 +4967,7 @@
               const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + r.weekKey));
               sched = snap.exists() ? snap.val() : null;
             } catch (e) {
-              alert("שגיאה בטעינת השבוע: " + (e.message || e));
+              window.toast("שגיאה בטעינת השבוע: " + (e.message || e));
               return;
             }
           }
@@ -4853,7 +4996,7 @@
             approved: approve,
             ts: Date.now(),
           });
-        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
       };
 
       // ===== תצוגה מאוחדת של כל בקשות ההחלפה (משימות + חגים + סופ"שים) =====
@@ -5064,12 +5207,12 @@
       // ייצוא הלוח כתמונת PNG באיכות גבוהה (חד לשיתוף בוואטסאפ)
       window.exportScheduleImage = async function () {
         if (typeof html2canvas === "undefined") {
-          alert("רכיב ייצוא התמונה עדיין נטען — נסה שוב בעוד רגע.");
+          window.toast("רכיב ייצוא התמונה עדיין נטען — נסה שוב בעוד רגע.");
           return;
         }
         const el = document.getElementById("tableOutput");
         if (!el || !el.firstChild) {
-          alert("אין לוח להציג. ודא שיש שיבוצים.");
+          window.toast("אין לוח להציג. ודא שיש שיבוצים.");
           return;
         }
         // ודא שטבלת הדסקטופ גלויה ללכידה (גם בנייד) — בלי הבהוב למשתמש
@@ -5109,7 +5252,7 @@
           link.click();
           document.body.removeChild(link);
         } catch (e) {
-          alert("שגיאה בייצוא התמונה: " + (e.message || e));
+          window.toast("שגיאה בייצוא התמונה: " + (e.message || e));
         } finally {
           el.classList.remove("export-capture");
           if (restore) restore();
@@ -5120,7 +5263,7 @@
       window.showMyWeekSummary = function () {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) {
-          alert("לא מזוהה עובד מחובר.");
+          window.toast("לא מזוהה עובד מחובר.");
           return;
         }
         const data = window.currentSchedule || {};
@@ -5238,7 +5381,7 @@
         } else {
           const k = document.getElementById("demandKeep").value;
           if (k === "") {
-            alert("יש לציין כמה אנשים להשאיר.");
+            window.toast("יש לציין כמה אנשים להשאיר.");
             return;
           }
           demand.keepCount = parseInt(k);
@@ -5247,7 +5390,7 @@
           const s = document.getElementById("demandStart").value;
           const e = document.getElementById("demandEnd").value;
           if (!s) {
-            alert("יש לבחור תאריך התחלה.");
+            window.toast("יש לבחור תאריך התחלה.");
             return;
           }
           demand.startDate = s;
@@ -5255,7 +5398,7 @@
         } else {
           const d = document.getElementById("demandDay").value;
           if (!d) {
-            alert("יש לבחור תאריך.");
+            window.toast("יש לבחור תאריך.");
             return;
           }
           demand.day = d;
@@ -5263,7 +5406,7 @@
           demand.timeTo = document.getElementById("demandTimeTo").value;
         }
         window.saveToCloud("forceDemands/" + id, demand);
-        alert("✅ הדרישה נשלחה למנהל הראשי!");
+        window.toast("✅ הדרישה נשלחה למנהל הראשי!");
         document.getElementById("demandNote").value = "";
         document.getElementById("demandCount").value = "";
         document.getElementById("demandKeep").value = "";
@@ -5271,7 +5414,7 @@
 
       window.deleteDemand = function (id) {
         if (window.currentUserRole !== "superAdmin") {
-          alert("רק המנהל הראשי יכול למחוק דרישות.");
+          window.toast("רק המנהל הראשי יכול למחוק דרישות.");
           return;
         }
         if (!confirm("למחוק את הדרישה?")) return;
@@ -5364,7 +5507,7 @@
             !e.workedLastWeekend,
         );
         if (techs.length === 0) {
-          alert('אין טכנאים זמינים לסופ"ש (כולם עבדו שבת שעברה?).');
+          window.toast('אין טכנאים זמינים לסופ"ש (כולם עבדו שבת שעברה?).');
           return;
         }
         const ranked = techs
@@ -5398,7 +5541,7 @@
           window.renderTable(window.currentSchedule, window.currentNotesLog);
         if (typeof window.triggerUnsavedChanges === "function")
           window.triggerUnsavedChanges();
-        alert(
+        window.toast(
           "✅ סומנו כסוגרי הסופ\"ש הקרוב.\nכעת לחץ 'צור מחדש' כדי לשבץ אותם, ואל תשכח לשמור.",
         );
       };
@@ -5419,7 +5562,7 @@
             !e.workedLastWeekend,
         );
         if (pool.length === 0) {
-          alert(
+          window.toast(
             'אין מועמדים זמינים לסגירת סופ"ש/חג.\nיש לסמן "מועמד לסגירת סופ"ש/חג" בכרטיס העובד (בעריכה) לפחות למי שרלוונטי.',
           );
           return;
@@ -5464,7 +5607,7 @@
         const finalMatal = techsToMatal;
 
         if (finalZira.length === 0 && finalMatal.length === 0) {
-          alert('לא נמצאו מספיק מועמדים זמינים לסגירת הסופ"ש/חג.');
+          window.toast('לא נמצאו מספיק מועמדים זמינים לסגירת הסופ"ש/חג.');
           return;
         }
 
@@ -5535,7 +5678,7 @@
           window.renderTable(window.currentSchedule, window.currentNotesLog);
         if (typeof window.renderMobileCards === "function")
           window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
-        alert(
+        window.toast(
           '🔒 סוגרי הסופ"ש/חג נקבעו וננעלו. אפשר להמשיך לתכנן את שאר השבוע בנפרד.\nלא לשכוח "שמור לענן" כדי לשמר את השינוי.',
         );
       };
@@ -5548,7 +5691,7 @@
       window.showMyUpcomingClosures = async function () {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) {
-          alert("לא מזוהה עובד מחובר.");
+          window.toast("לא מזוהה עובד מחובר.");
           return;
         }
         const modal = document.getElementById("myClosuresModal");
@@ -5736,7 +5879,7 @@
         const name = document.getElementById("newCmdName").value.trim();
         const phone = document.getElementById("newCmdPhone").value.trim();
         if (!name || !phone) {
-          alert("נא למלא שם וטלפון.");
+          window.toast("נא למלא שם וטלפון.");
           return;
         }
         window.commanders.push({ id: Date.now(), name, phone });
@@ -6260,19 +6403,19 @@
       // עובד A מבקש מעובד B להחליף אותו במשימה שטרם בוצעה
       window.requestTaskSwap = function (taskId) {
         const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const task = (window.systemTasks || []).find((t) => t.id === taskId);
         if (!task) return;
         const others = (window.staff || []).filter(
           (e) => e.isActive !== false && String(e.id) !== String(me.id),
         );
-        if (others.length === 0) { alert("אין עובדים אחרים להחלפה."); return; }
+        if (others.length === 0) { window.toast("אין עובדים אחרים להחלפה."); return; }
         const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
         const choice = prompt(`למי לשלוח בקשת החלפה למשימה?\n\n${optionsStr}\n\nהקלד את המספר:`);
         if (!choice) return;
         const idx = parseInt(choice.trim(), 10) - 1;
         const target = others[idx];
-        if (!target) { alert("בחירה לא תקינה."); return; }
+        if (!target) { window.toast("בחירה לא תקינה."); return; }
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -6287,7 +6430,7 @@
         };
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("taskSwapRequests/" + id, req);
-        alert(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+        window.toast(`✅ בקשת ההחלפה נשלחה ל${target.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
       };
 
       // תגובת העובד המוזמן (B) — אישור/דחייה (נכתב כילד חדש כדי לעמוד בכללי ההרשאה)
@@ -6297,7 +6440,7 @@
           approved: approve,
           ts: Date.now(),
         });
-        alert(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
       };
 
 
@@ -6329,7 +6472,7 @@
             approved: approve,
             ts: Date.now(),
           });
-        alert(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+        window.toast(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
       };
 
       // ===== התנדבות למשימה פתוחה (ללא עובד מוקצה) =====
@@ -6338,12 +6481,12 @@
       // אוטומטית ברגע שהוא מחובר (ראה listener ב-index.html), בדומה ל-passwordOverrides.
       window.volunteerForTask = function (taskId) {
         const me = window.loggedInWorker || window.loggedInUser;
-        if (!me || me.id == null) { alert("לא מזוהה עובד מחובר."); return; }
+        if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const task = (window.systemTasks || []).find((t) => t.id === taskId);
         if (!task) return;
         const already = (task.assignees && task.assignees.length > 0) || task.assignee;
         if (already) {
-          alert("למשימה הזו כבר יש מתנדב.");
+          window.toast("למשימה הזו כבר יש מתנדב.");
           window.renderTasks();
           return;
         }
@@ -6366,7 +6509,7 @@
             empName: me.name,
             ts: id,
           });
-        alert("✅ נרשמת למשימה!");
+        window.toast("✅ נרשמת למשימה!");
       };
 
       window.addTask = function () {
@@ -6377,8 +6520,8 @@
         const date = document.getElementById("newTaskDate").value;
         const endDateEl = document.getElementById("newTaskEndDate");
         const endDate = (!isSingleDay && endDateEl) ? endDateEl.value : "";
-        if (!category) { alert("יש לבחור קטגוריית משימה!"); return; }
-        if (!date) { alert("יש לבחור תאריך!"); return; }
+        if (!category) { window.toast("יש לבחור קטגוריית משימה!"); return; }
+        if (!date) { window.toast("יש לבחור תאריך!"); return; }
 
         // משימה עתידית (אחרי היום) — לא חובה להקצות עובד כבר עכשיו
         const _today = new Date();
@@ -6390,13 +6533,13 @@
           const rows = document.querySelectorAll(".task-participant-select");
           rows.forEach((sel) => { if (sel.value) assignees.push({ name: sel.value }); });
           if (assignees.length === 0 && !isFutureTask) {
-            alert("יש לבחור לפחות עובד אחד!");
+            window.toast("יש לבחור לפחות עובד אחד!");
             return;
           }
         } else {
           const assignee = document.getElementById("newTaskAssignee").value;
           if (!assignee && !isFutureTask) {
-            alert("יש לבחור עובד למשימה!");
+            window.toast("יש לבחור עובד למשימה!");
             return;
           }
           if (assignee) assignees = [{ name: assignee }];
@@ -6501,8 +6644,8 @@
         const date = document.getElementById("editTaskDate").value;
         const endDateEl = document.getElementById("editTaskEndDate");
         const endDate = endDateEl ? endDateEl.value : "";
-        if (!category) { alert("יש לבחור קטגוריית משימה!"); return; }
-        if (!date) { alert("יש לבחור תאריך!"); return; }
+        if (!category) { window.toast("יש לבחור קטגוריית משימה!"); return; }
+        if (!date) { window.toast("יש לבחור תאריך!"); return; }
         const checked = Array.from(
           document.querySelectorAll(".edit-task-assignee-cb:checked"),
         ).map((cb) => cb.value);
@@ -6669,7 +6812,7 @@
             "shift_em_rotations_v47",
             JSON.stringify(window.emRotations),
           );
-          alert("הגדרות חירום נשמרו");
+          window.toast("הגדרות חירום נשמרו");
           window.triggerUnsavedChanges();
           return;
         }
@@ -6758,7 +6901,7 @@
             delete window.currentSchedule.shiftTimesByLoc;
           }
           window.triggerUnsavedChanges();
-          alert("ההגדרות נשמרו כברירת מחדל לכל השבועות הבאים ✓");
+          window.toast("ההגדרות נשמרו כברירת מחדל לכל השבועות הבאים ✓");
         } else {
           // שמירה לשבוע הנוכחי בלבד
           window.currentSchedule.rules = JSON.parse(
@@ -6768,7 +6911,7 @@
             JSON.stringify(shiftTimesByLoc),
           );
           window.triggerUnsavedChanges();
-          alert(
+          window.toast(
             "ההגדרות נשמרו לשבוע הנוכחי בלבד ✓\n(לחץ 'שמור שינויים לענן' כדי לאשר)",
           );
         }
@@ -7056,7 +7199,7 @@
             window.renderPendingRequestsManager();
           if (typeof window.renderRequestsPage === "function")
             window.renderRequestsPage();
-          alert(
+          window.toast(
             "✅ האילוצים, הבקשות וסטטוס הסופ\"ש אופסו!\nשם משתמש וסיסמה נשמרו ללא שינוי.\nלחץ 'שמור שינויים לענן' כדי לעדכן.",
           );
         }
@@ -7152,11 +7295,11 @@
         const start = document.getElementById("holCalStart").value;
         const end = document.getElementById("holCalEnd").value || start;
         if (!name || !start) {
-          alert("יש למלא שם חג ותאריך התחלה.");
+          window.toast("יש למלא שם חג ותאריך התחלה.");
           return;
         }
         if (end < start) {
-          alert("תאריך הסיום לא יכול להיות לפני תאריך ההתחלה.");
+          window.toast("תאריך הסיום לא יכול להיות לפני תאריך ההתחלה.");
           return;
         }
         const id = Date.now() + Math.floor(Math.random() * 10000);
@@ -7289,15 +7432,15 @@
         const loc = document.getElementById("reqLoc").value;
         const note = document.getElementById("reqNote").value;
         if (!empId) {
-          alert("אנא בחר את שמך מהרשימה!");
+          window.toast("אנא בחר את שמך מהרשימה!");
           return;
         }
         if (!dateVal || !day) {
-          alert("יש לבחור תאריך מהיומן!");
+          window.toast("יש לבחור תאריך מהיומן!");
           return;
         }
         const emp = window.staff.find((e) => e.id == empId);
-        if (!emp) { alert("שגיאה: עובד לא נמצא."); return; }
+        if (!emp) { window.toast("שגיאה: עובד לא נמצא."); return; }
 
         // חישוב מפתח השבוע של הבקשה לפי התאריך שנבחר
         const reqDateObj = new Date(dateVal);
@@ -7319,7 +7462,7 @@
         };
         const _permFlag = _permByType[type];
         if (_permFlag && !_roleCfg[_permFlag]) {
-          alert("סוג הבקשה הזה אינו זמין עבור " + (emp.type || "סוג עובד זה") + ".");
+          window.toast("סוג הבקשה הזה אינו זמין עבור " + (emp.type || "סוג עובד זה") + ".");
           return;
         }
 
@@ -7331,7 +7474,7 @@
             ? document.getElementById("reqVacEndDate")?.value || dateVal
             : dateVal;
         if (type === "vacation" && !vacSingle && vacEndVal < dateVal) {
-          alert("תאריך הסיום חייב להיות אחרי תאריך ההתחלה.");
+          window.toast("תאריך הסיום חייב להיות אחרי תאריך ההתחלה.");
           return;
         }
         const vacIsRange = type === "vacation" && !vacSingle;
@@ -7339,7 +7482,7 @@
           type === "vacation" ? window._countVacDays(dateVal, vacEndVal) : 1;
         // חסימה רק בטווח שכולו שישי/שבת (אין בכלל מה ליצור) — יום בודד תמיד נשלח, גם אם הוא שישי/שבת
         if (vacIsRange && vacCount === 0) {
-          alert("הטווח שנבחר כולל רק שישי/שבת — לא נוצרות בקשות (הם אינם מנצלים יום חופש).");
+          window.toast("הטווח שנבחר כולל רק שישי/שבת — לא נוצרות בקשות (הם אינם מנצלים יום חופש).");
           return;
         }
 
@@ -7364,7 +7507,7 @@
             }
           }
           if (studyThisWeek >= 1) {
-            alert("🚨 ניתן לבקש יום לימודים אחד בלבד בשבוע.");
+            window.toast("🚨 ניתן לבקש יום לימודים אחד בלבד בשבוע.");
             return;
           }
         }
@@ -7396,11 +7539,11 @@
             });
           }
           if (existingCount >= _reqLimit) {
-            alert(`🚨 חסימה: ${emp.name}, הגעת למכסה המקסימלית של ${_reqLimit} בקשות לשבוע זה!`);
+            window.toast(`🚨 חסימה: ${emp.name}, הגעת למכסה המקסימלית של ${_reqLimit} בקשות לשבוע זה!`);
             return;
           }
           if (type === "shift" && (loc === LOC_ZIRA || loc === LOC_MATAL) && locationCount >= 1) {
-            alert("🚨 חסימה: מותר לבקש מיקום ספציפי פעם אחת בשבוע! הבקשה השנייה חייבת להיות אילוץ/חופש.");
+            window.toast("🚨 חסימה: מותר לבקש מיקום ספציפי פעם אחת בשבוע! הבקשה השנייה חייבת להיות אילוץ/חופש.");
             return;
           }
         }
@@ -7493,7 +7636,7 @@
                 : type === "constraint"
                   ? "אילוץ"
                   : "בקשת שיבוץ";
-          alert(`✅ הבקשה נשלחה בהצלחה!\n\n📅 ${vacIsRange ? typeLabel : fDate + ' (' + day + ')'}\n📋 סוג: ${vacIsRange ? 'חופשה בטווח (שישי/שבת לא נספרים)' : typeLabel}\nהמנהל יטפל בבקשתך בהקדם.`);
+          window.toast(`✅ הבקשה נשלחה בהצלחה!\n\n📅 ${vacIsRange ? typeLabel : fDate + ' (' + day + ')'}\n📋 סוג: ${vacIsRange ? 'חופשה בטווח (שישי/שבת לא נספרים)' : typeLabel}\nהמנהל יטפל בבקשתך בהקדם.`);
           document.getElementById("reqDate").value = "";
           document.getElementById("reqDay").value = "";
           document.getElementById("reqNote").value = "";
@@ -7770,7 +7913,7 @@
           (window.currentSchedule.pendingRequests &&
             window.currentSchedule.pendingRequests[reqId]);
         if (!r) {
-          alert("הבקשה לא נמצאה (ייתכן שכבר טופלה).");
+          window.toast("הבקשה לא נמצאה (ייתכן שכבר טופלה).");
           return;
         }
         const weekKey = r.weekKey || window.currentSelectedWeek;
@@ -7804,7 +7947,7 @@
             if (sched.pendingRequests) delete sched.pendingRequests[reqId];
             window.saveToCloud("schedules/" + weekKey, sched);
           } catch (e) {
-            alert("שגיאה בטיפול בבקשה: " + (e.message || e));
+            window.toast("שגיאה בטיפול בבקשה: " + (e.message || e));
             return;
           }
         }
@@ -7825,7 +7968,7 @@
           );
         }
         if (!silent) {
-          alert(
+          window.toast(
             isApproved
               ? "✅ הבקשה אושרה והוזנה אוטומטית לתיק העובד!"
               : "❌ הבקשה נדחתה ונמחקה מהתור.",
@@ -7847,7 +7990,7 @@
         for (const id of ids) {
           await window.processRequest(id, isApproved, true);
         }
-        alert(
+        window.toast(
           isApproved
             ? `✅ אושרו ${ids.length} הימים בטווח והוזנו אוטומטית לתיק העובד!`
             : `❌ נדחו ${ids.length} הימים בטווח ונמחקו מהתור.`,
@@ -8052,7 +8195,7 @@
         if (window.currentUserRole === "superAdmin") {
           let newPid = document.getElementById("editPersonalId").value.trim();
           if (newPid === "8326560" && emp.personalId !== "8326560") {
-            alert(
+            window.toast(
               "שגיאה אבטחה: לא ניתן לשייך מספר אישי זה לעובד אחר. הוא שמור למנהל המערכת הראשי.",
             );
             return; // עוצר את השמירה ולא סוגר את החלון
@@ -9370,7 +9513,7 @@
           const lines = window._lastGenerateSkippedPrefs
             .map((s) => `• ${s.name} — ${s.day} ${s.shift} (${s.reasons.join(", ")})`)
             .join("\n");
-          alert(
+          window.toast(
             `⚠️ ${window._lastGenerateSkippedPrefs.length} בקשות שיבוץ לא הוחלו בגלל התנגשות:\n\n${lines}\n\nניתן לשבץ ידנית ולאשר את האזהרה אם רוצים בכל זאת.`,
           );
         }
@@ -9866,7 +10009,7 @@
 
       window.saveAIKey = function () {
         const key = document.getElementById("aiKeyInput").value.trim();
-        if (!key.startsWith("sk-ant")) { alert("מפתח לא תקין — חייב להתחיל ב-sk-ant"); return; }
+        if (!key.startsWith("sk-ant")) { window.toast("מפתח לא תקין — חייב להתחיל ב-sk-ant"); return; }
         localStorage.setItem("shift_anthropic_key_v1", key);
         document.getElementById("aiKeySection").style.display = "none";
         document.getElementById("aiRunSection").style.display = "block";
@@ -10074,7 +10217,7 @@
 
       window.generateAI = async function () {
         const key = localStorage.getItem("shift_anthropic_key_v1");
-        if (!key) { alert("יש להזין API key תחילה"); return; }
+        if (!key) { window.toast("יש להזין API key תחילה"); return; }
 
         const statusEl = document.getElementById("aiStatus");
         const resultEl = document.getElementById("aiResult");
@@ -10194,7 +10337,7 @@
             window._parsedCSVData = window.parseScheduleCSV(e.target.result);
             window.renderCSVPreview(window._parsedCSVData);
           } catch (err) {
-            alert("שגיאה בקריאת הקובץ: " + err.message);
+            window.toast("שגיאה בקריאת הקובץ: " + err.message);
           }
         };
         reader.readAsText(file, "UTF-8");
@@ -10282,7 +10425,7 @@
 
       window.saveDraft = function () {
         const name = (document.getElementById("draftNameInput").value || "").trim();
-        if (!name) { alert("יש להזין שם לטיוטה"); return; }
+        if (!name) { window.toast("יש להזין שם לטיוטה"); return; }
 
         const draftId = "draft_" + Date.now();
         const draftData = {
@@ -10294,7 +10437,7 @@
         };
 
         window.saveToCloud("drafts/" + draftId, draftData);
-        alert("✅ הטיוטה '" + name + "' נשמרה בהצלחה");
+        window.toast("✅ הטיוטה '" + name + "' נשמרה בהצלחה");
         document.getElementById("draftNameInput").value = "";
         window.renderDraftsList();
       };
@@ -10348,12 +10491,12 @@
       window.applyDraft = function (draftId) {
         const { ref, get } = window._fbImports || {};
         const db = window._firebaseDb;
-        if (!ref || !get || !db) { alert("שגיאה: Firebase לא מחובר"); return; }
+        if (!ref || !get || !db) { window.toast("שגיאה: Firebase לא מחובר"); return; }
 
         if (!confirm("טעינת הטיוטה תחליף את הלוח הנוכחי. להמשיך?")) return;
 
         get(ref(db, "drafts/" + draftId)).then(function (snap) {
-          if (!snap.exists()) { alert("הטיוטה לא נמצאה"); return; }
+          if (!snap.exists()) { window.toast("הטיוטה לא נמצאה"); return; }
           const draft = snap.val();
           window.currentSchedule = draft.schedule;
           window.isEmergencyMode = window.currentSchedule.isEmergencyMode === true;
@@ -10363,15 +10506,15 @@
           window.triggerUnsavedChanges();
           window.renderTable(window.currentSchedule, window.currentNotesLog);
           document.getElementById("draftsModal").style.display = "none";
-          alert("✅ הטיוטה '" + draft.name + "' נטענה בהצלחה");
-        }).catch(function (e) { alert("שגיאה: " + e.message); });
+          window.toast("✅ הטיוטה '" + draft.name + "' נטענה בהצלחה");
+        }).catch(function (e) { window.toast("שגיאה: " + e.message); });
       };
 
       window.deleteDraft = function (draftId) {
         if (!confirm("למחוק את הטיוטה לצמיתות?")) return;
         const { ref, remove } = window._fbImports || {};
         const db = window._firebaseDb;
-        if (!ref || !remove || !db) { alert("שגיאה: Firebase לא מחובר"); return; }
+        if (!ref || !remove || !db) { window.toast("שגיאה: Firebase לא מחובר"); return; }
         remove(ref(db, "drafts/" + draftId)).then(function () {
           window.renderDraftsList();
         });
@@ -10436,7 +10579,7 @@
       // Override applyCSVImport to also apply special statuses
       window.applyCSVImport = function (overwrite) {
         var parsed = window._parsedCSVData;
-        if (!parsed) { alert("אין נתונים לייבוא"); return; }
+        if (!parsed) { window.toast("אין נתונים לייבוא"); return; }
 
         var LOC_ZIRA = "זירה";
         var LOC_MATAL = 'מת"ל';
@@ -10493,7 +10636,7 @@
         var specCount = (parsed.specials || []).length;
         var msg = (overwrite ? "הלוח הוחלף" : "יובאו") + ": " + assignCount + " שיבוצים";
         if (specCount > 0) msg += " + " + specCount + " סטטוסים מיוחדים";
-        setTimeout(function() { alert("✅ " + msg); }, 100);
+        setTimeout(function() { window.toast("✅ " + msg); }, 100);
       };
 
       window.renderCSVPreview = function (parsed) {

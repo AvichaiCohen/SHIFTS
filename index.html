@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260821a";
+        var BUILD = "20260823a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -151,12 +151,13 @@
             err &&
             (err.code === "PERMISSION_DENIED" ||
               /permission_denied/i.test(err.message || ""));
+          const notify = window.toast || window.alert;
           if (isPerm) {
-            alert(
+            notify(
               "⛔ אין לך הרשאת כתיבה.\nרק המנהל הראשי יכול לשמור שינויים לענן.",
             );
           } else {
-            alert("⚠️ שגיאה בשמירה לענן:\n" + (err.message || err));
+            notify("⚠️ שגיאה בשמירה לענן:\n" + (err.message || err));
           }
         });
       };
@@ -753,7 +754,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260821a" />
+    <link rel="stylesheet" href="style.css?v=20260823a" />
   </head>
   <body>
     <div
@@ -4842,6 +4843,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260821a"></script>
+    <script src="script.js?v=20260823a"></script>
   </body>
 </html>
