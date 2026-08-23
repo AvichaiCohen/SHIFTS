@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260823c";
+        var BUILD = "20260823d";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -685,6 +685,45 @@
               window.renderHolidaysLog();
           });
 
+          // ביטול בקשות ע"י עובדים — נכתבות create-only ע"י עובד אנונימי;
+          // המנהל הראשי מסיר בפועל את הבקשה מהתור (pendingRequests + index),
+          // מסמן ב-myRequests "cancelled", ומנקה את בקשת-הביטול.
+          window.requestCancellations = {};
+          onValue(ref(db, "requestCancellations"), (snapshot) => {
+            window.requestCancellations = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            const cids = Object.keys(window.requestCancellations);
+            if (window.currentUserRole === "superAdmin" && cids.length > 0) {
+              cids.forEach((cid) => {
+                const c = window.requestCancellations[cid];
+                if (c && c.reqId != null) {
+                  const wk = c.weekKey || window.currentSelectedWeek;
+                  if (wk)
+                    window.saveToCloud(
+                      "schedules/" + wk + "/pendingRequests/" + c.reqId,
+                      null,
+                    );
+                  window.saveToCloud("pendingRequestsIndex/" + c.reqId, null);
+                  if (c.empId != null)
+                    window.saveToCloud(
+                      "myRequests/" + c.empId + "/" + c.reqId + "/status",
+                      "cancelled",
+                    );
+                  if (
+                    window.currentSchedule &&
+                    window.currentSchedule.pendingRequests
+                  )
+                    delete window.currentSchedule.pendingRequests[c.reqId];
+                  if (window._allPending) delete window._allPending[c.reqId];
+                }
+                window.saveToCloud("requestCancellations/" + cid, null);
+              });
+              if (typeof window.renderPendingRequestsManager === "function")
+                window.renderPendingRequestsManager();
+            }
+          });
+
           // בקשות החלפת חגים בין עובדים (A מבקש מ-B, B מאשר, מנהל מאשר סופית)
           window.holidaySwapRequests = {};
           onValue(ref(db, "holidaySwapRequests"), (snapshot) => {
@@ -754,7 +793,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260823c" />
+    <link rel="stylesheet" href="style.css?v=20260823d" />
   </head>
   <body>
     <div
@@ -890,9 +929,6 @@
         </div>
         <div onclick="window.showPage('demands')" id="nav-demands">
           📊 דרישות כוח
-        </div>
-        <div onclick="window.showPage('tracking')" id="nav-tracking">
-          🗓️ מעקב נוכחות
         </div>
         <div onclick="window.showPage('rules')" id="nav-rules">⚙️ הגדרות</div>
 
@@ -2355,47 +2391,6 @@
           <div id="staffGrid" class="staff-grid"></div>
         </div>
 
-        <div id="page-tracking" class="container">
-          <h1>מעקב נוכחות שבועי לפי יום</h1>
-          <p>בחר יום כדי לראות מי משובץ ובאיזה מיקום (זירה / מת"ל).</p>
-          <select
-            id="trackingDaySelectFull"
-            onchange="window.renderTrackingPage('full')"
-            style="
-              width: 100%;
-              max-width: 320px;
-              padding: 10px 14px;
-              border-radius: 10px;
-              font-weight: bold;
-              margin-bottom: 16px;
-            "
-          >
-            <option value="ראשון">יום ראשון</option>
-            <option value="שני">יום שני</option>
-            <option value="שלישי">יום שלישי</option>
-            <option value="רביעי">יום רביעי</option>
-            <option value="חמישי">יום חמישי</option>
-            <option value="שישי">יום שישי</option>
-            <option value="שבת">יום שבת</option>
-          </select>
-          <div
-            class="card-paper"
-            id="widget-trackingTable"
-            data-widget-key="trackingTable"
-            style="border-top: 4px solid var(--md-primary)"
-          >
-            <div class="widget-controls">
-              <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'trackingTable')" title="גרור להזזה">⠿</span>
-              <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('trackingTable')">👁</button>
-              <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('trackingTable')">⇥</button>
-            </div>
-            <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'trackingTable')" title="גרור לשינוי גודל">⇲</span>
-            <div class="widget-body">
-              <div id="fullTrackingTableContainer"></div>
-            </div>
-          </div>
-        </div>
-
         <div id="page-requests" class="container">
           <div
             style="
@@ -3097,10 +3092,6 @@
               <div class="more-page-card-icon">⚙️</div>
               <div class="more-page-card-label">הגדרות</div>
             </div>
-            <div class="more-page-card" onclick="window.showPage('tracking')">
-              <div class="more-page-card-icon">📊</div>
-              <div class="more-page-card-label">מעקב</div>
-            </div>
             <div class="more-page-card" onclick="window.exportToExcel()">
               <div class="more-page-card-icon">📥</div>
               <div class="more-page-card-label">ייצוא CSV</div>
@@ -3319,6 +3310,13 @@
                 margin-top: 4px;
               "
             ></div>
+          </div>
+
+          <div>
+            <label
+              style="display: block; margin-bottom: 4px; font-size: 0.875rem"
+              >🎂 יום הולדת (לא חובה)</label
+            ><input type="date" id="editBirthday" style="width: 100%" />
           </div>
 
           <div class="super-only">
@@ -4843,6 +4841,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260823c"></script>
+    <script src="script.js?v=20260823d"></script>
   </body>
 </html>

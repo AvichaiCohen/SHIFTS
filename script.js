@@ -165,12 +165,10 @@
         taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
         vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
-        trackingTable: { nativePage: "tracking", label: "נוכחות שבועית", defaultColSpan: 16 },
         demandsListContainer: { nativePage: "demands", label: "דרישות פעילות", defaultColSpan: 18 },
       };
       window.WIDGET_PAGES = [
         { id: "schedule", label: "לוח משמרות" },
-        { id: "tracking", label: "נוכחות שבועית" },
         { id: "tasks", label: "משימות וימים מיוחדים" },
         { id: "requests", label: "אישור בקשות" },
         { id: "staff", label: "צוות עובדים" },
@@ -207,7 +205,7 @@
       // דרישות, כרטיסי צוות/הגדרות) — הגריד של הפאנלים ה"מועברים" נכנס בתחתית
       // העמוד כדי לא לדחוף את התוכן הקבוע למטה. בעמודי הפאנלים הטהורים
       // (משימות/בקשות) הגריד נשאר בראש (מיד אחרי הכותרת).
-      window._WIDGET_GRID_AT_END = ["schedule", "tracking", "demands", "staff", "rules"];
+      window._WIDGET_GRID_AT_END = ["schedule", "demands", "staff", "rules"];
       // מוצא/יוצר את מיכל הגריד של עמוד נתון
       window._ensureWidgetGrid = function (pageId) {
         const pageEl = document.getElementById("page-" + pageId);
@@ -2017,13 +2015,52 @@
               ? `<span style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">✅ אושרה</span>`
               : r.status === "rejected"
                 ? `<span style="background:#fee2e2; color:#b91c1c; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">❌ נדחתה</span>`
-                : `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">⏳ ממתינה</span>`;
+                : r.status === "cancelled"
+                  ? `<span style="background:var(--md-bg); color:var(--md-text-secondary); padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">🚫 בוטלה</span>`
+                  : `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">⏳ ממתינה</span>`;
+          // ניתן לבטל רק בקשה שעדיין ממתינה (טרם אושרה/נדחתה)
+          const isPending = !r.status || r.status === "pending";
+          const cancelBtn = isPending
+            ? `<button class="btn btn-outlined" style="padding:3px 10px; font-size:0.78rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.cancelMyRequest('${r.id}')">בטל</button>`
+            : "";
           html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--md-divider);">
-            <div><div style="font-weight:500;">${window._reqDesc(r)}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${r.note}</div>` : ""}</div>
-            ${badge}
+            <div><div style="font-weight:500;">${window._reqDesc(r)}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${window.escapeHtml(r.note)}</div>` : ""}</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">${badge}${cancelBtn}</div>
           </div>`;
         });
         cont.innerHTML = html;
+      };
+
+      // ביטול בקשה ע"י העובד עצמו — נכתבת בקשת-ביטול (create-only), והמנהל
+      // הראשי מסיר בפועל מהתור (listener ב-index.html), בדומה לשאר הפעולות
+      // של עובד אנונימי. עדכון אופטימי מקומי כדי שהתצוגה תגיב מיד.
+      window.cancelMyRequest = async function (reqId) {
+        const r = (window._myRequests || {})[reqId];
+        if (!r) return;
+        const ok = await window.confirmDialog({
+          title: "ביטול בקשה",
+          message: "לבטל את הבקשה? היא תוסר מרשימת הבקשות שממתינות לאישור המנהל.",
+          confirmText: "בטל בקשה",
+          danger: true,
+        });
+        if (!ok) return;
+        const me = window.loggedInWorker || window.loggedInUser;
+        const empId = r.empId != null ? r.empId : me ? me.id : null;
+        // מזהה ייחודי לצומת (לא reqId) כדי שביטול חוזר לא ייכשל על create-only
+        const cid = Date.now() + "_" + Math.floor(Math.random() * 100000);
+        if (typeof window.saveToCloud === "function") {
+          window.saveToCloud("requestCancellations/" + cid, {
+            reqId,
+            empId,
+            weekKey: r.weekKey || null,
+            ts: Date.now(),
+          });
+        }
+        // עדכון אופטימי מקומי בלבד (הסטטוס הקבוע בענן יעודכן ע"י המנהל שמיישם)
+        if (window._myRequests && window._myRequests[reqId])
+          window._myRequests[reqId].status = "cancelled";
+        window.renderMyRequestsList();
+        window.toast("✅ הבקשה בוטלה.");
       };
 
       // ===== גיבוי אוטומטי ושחזור =====
@@ -2509,6 +2546,30 @@
         return emp.password || "1234";
       };
 
+      // ===== ימי הולדת =====
+      // birthday נשמר כ-YYYY-MM-DD; ההשוואה לפי חודש-יום בלבד (חוזר כל שנה).
+      window._isBirthdayToday = function (emp) {
+        if (!emp || !emp.birthday || emp.birthday.length < 10) return false;
+        const now = new Date();
+        const md =
+          String(now.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(now.getDate()).padStart(2, "0");
+        return emp.birthday.slice(5) === md;
+      };
+      window._checkBirthdaysToday = function () {
+        const staff = window.globalStaff || window.staff || [];
+        const today = staff.filter(
+          (e) => e && e.isActive !== false && window._isBirthdayToday(e),
+        );
+        if (today.length === 0) return;
+        const names = today.map((e) => e.name).join(", ");
+        window.toast(
+          "🎂 מזל טוב! היום חוגג/ת יום הולדת: " + names,
+          "success",
+        );
+      };
+
       // ===== גיבוב סיסמאות עובדים (SHA-256) =====
       // כדי שמי שקורא את ה-DB באופן אנונימי לא יראה סיסמה בטקסט גלוי. סיסמה
       // מגובבת נשמרת עם הקידומת "sha256:". תאימות לאחור מלאה: סיסמה ישנה
@@ -2667,6 +2728,16 @@
               window.migratePasswordsToHash();
             } catch (e) {}
           }, 2500);
+        }
+
+        // ברכת יום הולדת — פעם אחת בכניסה, אם היום חוגג מישהו מהצוות
+        if (!window._bdayChecked) {
+          window._bdayChecked = true;
+          setTimeout(() => {
+            try {
+              window._checkBirthdaysToday();
+            } catch (e) {}
+          }, 2000);
         }
 
         if (window.currentUserRole === "worker") {
@@ -3807,15 +3878,13 @@
                     ? "מנהל משני"
                     : "עובד";
               let pId = e.personalId || "לא הוגדר";
-              let pass = window.getEffectivePassword(e);
-              // סיסמאות מאוחסנות מגובבות ולא ניתנות לשחזור — לא חושפים את ה-hash.
-              // (סיסמה ישנה בטקסט גלוי עדיין תוצג עד המרה, לתאימות לאחור.)
-              let passDisplay = window._isHashedPassword(pass) ? "מגובבת 🔒" : pass;
+              // הסיסמה מאוחסנת מגובבת ולא ניתנת לשחזור — אין טעם/אפשרות להציגה.
+              // לאיפוס סיסמה משתמשים בעריכת העובד (שדה "סיסמה חדשה").
 
               return `<div class="emp-card chip-${(e.type || "").replace(/\s+/g, "-")} ${isInactive}" onclick="window.openModal(${e.id})">
                         <div style="width:100%;">
                             <div style="font-size:1.1em; font-weight:bold; color:var(--md-primary); margin-bottom:8px; border-bottom:1px solid var(--md-divider); padding-bottom:5px;">
-                                ${e.name} ${(() => { const off = []; if (e.canMorning === false) off.push("בוקר"); if (e.canEvening === false) off.push("ערב"); if (e.canNight === false || e.noNights) off.push("לילה"); return off.length ? `<span style="font-size:0.65em; color:var(--md-error); font-weight:normal;">⛔${off.join("/")}</span>` : ""; })()} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
+                                ${e.name} ${window._isBirthdayToday(e) ? '<span title="יום הולדת היום!">🎂</span>' : ""} ${(() => { const off = []; if (e.canMorning === false) off.push("בוקר"); if (e.canEvening === false) off.push("ערב"); if (e.canNight === false || e.noNights) off.push("לילה"); return off.length ? `<span style="font-size:0.65em; color:var(--md-error); font-weight:normal;">⛔${off.join("/")}</span>` : ""; })()} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
                             </div>
                             <div style="font-size:0.85em; color:var(--text-muted); display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
                                 <span>דרג: <b>${e.type}</b></span>
@@ -3825,9 +3894,7 @@
                             <div class="super-only" style="background:var(--md-bg); padding:8px; border-radius:6px; margin-top:10px; font-size:0.85em;">
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
                                     <span>מ.אישי: <b>${pId}</b></span>
-                                    <span style="display:flex; align-items:center; gap:5px;">סיסמה: <b id="staff_pass_${e.id}" style="letter-spacing: 2px;">****</b> 
-                                        <span style="cursor:pointer; font-size:1.1em;" title="הצג/הסתר" onclick="let el=document.getElementById('staff_pass_${e.id}'); el.innerText = el.innerText === '****' ? '${passDisplay}' : '****'; el.style.letterSpacing = '0px'; event.stopPropagation();">👁️</span>
-                                    </span>
+                                    <span style="color:var(--md-text-secondary);">סיסמה: 🔒 מוגנת</span>
                                 </div>
                                 <div style="margin-top:4px; color:#c2410c;">הרשאה: <b>${roleName}</b></div>
                             </div>
@@ -4562,8 +4629,6 @@
           window.renderStaff();
         if (p === "requests" && typeof window.renderRequestsPage === "function")
           window.renderRequestsPage();
-        if (p === "tracking" && typeof window.renderTrackingPage === "function")
-          window.renderTrackingPage();
         if (p === "tasks" && typeof window.renderTasks === "function") {
           window.renderTasks();
           if (typeof window.renderWeekendJusticeTable === "function")
@@ -8122,6 +8187,7 @@
         document.getElementById("editFixedLoc").value = emp.fixedLoc || "";
         const _oMQuota = emp.vacationQuota !== undefined ? emp.vacationQuota : 14;
         document.getElementById("editVacation").value = _oMQuota;
+        document.getElementById("editBirthday").value = emp.birthday || "";
         // חישוב יתרה: נוצלו (אילוצים + סטטוסים מיוחדים)
         const _oMConstraints = emp.constraints || [];
         let _oMUsed = 0;
@@ -8268,6 +8334,7 @@
         emp.fixedLoc = document.getElementById("editFixedLoc").value;
         emp.vacationQuota =
           parseInt(document.getElementById("editVacation").value) || 0;
+        emp.birthday = document.getElementById("editBirthday").value || "";
         // זמינות משמרות
         emp.canMorning = document.getElementById("editCanMorning").checked;
         emp.canEvening = document.getElementById("editCanEvening").checked;
@@ -8359,6 +8426,7 @@
           globalEmp.type = emp.type;
           globalEmp.fixedLoc = emp.fixedLoc;
           globalEmp.vacationQuota = emp.vacationQuota;
+          globalEmp.birthday = emp.birthday || "";
           globalEmp.noNights = emp.noNights;
           globalEmp.canMorning = emp.canMorning;
           globalEmp.canEvening = emp.canEvening;

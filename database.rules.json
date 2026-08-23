@@ -51,6 +51,11 @@
         ".write": "auth != null && !data.exists()"
       }
     },
+    "requestCancellations": {
+      "$reqId": {
+        ".write": "auth != null && !data.exists()"
+      }
+    },
     "holidaySwapRequests": {
       "$id": {
         ".write": "auth != null && !data.exists()",
