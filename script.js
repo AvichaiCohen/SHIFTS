@@ -1810,8 +1810,8 @@
               lines += `<div style="color:#b91c1c; font-size:0.88rem; margin-top:3px;">➖ הוסר: ${n.removed.join(" · ")}</div>`;
             cards += `<div style="background:#fff; border-right:4px solid #f59e0b; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                <div><b style="color:#b45309;">🔔 עודכנו לך המשמרות</b> <span style="color:#64748b; font-size:0.8rem;">${n.weekLabel || ""}</span>${lines}</div>
-                <button onclick="window.dismissShiftNotif('${n.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+                <div><b style="color:#b45309;">🔔 עודכנו לך המשמרות</b> <span style="color:var(--md-text-secondary); font-size:0.8rem;">${n.weekLabel || ""}</span>${lines}</div>
+                <button onclick="window.dismissShiftNotif('${n.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
               </div>
             </div>`;
           });
@@ -1838,12 +1838,12 @@
             const color = ok ? "#15803d" : "#b91c1c";
             const title = ok ? "✅ הבקשה שלך אושרה" : "❌ הבקשה שלך נדחתה";
             const noteLine = r.note
-              ? `<div style="font-size:0.82rem; margin-top:3px; color:#64748b;">📝 ${r.note}</div>`
+              ? `<div style="font-size:0.82rem; margin-top:3px; color:var(--md-text-secondary);">📝 ${r.note}</div>`
               : "";
             cards += `<div style="background:#fff; border-right:4px solid ${color}; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${window._reqDesc(r)}</div>${noteLine}</div>
-                <button onclick="window.dismissRequestNotif('${r.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+                <button onclick="window.dismissRequestNotif('${r.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
               </div>
             </div>`;
           });
@@ -1866,7 +1866,7 @@
             cards += `<div style="background:#fff; border-right:4px solid #7c3aed; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div><b style="color:#7c3aed;">${window.escapeHtml(n.title)}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155; white-space:pre-wrap;">${window.escapeHtml(n.body)}</div></div>
-                <button onclick="window.dismissGenNotif(${n.id})" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+                <button onclick="window.dismissGenNotif(${n.id})" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
               </div>
             </div>`;
           });
@@ -1881,7 +1881,7 @@
             cards += `<div style="background:#fff; border-right:4px solid #0d9488; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div><b style="color:#0d9488;">🗓️ את/ה מתוכנן/ת לסגור את הסופ"ש/חג הקרוב</b><div style="font-size:0.85rem; margin-top:4px;"><a href="#" onclick="window.showMyUpcomingClosures(); return false;" style="color:#0d9488;">לפרטים מלאים ←</a></div></div>
-                <button onclick="window.dismissNextWeekendNotif('${nextWkKey}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:#94a3b8; line-height:1;">✕</button>
+                <button onclick="window.dismissNextWeekendNotif('${nextWkKey}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
               </div>
             </div>`;
           }
@@ -2257,7 +2257,7 @@
             if (reqSelector) {
               reqSelector.innerHTML = `<option value="${emp.id}">${emp.name}</option>`;
               reqSelector.setAttribute("disabled", "true");
-              reqSelector.style.background = "#e2e8f0";
+              reqSelector.style.background = "var(--md-divider)";
             }
             if (typeof window.subscribeShiftNotifs === "function")
               window.subscribeShiftNotifs(emp.id);
@@ -3822,7 +3822,7 @@
                                 <span>שיוך: <b>${displayFixed}</b></span>
                                 <span style="grid-column:1/-1; color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--text-muted)'};">חופשים: <b>${_vacUsed} / ${_vacQuota}</b> (נשארו: <b style="color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${_vacRemaining}</b>)</span>
                             </div>
-                            <div class="super-only" style="background:#f1f5f9; padding:8px; border-radius:6px; margin-top:10px; font-size:0.85em;">
+                            <div class="super-only" style="background:var(--md-bg); padding:8px; border-radius:6px; margin-top:10px; font-size:0.85em;">
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
                                     <span>מ.אישי: <b>${pId}</b></span>
                                     <span style="display:flex; align-items:center; gap:5px;">סיסמה: <b id="staff_pass_${e.id}" style="letter-spacing: 2px;">****</b> 
@@ -4708,7 +4708,7 @@
 
         if (!window.holidaysLog || window.holidaysLog.length === 0) {
           tableContainer.innerHTML =
-            "<p style='color:#64748b; font-style:italic;'>אין רישומים במערכת.</p>";
+            "<p style='color:var(--md-text-secondary); font-style:italic;'>אין רישומים במערכת.</p>";
           if (typeof window.renderHolidayStats === "function")
             window.renderHolidayStats();
           if (typeof window.renderMySwapRequests === "function") window.renderMySwapRequests();
@@ -5136,7 +5136,7 @@
             });
         });
         if (items.length === 0) {
-          cont.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
+          cont.innerHTML = `<span style="color:var(--md-text-secondary); font-style:italic;">אין בקשות החלפה הממתינות לאישורך.</span>`;
           return;
         }
         items.sort((a, b) => (a.r.ts || 0) - (b.r.ts || 0));
@@ -5338,7 +5338,7 @@
           cd.setDate(cd.getDate() + i);
           const dateStr = `${cd.getDate()}/${cd.getMonth() + 1}`;
           let val = "מנוחה";
-          let color = "#94a3b8";
+          let color = "var(--md-text-secondary)";
           let foundLoc = null,
             foundShift = null;
           shiftsToCheck.forEach((s) => {
@@ -5532,7 +5532,7 @@
           return `<div style="border-right:4px solid ${color}; background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
               <b style="color:${color};">${title}</b>
-              ${canDelete ? `<button onclick="window.deleteDemand(${d.id})" title="מחק" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1rem;">🗑️</button>` : ""}
+              ${canDelete ? `<button onclick="window.deleteDemand(${d.id})" title="מחק" style="background:none;border:none;color:var(--md-text-secondary);cursor:pointer;font-size:1rem;">🗑️</button>` : ""}
             </div>
             <div style="font-size:0.9rem; margin-top:4px;">${details}</div>
             <div style="font-size:0.85rem; color:var(--md-text-secondary); margin-top:3px;">${when}</div>
@@ -7466,7 +7466,7 @@
         ) {
           selector.innerHTML = `<option value="${window.loggedInUser.id}">${window.loggedInUser.name}</option>`;
           selector.setAttribute("disabled", "true");
-          selector.style.background = "#e2e8f0";
+          selector.style.background = "var(--md-divider)";
           selector.value = window.loggedInUser.id;
         } else {
           // אם זה מנהל שמגיש עבור מישהו - הרשימה נפתחת רגיל
@@ -7801,7 +7801,7 @@
         window.lastPendingCount = keys.length;
 
         if (keys.length === 0) {
-          queueContainer.innerHTML = `<span style="color:#64748b; font-style:italic;">אין בקשות הממתינות לאישורך כרגע.</span>`;
+          queueContainer.innerHTML = `<span style="color:var(--md-text-secondary); font-style:italic;">אין בקשות הממתינות לאישורך כרגע.</span>`;
           return;
         }
 
@@ -9683,7 +9683,7 @@
             data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
           let noteHtml = "";
           if (!window.isWorkerMode) {
-            noteHtml = `<br><input type="text" class="day-note-display" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed #cbd5e1; background:#f8fafc;">`;
+            noteHtml = `<br><input type="text" class="day-note-display" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום..." onchange="window.updateDailyNote('${d}', this.value)" style="width:90%; margin-top:5px; font-size:0.8rem; padding:4px; text-align:center; border:1px dashed var(--md-divider); background:var(--md-bg);">`;
           } else if (note) {
             noteHtml = `<br><span class="day-note-display" style="font-size:0.8rem; color:#ea580c; background:#ffedd5; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;">${note}</span>`;
           }
@@ -9716,7 +9716,7 @@
             }
             const _dIdx = days.indexOf(d);
             if (r.showForModes && !r.showForModes.includes(_dayModes[_dIdx])) {
-              html += `<div style="height:40px;background:#f1f5f9;border-radius:4px;opacity:0.35;margin:2px 0;"></div></td>`;
+              html += `<div style="height:40px;background:var(--md-bg);border-radius:4px;opacity:0.35;margin:2px 0;"></div></td>`;
               return;
             }
             let assigned =
@@ -9894,7 +9894,7 @@
           data.dailyNotes && data.dailyNotes[d] ? data.dailyNotes[d] : "";
         let noteHtml = "";
         if (!window.isWorkerMode) {
-          noteHtml = `<input type="text" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום מיוחד..." onchange="window.updateDailyNote('${d}', this.value)" style="width:100%; margin-top:5px; font-size:0.85rem; padding:6px; border:1px dashed #cbd5e1; background:#f8fafc; border-radius:6px;">`;
+          noteHtml = `<input type="text" value="${window.escapeHtml(note)}" placeholder="📝 הערת יום מיוחד..." onchange="window.updateDailyNote('${d}', this.value)" style="width:100%; margin-top:5px; font-size:0.85rem; padding:6px; border:1px dashed var(--md-divider); background:var(--md-bg); border-radius:6px;">`;
         } else if (note) {
           noteHtml = `<div style="font-size:0.85rem; color:#ea580c; background:#ffedd5; padding:6px 10px; border-radius:6px; margin-top:6px; font-weight:bold;">📌 ${note}</div>`;
         }
@@ -9969,16 +9969,16 @@
 
           if (window.isWorkerMode && empsInShift.length === 0) return;
 
-          html += `<div class="mobile-shift-card" style="margin-bottom: 16px;"><div class="mobile-shift-header" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;"><div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span style="font-size:1.1rem;"><b style="color:var(--md-primary);">${window.getLocName(r.loc)}</b> | ${r.label || r.shift}</span><span style="font-size:0.85rem; background:#cbd5e1; padding:4px 10px; border-radius:12px; font-weight:bold; color:#0f172a;">${empsInShift.length}</span></div>`;
+          html += `<div class="mobile-shift-card" style="margin-bottom: 16px;"><div class="mobile-shift-header" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;"><div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span style="font-size:1.1rem;"><b style="color:var(--md-primary);">${window.getLocName(r.loc)}</b> | ${r.label || r.shift}</span><span style="font-size:0.85rem; background:var(--md-divider); padding:4px 10px; border-radius:12px; font-weight:bold; color:var(--md-text);">${empsInShift.length}</span></div>`;
           if (!window.isWorkerMode) {
-            html += `<input type="text" placeholder="✍️ תן שם/הערה למשמרת זו..." value="${window.escapeHtml(shiftCustomName)}" style="width:100%; font-size:0.85rem; padding:8px; margin-top:4px; border:1px dashed #94a3b8; border-radius:6px; background:#f8fafc;" onchange="window.updateShiftCustomName('${d}','${r.shift}','${safeLoc}', this.value)">`;
+            html += `<input type="text" placeholder="✍️ תן שם/הערה למשמרת זו..." value="${window.escapeHtml(shiftCustomName)}" style="width:100%; font-size:0.85rem; padding:8px; margin-top:4px; border:1px dashed var(--md-text-secondary); border-radius:6px; background:var(--md-bg);" onchange="window.updateShiftCustomName('${d}','${r.shift}','${safeLoc}', this.value)">`;
           } else if (shiftCustomName) {
             html += `<span style="font-size:0.85rem; color:var(--md-primary); font-weight:700; background:rgba(25,118,210,0.08); padding:4px 8px; border-radius:4px; width:100%;">📌 ${shiftCustomName}</span>`;
           }
           html += `</div><div class="mobile-shift-body" style="margin-top:10px;">`;
 
           if (empsInShift.length === 0) {
-            html += `<div style="color:#94a3b8; font-size:0.9rem; padding:8px 4px; font-style:italic;">אין עובדים משובצים</div>`;
+            html += `<div style="color:var(--md-text-secondary); font-size:0.9rem; padding:8px 4px; font-style:italic;">אין עובדים משובצים</div>`;
           } else {
             empsInShift.forEach((emp) => {
               let isMe =
@@ -10019,7 +10019,7 @@
                 ? "0 0 0 2px #f59e0b"
                 : "0 1px 2px rgba(0,0,0,0.02)";
               // הכוכב הוסר כאן
-              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:#f1f5f9; padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid #e2e8f0; box-shadow:${chipShadow};">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${swapBtn}${noteBtn}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:#64748b; margin-right:4px;">(${window.escapeHtml(emp.note)})</small>` : ""}${mWarnIcon}</div>`;
+              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:var(--md-bg); padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid var(--md-divider); box-shadow:${chipShadow};">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${swapBtn}${noteBtn}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:var(--md-text-secondary); margin-right:4px;">(${window.escapeHtml(emp.note)})</small>` : ""}${mWarnIcon}</div>`;
             });
           }
           if (window.isEditMode && !window.isWorkerMode) {

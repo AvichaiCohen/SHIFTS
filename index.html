@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260823b";
+        var BUILD = "20260823c";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -754,7 +754,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260823b" />
+    <link rel="stylesheet" href="style.css?v=20260823c" />
   </head>
   <body>
     <div
@@ -1335,8 +1335,8 @@
               <button
                 class="btn btn-outlined"
                 style="
-                  border-color: #64748b;
-                  color: #64748b;
+                  border-color: var(--md-text-secondary);
+                  color: var(--md-text-secondary);
                   font-size: 0.82rem;
                 "
                 onclick="window.openDraftsModal()"
@@ -1588,7 +1588,7 @@
                   font-size: 1rem;
                   border-radius: 8px;
                   display: block !important;
-                  border: 1px solid #cbd5e1;
+                  border: 1px solid var(--md-divider);
                 "
               ></select>
 
@@ -1611,7 +1611,7 @@
                     padding: 10px;
                     font-size: 1rem;
                     border-radius: 8px;
-                    border: 1px solid #cbd5e1;
+                    border: 1px solid var(--md-divider);
                   "
                   onchange="window.updateReqDay()"
                 />
@@ -1622,12 +1622,12 @@
                   placeholder="היום"
                   style="
                     flex: 1;
-                    background: #f8fafc;
-                    color: #64748b;
+                    background: var(--md-bg);
+                    color: var(--md-text-secondary);
                     padding: 10px;
                     font-size: 1rem;
                     border-radius: 8px;
-                    border: 1px solid #cbd5e1;
+                    border: 1px solid var(--md-divider);
                     text-align: center;
                   "
                 />
@@ -1650,7 +1650,7 @@
                   font-size: 1rem;
                   border-radius: 8px;
                   display: block !important;
-                  border: 1px solid #cbd5e1;
+                  border: 1px solid var(--md-divider);
                 "
                 onchange="window.toggleReqType()"
               >
@@ -1706,7 +1706,7 @@
                       padding: 10px;
                       font-size: 1rem;
                       border-radius: 8px;
-                      border: 1px solid #cbd5e1;
+                      border: 1px solid var(--md-divider);
                       width: 100%;
                       box-sizing: border-box;
                     "
@@ -1743,7 +1743,7 @@
                   font-size: 1rem;
                   border-radius: 8px;
                   display: block !important;
-                  border: 1px solid #cbd5e1;
+                  border: 1px solid var(--md-divider);
                 "
               >
                 <option value="בוקר">בוקר</option>
@@ -1759,7 +1759,7 @@
                   font-size: 1rem;
                   border-radius: 8px;
                   display: block !important;
-                  border: 1px solid #cbd5e1;
+                  border: 1px solid var(--md-divider);
                 "
               >
                 <option value='מת"ל'>🏢 העדפת מיקום: מת"ל / 200</option>
@@ -1776,7 +1776,7 @@
                   padding: 10px;
                   font-size: 1rem;
                   border-radius: 8px;
-                  border: 1px solid #cbd5e1;
+                  border: 1px solid var(--md-divider);
                   width: 100%;
                   box-sizing: border-box;
                 "
@@ -2618,7 +2618,7 @@
 
           <div
             class="card-paper manager-only"
-            style="border-left: 4px solid #64748b; margin-top: 20px"
+            style="border-left: 4px solid var(--md-text-secondary); margin-top: 20px"
           >
             <div
               style="
@@ -2629,7 +2629,7 @@
                 gap: 8px;
               "
             >
-              <h3 style="color: #64748b; margin: 0">🧩 סידור פאנלים</h3>
+              <h3 style="color: var(--md-text-secondary); margin: 0">🧩 סידור פאנלים</h3>
               <button
                 class="btn btn-outlined"
                 onclick="window.resetWidgetLayout()"
@@ -4264,7 +4264,7 @@
                 width: 100%;
                 padding: 8px;
                 border-radius: 8px;
-                border: 1px solid #e2e8f0;
+                border: 1px solid var(--md-divider);
                 font-size: 0.9rem;
                 box-sizing: border-box;
               "
@@ -4287,7 +4287,7 @@
                 width: 100%;
                 padding: 8px;
                 border-radius: 8px;
-                border: 1px solid #e2e8f0;
+                border: 1px solid var(--md-divider);
                 font-size: 0.9rem;
                 box-sizing: border-box;
               "
@@ -4339,7 +4339,7 @@
                   width: 70px;
                   padding: 7px 10px;
                   border-radius: 8px;
-                  border: 1px solid #e2e8f0;
+                  border: 1px solid var(--md-divider);
                   font-size: 0.9rem;
                 "
               />
@@ -4575,8 +4575,8 @@
           ></div>
           <div
             style="
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
+              background: var(--md-bg);
+              border: 1px solid var(--md-divider);
               border-radius: 8px;
               padding: 10px;
               max-height: 200px;
@@ -4707,7 +4707,7 @@
                 flex: 1;
                 padding: 8px 12px;
                 border-radius: 8px;
-                border: 1px solid #e2e8f0;
+                border: 1px solid var(--md-divider);
                 font-size: 0.9rem;
               "
             />
@@ -4775,8 +4775,8 @@
             id="aiResult"
             style="
               display: none;
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
+              background: var(--md-bg);
+              border: 1px solid var(--md-divider);
               border-radius: 8px;
               padding: 12px;
               font-size: 0.72rem;
@@ -4843,6 +4843,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260823b"></script>
+    <script src="script.js?v=20260823c"></script>
   </body>
 </html>

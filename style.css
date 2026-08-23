@@ -847,13 +847,17 @@
         }
       }
       /* ===== תיקוני נראות במצב כהה (טלפון ומחשב) ===== */
-      body.dark-mode [style*="background:#f8fafc"],
-      body.dark-mode [style*="background:#f1f5f9"],
+      /* רקעים בגוונים סמנטיים שנשארים בהירים ב-dark mode (לא הומרו ל-tokens
+         כדי לשמור על הזהות הצבעונית) — מוודאים טקסט כהה עליהם כדי שיישאר קריא.
+         (#f8fafc/#f1f5f9/#cbd5e1 הומרו ל-tokens ולכן מתכהים לבד — הוסרו מכאן.) */
       body.dark-mode [style*="background:#e0f2fe"],
-      body.dark-mode [style*="background:#cbd5e1"],
+      body.dark-mode [style*="background: #e0f2fe"],
       body.dark-mode [style*="background:#e9d5ff"],
+      body.dark-mode [style*="background: #e9d5ff"],
       body.dark-mode [style*="background:#faf5ff"],
+      body.dark-mode [style*="background: #faf5ff"],
       body.dark-mode [style*="background:#ffedd5"],
+      body.dark-mode [style*="background: #ffedd5"],
       body.dark-mode [style*="background: white"],
       body.dark-mode [style*="background:white"] {
         color: #0f172a;
