@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260823e";
+        var BUILD = "20260823f";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -793,7 +793,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260823e" />
+    <link rel="stylesheet" href="style.css?v=20260823f" />
   </head>
   <body>
     <div
@@ -1847,7 +1847,23 @@
         </div>
 
         <div id="page-tasks" class="container">
-          <h1>ניהול משימות שוטפות וימים מיוחדים</h1>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 10px;
+            "
+          >
+            <h1 style="margin: 0">ניהול משימות שוטפות וימים מיוחדים</h1>
+            <button
+              class="btn btn-contained manager-only"
+              onclick="window.openAddTaskModal()"
+            >
+              ➕ הוסף משימה חדשה
+            </button>
+          </div>
           <div id="myAllSwapsContainer"></div>
           <div style="display: flex; gap: 20px; flex-wrap: wrap">
             <div style="flex: 1; min-width: 300px">
@@ -1869,20 +1885,29 @@
                   <div id="taskStatsContainer"></div>
                 </div>
               </div>
-              <div
-                class="card-paper manager-only"
-                id="widget-taskInputsWrapper"
-                data-widget-key="taskInputsWrapper"
-              >
-                <div class="widget-controls">
-                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'taskInputsWrapper')" title="גרור להזזה">⠿</span>
-                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('taskInputsWrapper')">👁</button>
-                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('taskInputsWrapper')">⇥</button>
-                </div>
-                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'taskInputsWrapper')" title="גרור לשינוי גודל">⇲</span>
+              <div id="addTaskModal" class="modal">
+                <div class="modal-content" style="max-width: 520px">
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      margin-bottom: 14px;
+                    "
+                  >
+                    <h3 style="margin: 0; color: var(--md-primary)">
+                      ➕ הוסף משימה חדשה
+                    </h3>
+                    <button
+                      class="btn btn-outlined"
+                      style="padding: 2px 10px"
+                      onclick="window.closeAddTaskModal()"
+                    >
+                      ✕
+                    </button>
+                  </div>
               <div
                 id="taskInputsWrapper"
-                class="widget-body"
                 style="display: flex; gap: 10px; flex-wrap: wrap"
               >
                 <div style="width: 100%; display: flex; gap: 8px">
@@ -2016,6 +2041,7 @@
                   </div>
                 </div>
                 </div>
+                </div>
               </div>
               <div
                 class="card-paper"
@@ -2121,17 +2147,38 @@
                   תיעוד שנתי של עובדים שסגרו משמרות בחגים. עובד יכול להשתבץ לחג
                   (יתעדכן סופית כשהמנהל הראשי מחובר) ולבקש החלפה על רישום שלו.
                 </p>
+                <button
+                  class="btn btn-contained"
+                  id="addHolidayLogBtn"
+                  style="width: 100%; margin-bottom: 12px; background: var(--md-secondary)"
+                  onclick="window.openAddHolidayModal()"
+                >
+                  ➕ הוסף רישום חג / יום מיוחד
+                </button>
+                <div id="addHolidayLogModal" class="modal">
+                  <div class="modal-content" style="max-width: 460px">
+                    <div
+                      style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 14px;
+                      "
+                    >
+                      <h3 id="holLogModalTitle" style="margin: 0; color: var(--md-secondary)">
+                        ➕ הוסף רישום חג
+                      </h3>
+                      <button
+                        class="btn btn-outlined"
+                        style="padding: 2px 10px"
+                        onclick="window.closeAddHolidayModal()"
+                      >
+                        ✕
+                      </button>
+                    </div>
                 <div
                   id="holLogInputsWrapper"
-                  style="
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    margin-bottom: 20px;
-                    background: var(--md-bg);
-                    padding: 15px;
-                    border-radius: 8px;
-                  "
+                  style="display: flex; flex-direction: column; gap: 10px"
                 >
                   <select id="holLogEmp" style="width: 100%"></select>
                   <div
@@ -2192,6 +2239,8 @@
                       ➕ הוסף רישום
                     </button>
                   </div>
+                </div>
+                </div>
                 </div>
                 <div id="holidaysLogTable"></div>
                 </div>
@@ -4841,6 +4890,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260823e"></script>
+    <script src="script.js?v=20260823f"></script>
   </body>
 </html>

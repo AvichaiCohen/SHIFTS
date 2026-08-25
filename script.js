@@ -162,7 +162,6 @@
         swapRequestsManagerContainer: { nativePage: "tasks", label: 'ניהול בקשות החלפה (משימות/חגים/סופ"שים)' },
         holidaysLogTable: { nativePage: "tasks", label: "מעקב סגירת חגים" },
         employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
-        taskInputsWrapper: { nativePage: "tasks", label: "הוספת משימה חדשה" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
         vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
         demandsListContainer: { nativePage: "demands", label: "דרישות פעילות", defaultColSpan: 18 },
@@ -4905,6 +4904,22 @@
         document.getElementById("holLogCustom").value = "";
         document.getElementById("holLogCustom").style.display = "none";
         document.getElementById("holLogType").value = "";
+        window.closeAddHolidayModal();
+      };
+
+      // מודל הוספת רישום חג — במקום פאנל קבוע
+      window.openAddHolidayModal = function () {
+        const m = document.getElementById("addHolidayLogModal");
+        if (m) m.style.display = "flex";
+        const title = document.getElementById("holLogModalTitle");
+        if (title)
+          title.textContent = window.isWorkerMode
+            ? "🙋 השתבצות לחג"
+            : "➕ הוסף רישום חג";
+      };
+      window.closeAddHolidayModal = function () {
+        const m = document.getElementById("addHolidayLogModal");
+        if (m) m.style.display = "none";
       };
 
       window.deleteHolidayLog = function (id) {
@@ -6750,6 +6765,18 @@
         if (endDateEl) endDateEl.value = "";
         window.renderTasks();
         window.triggerUnsavedChanges();
+        window.closeAddTaskModal();
+        window.toast("✅ המשימה נוספה.");
+      };
+
+      // מודל הוספת משימה — במקום פאנל קבוע מול העיניים
+      window.openAddTaskModal = function () {
+        const m = document.getElementById("addTaskModal");
+        if (m) m.style.display = "flex";
+      };
+      window.closeAddTaskModal = function () {
+        const m = document.getElementById("addTaskModal");
+        if (m) m.style.display = "none";
       };
 
       // שמירת המשימות — מקומי (cache) + ענן (כדי שכל המשתמשים יראו)
