@@ -1087,6 +1087,17 @@
       window.taskCategories = JSON.parse(
         localStorage.getItem("shift_task_categories_v47"),
       ) || ["חלוקת מזון", 'אבט"ש', "חניונים"];
+      // קשל"ט — משימת מפקדים (מיועדת לקבע). מוודאים שהיא קיימת גם למי שכבר
+      // שמר רשימת קטגוריות ישנה בלי לדרוס את השאר.
+      if (!window.taskCategories.includes('קשל"ט')) {
+        window.taskCategories.push('קשל"ט');
+        try {
+          localStorage.setItem(
+            "shift_task_categories_v47",
+            JSON.stringify(window.taskCategories),
+          );
+        } catch (e) {}
+      }
       window.systemTasks =
         JSON.parse(localStorage.getItem("shift_tasks_v47")) || [];
       window.currentId = null;
@@ -6062,6 +6073,7 @@
 
       window.setTaskListFilter = function (field, value) {
         if (field === "year") window._taskListFilterYear = value;
+        else if (field === "cat") window._taskListFilterCat = value;
         else window._taskListFilterName = value;
         window.renderTasks();
       };
@@ -6115,6 +6127,7 @@
           // סינון פנימי לתצוגה בלבד — לא נוגע בנתונים עצמם
           window._taskListFilterYear = window._taskListFilterYear || "";
           window._taskListFilterName = window._taskListFilterName || "";
+          window._taskListFilterCat = window._taskListFilterCat || "";
           const taskYears = Array.from(
             new Set(window.systemTasks.filter((t) => t.date).map((t) => t.date.slice(0, 4))),
           ).sort();
@@ -6129,12 +6142,45 @@
               ),
             ),
           ).sort((a, b) => a.localeCompare(b));
+          const taskCats = Array.from(
+            new Set(window.systemTasks.map((t) => t.category).filter(Boolean)),
+          ).sort((a, b) => a.localeCompare(b));
+
+          // סטטיסטיקה כללית (על כל המשימות, לא מושפעת מהסינון)
+          const _statTotal = window.systemTasks.length;
+          const _statDone = window.systemTasks.filter((t) => t.completed).length;
+          const _statOpen = _statTotal - _statDone;
+          const _thisYear = String(new Date().getFullYear());
+          const _byYear = {};
+          window.systemTasks.forEach((t) => {
+            const y = t.date ? t.date.slice(0, 4) : "ללא תאריך";
+            _byYear[y] = (_byYear[y] || 0) + 1;
+          });
+          const _yearsSorted = Object.keys(_byYear).sort();
+          const _yearChips = _yearsSorted
+            .map(
+              (y) =>
+                `<span style="background:var(--md-bg); border-radius:6px; padding:2px 8px; font-size:0.78rem;">${window.escapeHtml(y)}: <b>${_byYear[y]}</b></span>`,
+            )
+            .join(" ");
+          html += `<div style="background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px; font-size:0.85rem; display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center;">
+            <span>📊 סה"כ <b>${_statTotal}</b> משימות</span>
+            <span style="color:var(--md-success);">✔ ${_statDone} בוצעו</span>
+            <span style="color:var(--md-warning);">⏳ ${_statOpen} פתוחות</span>
+            <span>השנה (${_thisYear}): <b>${_byYear[_thisYear] || 0}</b></span>
+            <span style="display:flex; gap:6px; flex-wrap:wrap;">${_yearChips}</span>
+          </div>`;
+
           html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <select onchange="window.setTaskListFilter('year', this.value)" style="flex:1; min-width:100px;">
+            <select onchange="window.setTaskListFilter('year', this.value)" style="flex:1; min-width:90px;">
               <option value="">כל השנים</option>
               ${taskYears.map((y) => `<option value="${y}" ${window._taskListFilterYear === y ? "selected" : ""}>${y}</option>`).join("")}
             </select>
-            <select onchange="window.setTaskListFilter('name', this.value)" style="flex:1; min-width:120px;">
+            <select onchange="window.setTaskListFilter('cat', this.value)" style="flex:1; min-width:110px;">
+              <option value="">כל המשימות</option>
+              ${taskCats.map((c) => `<option value="${window.escapeHtml(c)}" ${window._taskListFilterCat === c ? "selected" : ""}>${window.escapeHtml(c)}</option>`).join("")}
+            </select>
+            <select onchange="window.setTaskListFilter('name', this.value)" style="flex:1; min-width:110px;">
               <option value="">כל העובדים</option>
               ${taskNames.map((n) => `<option value="${window.escapeHtml(n)}" ${window._taskListFilterName === n ? "selected" : ""}>${window.escapeHtml(n)}</option>`).join("")}
             </select>
@@ -6151,6 +6197,7 @@
                     : [];
               return (
                 (!window._taskListFilterYear || tYear === window._taskListFilterYear) &&
+                (!window._taskListFilterCat || t.category === window._taskListFilterCat) &&
                 (!window._taskListFilterName || tNames.includes(window._taskListFilterName))
               );
             })
@@ -6363,6 +6410,24 @@
             <div style="font-size:0.75rem; color:var(--text-muted);">חגים ממתינים</div>
           </div>
         </div>`;
+
+        // מצב ימי חופש של העובד
+        const _empObj = (window.staff || []).find((e) => e.name === name);
+        if (_empObj && typeof window._computeVacUsage === "function") {
+          const _v = window._computeVacUsage(_empObj);
+          const _remColor =
+            _v.remaining < 0
+              ? "var(--md-error)"
+              : _v.remaining === 0
+                ? "var(--md-warning)"
+                : "var(--md-success)";
+          html += `<div style="background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:0.9rem; display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+            <span style="font-weight:bold; color:#0d9488;">🌴 חופשים</span>
+            <span>מכסה: <b>${_v.quota}</b></span>
+            <span>נוצלו: <b>${_v.used}</b></span>
+            <span>נותרו: <b style="color:${_remColor};">${_v.remaining}</b></span>
+          </div>`;
+        }
 
         // טבלת משימות
         html += `<h4 style="margin:8px 0; color:var(--md-primary);">📋 משימות</h4>`;

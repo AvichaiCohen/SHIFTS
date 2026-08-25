@@ -1118,6 +1118,16 @@
         opacity: 0.85;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
       }
+      /* התאמת/הזזת פאנלים היא פעולת ניהול בלבד — עובד/צופה רואים את הפאנלים
+         סטטיים (בלי ידיות/כפתורי עריכה/כפתור "פאנלים מוסתרים" שהפריע להם). */
+      body.worker-view .widget-controls,
+      body.worker-view .widget-resize-handle,
+      body.worker-view .hidden-widgets-btn,
+      body.view-only .widget-controls,
+      body.view-only .widget-resize-handle,
+      body.view-only .hidden-widgets-btn {
+        display: none !important;
+      }
       /* פאנל מוסתר נעלם לגמרי מהגריד (לא תופס משבצת ריקה) — חוזר דרך כפתור
          "פאנלים מוסתרים" שמופיע מעל הגריד */
       .widget-collapsed {
