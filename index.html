@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260823g";
+        var BUILD = "20260823h";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -482,6 +482,17 @@
             }
           });
 
+          // הגדרות משתמש הצפייה ("זירה") — סיסמה מגובבת + השבתה, נשלט מההגדרות
+          window._viewerPassHash = null;
+          window._viewerDisabled = false;
+          onValue(ref(db, "settings/viewer"), (snapshot) => {
+            const v = snapshot.exists() ? snapshot.val() || {} : {};
+            window._viewerPassHash = v.passHash || null;
+            window._viewerDisabled = v.disabled === true;
+            const chk = document.getElementById("viewerDisabledChk");
+            if (chk) chk.checked = window._viewerDisabled;
+          });
+
           // טביעת אצבע של סיסמת המנהל הראשי — מאפשרת החלפת סיסמה בלי שינוי קוד
           onValue(ref(db, "settings/adminHash"), (snapshot) => {
             window.adminHashOverride = snapshot.exists()
@@ -793,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260823g" />
+    <link rel="stylesheet" href="style.css?v=20260823h" />
   </head>
   <body>
     <div
@@ -2692,6 +2703,52 @@
               אם פאנל "אבד" (הועבר לעמוד שקשה להגיע אליו) — הכפתור מחזיר את כל
               הפאנלים למיקום ולגודל ברירת המחדל.
             </p>
+          </div>
+
+          <div
+            class="card-paper super-only"
+            style="border-left: 4px solid #64748b; margin-top: 20px"
+          >
+            <h3 style="color: var(--md-text-secondary); margin-top: 0">
+              👁️ משתמש צפייה ("זירה")
+            </h3>
+            <p
+              style="
+                font-size: 0.82rem;
+                color: var(--md-text-secondary);
+                margin-top: 0;
+              "
+            >
+              שם המשתמש לצפייה בלבד הוא "זירה". כאן אפשר לשנות את הסיסמה שלו או
+              להשבית לגמרי את גישת הצפייה.
+            </p>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 12px;
+                cursor: pointer;
+                font-size: 0.9rem;
+              "
+            >
+              <input type="checkbox" id="viewerDisabledChk" />
+              השבת גישת צפייה
+            </label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <input
+                type="text"
+                id="viewerNewPass"
+                placeholder="סיסמה חדשה (ריק = ללא שינוי)"
+                style="flex: 1; min-width: 180px"
+              />
+              <button
+                class="btn btn-contained"
+                onclick="window.saveViewerSettings()"
+              >
+                💾 שמור
+              </button>
+            </div>
           </div>
 
           <div
@@ -4890,6 +4947,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260823g"></script>
+    <script src="script.js?v=20260823h"></script>
   </body>
 </html>

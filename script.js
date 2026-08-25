@@ -2445,11 +2445,22 @@
           return;
         }
 
-        // 0. משתמש צפייה בלבד — רואה את הלוח והמשימות הקיימים, אינו חלק מהשיבוץ
-        if (uid === VIEWER_USER && pass === VIEWER_PASS) {
-          window.saveSession({ kind: "viewer" });
-          window.enterViewerMode();
-          return;
+        // 0. משתמש צפייה בלבד — סיסמה נשלטת מההגדרות (מגובבת) עם אפשרות
+        // להשבתה; ברירת מחדל "1601" אם לא הוגדרה סיסמה משלך.
+        if (uid === VIEWER_USER) {
+          if (window._viewerDisabled) {
+            window.toast("⛔ גישת הצפייה מושבתת כרגע.");
+            return;
+          }
+          const okViewer = window._viewerPassHash
+            ? await window.verifyPassword(pass, window._viewerPassHash)
+            : pass === VIEWER_PASS;
+          if (okViewer) {
+            window.saveSession({ kind: "viewer" });
+            window.enterViewerMode();
+            return;
+          }
+          // סיסמה שגויה — ממשיכים לנתיבים הבאים (יסתיים בהודעת שגיאה גנרית)
         }
 
         // 1. התחברות מנהל ראשי — השוואת טביעת אצבע, ללא סיסמה גלויה בקוד
@@ -2514,7 +2525,31 @@
 
       // ===== משתמש צפייה בלבד =====
       const VIEWER_USER = "זירה";
-      const VIEWER_PASS = "1601";
+      const VIEWER_PASS = "1601"; // ברירת מחדל אם לא הוגדרה סיסמה מותאמת בהגדרות
+
+      // שמירת הגדרות משתמש הצפייה — סיסמה מגובבת + השבתה (המנהל הראשי בלבד)
+      window.saveViewerSettings = async function () {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק מנהל ראשי יכול לשנות זאת.");
+          return;
+        }
+        const disabled = document.getElementById("viewerDisabledChk").checked;
+        const newPass = document.getElementById("viewerNewPass").value.trim();
+        const payload = { disabled };
+        if (newPass) {
+          if (newPass.length < 4) {
+            window.toast("סיסמה קצרה מדי — נדרשים לפחות 4 תווים.");
+            return;
+          }
+          payload.passHash = await window.hashPassword(newPass);
+        } else if (window._viewerPassHash) {
+          payload.passHash = window._viewerPassHash; // שמירת הסיסמה הקיימת
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("settings/viewer", payload);
+        document.getElementById("viewerNewPass").value = "";
+        window.toast("✅ הגדרות הצופה נשמרו.");
+      };
 
       window.isViewOnly = false;
       window.enterViewerMode = function () {
