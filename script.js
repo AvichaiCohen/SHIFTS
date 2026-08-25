@@ -5271,6 +5271,24 @@
         return { time: maxT, label: arr.length ? lastLabel : "—", count: arr.length };
       };
 
+      // יחס סגירה לפי הפער האחרון: כמה שבועות עברו בין שתי הסגירות האחרונות.
+      // gapWeeks=2 → "1/2" (סוגר אחת לשבועיים). gapWeeks=1 → 2 שבתות רצוף → התראה.
+      window._closureRatioInfo = function (name) {
+        const arr = (window.weekendHistory && window.weekendHistory[name]) || [];
+        const times = Array.from(
+          new Set(
+            arr.map((l) => window._parseWeekendLabelTime(l)).filter((t) => t > 0),
+          ),
+        ).sort((a, b) => b - a);
+        if (times.length < 2)
+          return { ratio: null, gapWeeks: null, consecutive: false };
+        const gapWeeks = Math.max(
+          1,
+          Math.round((times[0] - times[1]) / (7 * 86400000)),
+        );
+        return { ratio: "1/" + gapWeeks, gapWeeks, consecutive: gapWeeks === 1 };
+      };
+
       window.updateWeekendHistory = function () {
         let weekSun = window.getSunday(window.currentWeekOffset || 0);
         let weekLabel = window.formatWeekString(weekSun);
@@ -5322,16 +5340,35 @@
             "<p style='color:var(--text-muted); font-style:italic;'>אין נתונים.</p>";
           return;
         }
-        let html = `<table style="width:100%; text-align:right;">
+        // התראה מרוכזת: מי שסגר 2 שבתות ברצף
+        const _consecutive = relevantStaff.filter(
+          (e) => window._closureRatioInfo(e.name).consecutive,
+        );
+        let alertHtml = "";
+        if (_consecutive.length > 0) {
+          alertHtml = `<div style="background:rgba(239,68,68,0.1); border-right:4px solid var(--md-error); border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:0.85rem;">
+            <b style="color:var(--md-error);">⚠️ סגרו 2 שבתות ברצף:</b> ${_consecutive.map((e) => window.escapeHtml(e.name)).join(", ")}
+          </div>`;
+        }
+        let html =
+          alertHtml +
+          `<table style="width:100%; text-align:right;">
           <tr style="background:var(--md-bg);">
             <th style="padding:8px; border-bottom:2px solid var(--md-divider);">שם</th>
             <th style="padding:8px; border-bottom:2px solid var(--md-divider); text-align:center;">כמות סופ"שים</th>
+            <th style="padding:8px; border-bottom:2px solid var(--md-divider); text-align:center;">יחס סגירה</th>
             <th style="padding:8px; border-bottom:2px solid var(--md-divider);">סופ"ש אחרון</th>
             <th style="padding:8px; border-bottom:2px solid var(--md-divider);">סטטוס נוכחי</th>
           </tr>`;
         relevantStaff.forEach((e) => {
           let hist = window.weekendHistory[e.name] || [];
           let lastWE = window._lastWeekendInfo(e.name).label;
+          const _cr = window._closureRatioInfo(e.name);
+          const ratioCell = _cr.consecutive
+            ? `<span style="color:var(--md-error); font-weight:bold;" title="2 שבתות ברצף">⚠️ 2 רצוף</span>`
+            : _cr.ratio
+              ? `<b>${_cr.ratio}</b> <small style="color:var(--text-muted);">(אחת ל-${_cr.gapWeeks} שב')</small>`
+              : `<span style="color:var(--text-muted);">—</span>`;
           let status = e.isNextWeekend
             ? `<span style="color:var(--md-primary); font-weight:bold;">📅 משובץ לסופ"ש הקרוב</span>`
             : e.workedLastWeekend
@@ -5340,6 +5377,7 @@
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
             <td style="padding:8px;"><b>${e.name}</b> <small style="color:var(--text-muted);">(${e.type})</small></td>
             <td style="padding:8px; text-align:center; font-weight:bold; color:var(--md-secondary);">${hist.length || 0}</td>
+            <td style="padding:8px; text-align:center; font-size:0.85rem;">${ratioCell}</td>
             <td style="padding:8px; font-size:0.85rem;">${lastWE}</td>
             <td style="padding:8px;">${status}</td>
           </tr>`;
@@ -5852,18 +5890,17 @@
           return;
         }
         const { ref, get } = window._fbImports;
-        const WEEKS_AHEAD = 12;
-        const results = [];
-        for (let off = 0; off <= WEEKS_AHEAD; off++) {
+        // סריקת שבוע בודד (יחסית לשבוע הנוכחי) → רשומת סגירה אם משובץ, אחרת null
+        const scanWeek = async (off) => {
           const sun = window.getSunday(off);
           const wk = window.getWeekDbKey(sun);
           let sched;
           try {
             const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
-            if (!snap.exists()) continue;
+            if (!snap.exists()) return null;
             sched = snap.val();
           } catch (e) {
-            continue;
+            return null;
           }
           const daysFound = {};
           const slots = [];
@@ -5881,39 +5918,57 @@
               }
             });
           });
-          if (Object.keys(daysFound).length > 0) {
-            results.push({
-              weekKey: wk,
-              weekLabel: window.formatWeekString(sun),
-              days: daysFound,
-              slots,
-            });
-          }
+          if (Object.keys(daysFound).length === 0) return null;
+          return {
+            weekKey: wk,
+            weekLabel: window.formatWeekString(sun),
+            days: daysFound,
+            slots,
+          };
+        };
+
+        // עבר (10 שבועות אחורה) + עתיד (12 קדימה)
+        const pastResults = [];
+        for (let off = -10; off <= -1; off++) {
+          const r = await scanWeek(off);
+          if (r) pastResults.push(r);
+        }
+        pastResults.reverse(); // האחרון שסגר קודם
+        const futureResults = [];
+        for (let off = 0; off <= 12; off++) {
+          const r = await scanWeek(off);
+          if (r) futureResults.push(r);
         }
 
-        // נשמר גלובלית כדי שכפתור "בקש החלפה" בכל שורה יוכל להפנות אליו
-        // לפי אינדקס, בלי להטמיע JSON גולמי בתוך onclick
-        window._myUpcomingClosuresResults = results;
+        // רק העתיד רלוונטי להחלפה — נשמר לכפתור "בקש החלפה" (לפי אינדקס)
+        window._myUpcomingClosuresResults = futureResults;
 
         if (!cont) return;
-        if (results.length === 0) {
+        const canRequestSwap = window.roleCan(me.type, "canSwapWeekend");
+        const renderSection = (title, arr, withSwap) => {
+          if (arr.length === 0)
+            return `<h4 style="margin:12px 0 6px; color:var(--md-primary);">${title}</h4><p style="color:var(--text-muted); font-style:italic; margin:0 0 6px; font-size:0.88rem;">אין.</p>`;
+          let h = `<h4 style="margin:12px 0 6px; color:var(--md-primary);">${title}</h4><table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th>${withSwap ? '<th style="padding:8px;"></th>' : ""}</tr>`;
+          arr.forEach((r, idx) => {
+            const dayDetails = Object.entries(r.days)
+              .map(([d, a]) => `<b>${window.escapeHtml(d)}</b>: ${window.escapeHtml(a.join(", "))}`)
+              .join("<br>");
+            const swapCell = withSwap
+              ? `<td style="padding:8px; white-space:nowrap;"><button class="btn btn-outlined" style="padding:4px 10px; font-size:0.78rem;" onclick="window.requestWeekendSwap(${idx})">🔄 בקש החלפה</button></td>`
+              : "";
+            h += `<tr style="border-bottom:1px solid var(--md-divider);"><td style="padding:8px; white-space:nowrap; vertical-align:top;">${window.escapeHtml(r.weekLabel)}</td><td style="padding:8px;">${dayDetails}</td>${swapCell}</tr>`;
+          });
+          return h + `</table>`;
+        };
+
+        if (pastResults.length === 0 && futureResults.length === 0) {
           cont.innerHTML =
-            "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין סופ\"שים/חגים קרובים שאת/ה מתוכנן/ת לסגור.</p>";
+            "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין סופ\"שים שסגרת לאחרונה או שאת/ה מתוכנן/ת לסגור.</p>";
           return;
         }
-        const canRequestSwap = window.roleCan(me.type, "canSwapWeekend");
-        let html = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.9rem;"><tr style="background:var(--md-bg);"><th style="padding:8px;">שבוע</th><th style="padding:8px;">פירוט</th>${canRequestSwap ? '<th style="padding:8px;"></th>' : ""}</tr>`;
-        results.forEach((r, idx) => {
-          const dayDetails = Object.entries(r.days)
-            .map(([d, arr]) => `<b>${window.escapeHtml(d)}</b>: ${window.escapeHtml(arr.join(", "))}`)
-            .join("<br>");
-          const swapCell = canRequestSwap
-            ? `<td style="padding:8px; white-space:nowrap;"><button class="btn btn-outlined" style="padding:4px 10px; font-size:0.78rem;" onclick="window.requestWeekendSwap(${idx})">🔄 בקש החלפה</button></td>`
-            : "";
-          html += `<tr style="border-bottom:1px solid var(--md-divider);"><td style="padding:8px; white-space:nowrap; vertical-align:top;">${window.escapeHtml(r.weekLabel)}</td><td style="padding:8px;">${dayDetails}</td>${swapCell}</tr>`;
-        });
-        html += `</table>`;
-        cont.innerHTML = html;
+        cont.innerHTML =
+          renderSection("🗓️ סגירות אחרונות (עבר)", pastResults, false) +
+          renderSection("📅 סגירות עתידיות", futureResults, canRequestSwap);
       };
 
       // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)
@@ -8410,14 +8465,19 @@
       window.closeModal = async function () {
         const emp = window.staff.find((e) => e.id === window.currentId);
 
-        // הגנה נוספת: מניעת שיוך המספר האישי של המנהל הראשי לעובד אחר
+        // המנהל הראשי יכול לסמן כרטיס אחד ברוסטר כ"הכרטיס שלו" (מספר אישי
+        // 8326560) — כדי להיות גם חלק מהצוות וניתן לשיבוץ. שומרים ייחודיות:
+        // מסירים את המספר מכל כרטיס אחר, כך שיש בדיוק כרטיס מנהל אחד.
         if (window.currentUserRole === "superAdmin") {
-          let newPid = document.getElementById("editPersonalId").value.trim();
+          const newPid = document.getElementById("editPersonalId").value.trim();
           if (newPid === "8326560" && emp.personalId !== "8326560") {
-            window.toast(
-              "שגיאה אבטחה: לא ניתן לשייך מספר אישי זה לעובד אחר. הוא שמור למנהל המערכת הראשי.",
-            );
-            return; // עוצר את השמירה ולא סוגר את החלון
+            (window.staff || []).forEach((o) => {
+              if (o !== emp && o.personalId === "8326560") o.personalId = "";
+            });
+            (window.globalStaff || []).forEach((o) => {
+              if (String(o.id) !== String(emp.id) && o.personalId === "8326560")
+                o.personalId = "";
+            });
           }
         }
 
@@ -8486,6 +8546,8 @@
           const _newPw = document.getElementById("editPassword").value.trim();
           if (_newPw) emp.password = await window.hashPassword(_newPw);
           emp.systemRole = document.getElementById("editSystemRole").value;
+          // כרטיס המנהל (מספר אישי 8326560) תמיד superAdmin
+          if (emp.personalId === "8326560") emp.systemRole = "superAdmin";
         }
 
         if (document.getElementById("editNextWeekend").checked) {
