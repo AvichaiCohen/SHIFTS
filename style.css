@@ -1121,12 +1121,18 @@
       }
       /* התאמת/הזזת פאנלים היא פעולת ניהול בלבד — עובד/צופה רואים את הפאנלים
          סטטיים (בלי ידיות/כפתורי עריכה/כפתור "פאנלים מוסתרים" שהפריע להם). */
-      body.worker-view .widget-controls,
-      body.worker-view .widget-resize-handle,
-      body.worker-view .hidden-widgets-btn,
+      /* צפייה-בלבד (view-only): נעול לגמרי — אין הזזה/שינוי-גודל/שחזור */
       body.view-only .widget-controls,
       body.view-only .widget-resize-handle,
       body.view-only .hidden-widgets-btn {
+        display: none !important;
+      }
+      /* עובד (לא view-only): רשאי לסדר את לוח הפאנלים שלו במחשב — גרירה
+         ושינוי-גודל מותרים (ידית ⠿ + ידית הגודל). אך לא כיווץ/העברה-לעמוד,
+         שעלולים לשלוח פאנל לעמוד ניהולי שאינו נגיש לעובד. הידיות ממילא
+         מוסתרות מתחת ל-1024px (מובייל), כך שזה חל רק במחשב. */
+      body.worker-view:not(.view-only) .widget-controls button,
+      body.worker-view:not(.view-only) .hidden-widgets-btn {
         display: none !important;
       }
       /* פאנל מוסתר נעלם לגמרי מהגריד (לא תופס משבצת ריקה) — חוזר דרך כפתור
