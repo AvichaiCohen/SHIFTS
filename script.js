@@ -3317,14 +3317,26 @@
         const prevDay = dIdx > 0 ? days[dIdx - 1] : null;
         const empConst = emp.constraints || [];
 
-        // עובד "מרותק למיקום" עובד ברצף באותו מקום בכוונה — לא מציגים לו אזהרות
-        // מנוחה על משמרות רצופות (לפי בחירת המנהל בכרטיס העובד).
-        const _tied = emp.tiedToLoc === true;
+        // "תקופת ריתוק": בטווח תאריכים שהמנהל הגדיר לעובד, הוא משובץ ברצף
+        // באחד הצדדים בכוונה — לא מציגים לו אזהרות מנוחה (עבד אחרי לילה/24ש/סופ"ש).
+        // הבדיקה לפי התאריך בפועל של היום המוצג מול emp.restExemptFrom/To.
+        const _restExempt = (function () {
+          if (!emp.restExemptFrom && !emp.restExemptTo) return false;
+          const weekSun = window.getSunday(window.currentWeekOffset || 0);
+          const idx = days.indexOf(day);
+          if (idx < 0) return false;
+          const d = new Date(weekSun);
+          d.setDate(d.getDate() + idx);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          const from = emp.restExemptFrom || "0000-01-01";
+          const to = emp.restExemptTo || "9999-12-31";
+          return key >= from && key <= to;
+        })();
 
         // בדיקת "מנוחה אחרי לילה/24ש" רלוונטית רק א'-ה' — שישי/שבת הם סבב סופ"ש
         // רציף בכוונה (חמישי-לילה/שישי/שבת נחשבים משמרת אחת ארוכה, לא הפרה),
         // וראשון נבדק בנפרד לפי הדגל workedLastWeekend (לא לפי משמרת ליל שבת ממש)
-        if (!_tied && prevDay && dIdx >= 1 && dIdx <= 4) {
+        if (!_restExempt && prevDay && dIdx >= 1 && dIdx <= 4) {
           const workedPrevNight = baseLocs.some(
             (l) =>
               window.currentSchedule[`${prevDay}-לילה`] &&
@@ -3344,7 +3356,12 @@
             warnings.push(`עבד/ה משמרת 24 שעות ביום ${prevDay} — נדרשת מנוחה`);
         }
 
-        if (day === "ראשון" && emp.workedLastWeekend && emp.type !== "נחפף") {
+        if (
+          !_restExempt &&
+          day === "ראשון" &&
+          emp.workedLastWeekend &&
+          emp.type !== "נחפף"
+        ) {
           warnings.push('עבד/ה בסופ"ש האחרון — בדרך כלל זכאי/ת למנוחה ביום ראשון');
         }
 
@@ -8595,7 +8612,10 @@
           emp.canZiraEvening || false;
         document.getElementById("editWeekendCloser").checked =
           emp.isWeekendCloserCandidate || false;
-        document.getElementById("editTiedToLoc").checked = emp.tiedToLoc === true;
+        document.getElementById("editRestExemptFrom").value =
+          emp.restExemptFrom || "";
+        document.getElementById("editRestExemptTo").value =
+          emp.restExemptTo || "";
         document.getElementById("editTechLevel").value = emp.techLevel || "";
         // בדיקה אם העובד כבר ברשימת המפקדים (גם ללא empId — לפי שם)
         let linkedCmd = window.commanders.find(
@@ -8746,7 +8766,10 @@
           document.getElementById("editZiraEvening").checked;
         emp.isWeekendCloserCandidate =
           document.getElementById("editWeekendCloser").checked;
-        emp.tiedToLoc = document.getElementById("editTiedToLoc").checked;
+        emp.restExemptFrom =
+          document.getElementById("editRestExemptFrom").value || "";
+        emp.restExemptTo =
+          document.getElementById("editRestExemptTo").value || "";
         emp.techLevel = document.getElementById("editTechLevel").value;
 
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
@@ -8835,7 +8858,8 @@
           globalEmp.ziraWeekendAllowed = emp.ziraWeekendAllowed;
           globalEmp.canZiraEvening = emp.canZiraEvening;
           globalEmp.isWeekendCloserCandidate = emp.isWeekendCloserCandidate;
-          globalEmp.tiedToLoc = emp.tiedToLoc === true;
+          globalEmp.restExemptFrom = emp.restExemptFrom || "";
+          globalEmp.restExemptTo = emp.restExemptTo || "";
           globalEmp.techLevel = emp.techLevel;
           globalEmp.isCommander = emp.isCommander === true;
           globalEmp.commanderPhone = emp.commanderPhone || "";

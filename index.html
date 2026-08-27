@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827b";
+        var BUILD = "20260827c";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -804,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827b" />
+    <link rel="stylesheet" href="style.css?v=20260827c" />
   </head>
   <body>
     <div
@@ -3645,22 +3645,49 @@
               />
               מועמד לסגירת סופ"ש/חג (יוצע ב"קבע סוגרי סופ"ש")</label
             >
-            <label
-              style="
-                cursor: pointer;
-                color: #b45309;
-                font-size: 0.875rem;
-                display: block;
-                margin-top: 10px;
-                font-weight: bold;
-              "
-              ><input
-                type="checkbox"
-                id="editTiedToLoc"
-                style="vertical-align: middle"
-              />
-              🔒 מרותק למיקום — ללא אזהרת מנוחה על משמרות רצופות</label
-            >
+            <div style="margin-top: 10px">
+              <label
+                style="
+                  font-size: 0.875rem;
+                  font-weight: bold;
+                  color: #b45309;
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >🔒 תקופת ריתוק — ללא אזהרת מנוחה (עבד/ה אחרי לילה) בין
+                התאריכים</label
+              >
+              <div
+                style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"
+              >
+                <label style="font-size: 0.8rem; color: #64748b">מתאריך</label>
+                <input
+                  type="date"
+                  id="editRestExemptFrom"
+                  style="flex: 1; min-width: 120px"
+                />
+                <label style="font-size: 0.8rem; color: #64748b">עד</label>
+                <input
+                  type="date"
+                  id="editRestExemptTo"
+                  style="flex: 1; min-width: 120px"
+                />
+                <button
+                  type="button"
+                  onclick="document.getElementById('editRestExemptFrom').value='';document.getElementById('editRestExemptTo').value='';"
+                  style="
+                    padding: 4px 10px;
+                    font-size: 0.8rem;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    background: #f8fafc;
+                    cursor: pointer;
+                  "
+                >
+                  נקה
+                </button>
+              </div>
+            </div>
             <div
               id="lblTechLevel"
               style="
@@ -4980,6 +5007,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827b"></script>
+    <script src="script.js?v=20260827c"></script>
   </body>
 </html>
