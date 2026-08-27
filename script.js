@@ -1128,6 +1128,8 @@
       // נתוני הוגנות סופ"ש
       window.weekendHistory =
         JSON.parse(localStorage.getItem("shift_weekend_history_v1")) || {};
+      window.weekendHistoryMeta =
+        JSON.parse(localStorage.getItem("shift_weekend_history_meta_v1")) || {};
 
       window.lastPendingCount = null;
 
@@ -1562,10 +1564,52 @@
       };
 
       // טבלת בדיקת שיבוץ מלאה — מודאל עם כל עובד, כל יום, תפקיד, ואישור ידני
+      // בקשות/אילוצים ממתינים לשבוע המוצג שטרם טופלו (לא קיבלו יחס)
+      window._pendingRequestsThisWeek = function () {
+        const wk = window.currentSelectedWeek;
+        const out = {};
+        const cur =
+          (window.currentSchedule && window.currentSchedule.pendingRequests) || {};
+        Object.keys(cur).forEach((id) => {
+          if (cur[id]) out[id] = cur[id];
+        });
+        const idx = window._allPending || {};
+        Object.keys(idx).forEach((id) => {
+          if (idx[id] && (idx[id].weekKey || wk) === wk && !out[id])
+            out[id] = idx[id];
+        });
+        return Object.values(out);
+      };
+      window._reqTypeLabel = function (type) {
+        return type === "vacation"
+          ? "חופש"
+          : type === "study"
+            ? "יום לימודים"
+            : type === "constraint"
+              ? "אילוץ"
+              : type === "shift"
+                ? "העדפת שיבוץ"
+                : type || "בקשה";
+      };
+
       window.openStaffingCheckModal = function () {
         const rows = window
           ._buildStaffingCheckRows()
           .sort((a, b) => a.shiftCount - b.shiftCount || b.noneCount - a.noneCount);
+        // הערה: בקשות/אילוצים ממתינים שטרם טופלו לשבוע זה
+        const _pending = window._pendingRequestsThisWeek();
+        let _noticeHtml = "";
+        if (_pending.length > 0) {
+          _noticeHtml = `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:0.85rem; text-align:right;">
+            <b style="color:var(--md-warning);">⏳ ${_pending.length} בקשות/אילוצים ממתינים שטרם טופלו לשבוע זה:</b>
+            <ul style="margin:6px 0 0; padding-right:20px;">${_pending
+              .map(
+                (r) =>
+                  `<li><b>${window.escapeHtml(r.empName || "")}</b> — ${r.date ? r.date.split("-").reverse().join(".") : ""} · ${window.escapeHtml(window._reqTypeLabel(r.type))}${r.note ? " (" + window.escapeHtml(r.note) + ")" : ""}</li>`,
+              )
+              .join("")}</ul>
+          </div>`;
+        }
         const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
         const typeStyle = {
           shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
@@ -1573,7 +1617,7 @@
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
         };
-        let html = `<div style="text-align:left; margin-bottom:10px;">
+        let html = _noticeHtml + `<div style="text-align:left; margin-bottom:10px;">
           <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.approveAllStaffingRows()">✅ אשר את כולם</button>
         </div>
         <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.85rem;">
@@ -5308,20 +5352,44 @@
 
       // יחס סגירה לפי הפער האחרון: כמה שבועות עברו בין שתי הסגירות האחרונות.
       // gapWeeks=2 → "1/2" (סוגר אחת לשבועיים). gapWeeks=1 → 2 שבתות רצוף → התראה.
+      // last2 = שתי הסגירות האחרונות (תווית + זמן) — לטולטיפ ולזיהוי "חמישי בלבד".
       window._closureRatioInfo = function (name) {
         const arr = (window.weekendHistory && window.weekendHistory[name]) || [];
-        const times = Array.from(
-          new Set(
-            arr.map((l) => window._parseWeekendLabelTime(l)).filter((t) => t > 0),
-          ),
-        ).sort((a, b) => b - a);
-        if (times.length < 2)
-          return { ratio: null, gapWeeks: null, consecutive: false };
+        const seen = new Set();
+        const uniq = [];
+        arr
+          .map((l) => ({ label: l, time: window._parseWeekendLabelTime(l) }))
+          .filter((e) => e.time > 0)
+          .sort((a, b) => b.time - a.time)
+          .forEach((e) => {
+            if (!seen.has(e.time)) {
+              seen.add(e.time);
+              uniq.push(e);
+            }
+          });
+        if (uniq.length < 2)
+          return { ratio: null, gapWeeks: null, consecutive: false, last2: uniq };
         const gapWeeks = Math.max(
           1,
-          Math.round((times[0] - times[1]) / (7 * 86400000)),
+          Math.round((uniq[0].time - uniq[1].time) / (7 * 86400000)),
         );
-        return { ratio: "1/" + gapWeeks, gapWeeks, consecutive: gapWeeks === 1 };
+        return {
+          ratio: "1/" + gapWeeks,
+          gapWeeks,
+          consecutive: gapWeeks === 1,
+          last2: [uniq[0], uniq[1]],
+        };
+      };
+      // תיאור לטולטיפ: שתי הסגירות האחרונות + סימון "חמישי בלבד" (לא סופ"ש מלא)
+      window._closureTooltip = function (name, cr) {
+        if (!cr || !cr.last2 || cr.last2.length < 2) return "";
+        const meta = (window.weekendHistoryMeta && window.weekendHistoryMeta[name]) || {};
+        return cr.last2
+          .map((e) => {
+            const m = meta[e.label];
+            return e.label + (m && m.thursdayOnly ? " (חמישי בלבד)" : "");
+          })
+          .join("  ⇄  ");
       };
 
       window.updateWeekendHistory = function () {
@@ -5399,10 +5467,23 @@
           let hist = window.weekendHistory[e.name] || [];
           let lastWE = window._lastWeekendInfo(e.name).label;
           const _cr = window._closureRatioInfo(e.name);
+          const _tip = window._closureTooltip(e.name, _cr);
+          const _tipAttr = _tip ? ` title="${_tip.replace(/"/g, "&quot;")}"` : "";
+          // אם אחת מהשתיים הייתה חמישי בלבד — מסמנים שזה לא סופ"ש מלא ברצף
+          const _thuOnly =
+            _cr.last2 &&
+            _cr.last2.some((x) => {
+              const m =
+                (window.weekendHistoryMeta &&
+                  window.weekendHistoryMeta[e.name] &&
+                  window.weekendHistoryMeta[e.name][x.label]) ||
+                null;
+              return m && m.thursdayOnly;
+            });
           const ratioCell = _cr.consecutive
-            ? `<span style="color:var(--md-error); font-weight:bold;" title="2 שבתות ברצף">⚠️ 2 רצוף</span>`
+            ? `<span style="color:var(--md-error); font-weight:bold; cursor:help;"${_tipAttr}>⚠️ 2 רצוף${_thuOnly ? ' <small style="font-weight:normal;">(כולל חמישי)</small>' : ""}</span>`
             : _cr.ratio
-              ? `<b>${_cr.ratio}</b> <small style="color:var(--text-muted);">(אחת ל-${_cr.gapWeeks} שב')</small>`
+              ? `<span style="cursor:help;"${_tipAttr}><b>${_cr.ratio}</b> <small style="color:var(--text-muted);">(אחת ל-${_cr.gapWeeks} שב')</small></span>`
               : `<span style="color:var(--text-muted);">—</span>`;
           let status = e.isNextWeekend
             ? `<span style="color:var(--md-primary); font-weight:bold;">📅 משובץ לסופ"ש הקרוב</span>`
@@ -6019,6 +6100,7 @@
             "<i style='color:var(--text-muted);'>מחשב מחדש מהענן...</i>";
         const WEEKS_BACK = 16;
         const history = {};
+        const meta = {}; // meta[name][label] = { thursdayOnly, days:[...] }
         for (let off = -WEEKS_BACK; off <= 0; off++) {
           const sun = window.getSunday((window.currentWeekOffset || 0) + off);
           const wk = window.getWeekDbKey(sun);
@@ -6031,7 +6113,7 @@
           } catch (e) {
             continue;
           }
-          const workers = new Set();
+          const workerDays = {}; // name -> Set של ימי הסופ"ש שבהם עבד
           [
             { loc: LOC_MATAL, shifts: weekendShiftsMATAL },
             { loc: LOC_ZIRA, shifts: weekendShiftsZira },
@@ -6041,20 +6123,36 @@
               const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
               if (arr)
                 arr.forEach((e) => {
-                  if (e && e.name) workers.add(e.name);
+                  if (e && e.name) {
+                    if (!workerDays[e.name]) workerDays[e.name] = new Set();
+                    workerDays[e.name].add(d);
+                  }
                 });
             });
           });
-          workers.forEach((name) => {
+          Object.keys(workerDays).forEach((name) => {
             if (!history[name]) history[name] = [];
             history[name].push(label); // מסודר כרונולוגית (ישן → חדש)
+            const daysSet = workerDays[name];
+            // "חמישי בלבד" = עבד רק חמישי-לילה (מת"ל) בלי שישי/שבת — לא סופ"ש מלא
+            const thursdayOnly =
+              daysSet.has("חמישי") &&
+              !daysSet.has("שישי") &&
+              !daysSet.has("שבת");
+            if (!meta[name]) meta[name] = {};
+            meta[name][label] = { thursdayOnly, days: Array.from(daysSet) };
           });
         }
         window.weekendHistory = history;
+        window.weekendHistoryMeta = meta;
         try {
           localStorage.setItem(
             "shift_weekend_history_v1",
             JSON.stringify(history),
+          );
+          localStorage.setItem(
+            "shift_weekend_history_meta_v1",
+            JSON.stringify(meta),
           );
         } catch (e) {}
         window.renderWeekendJusticeTable();
@@ -6184,14 +6282,24 @@
       };
 
       window.renderTasks = function () {
-        let assigneeHtml = `<option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>`;
-        window.staff
-          .filter((e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"))
-          .forEach((e) => {
-            assigneeHtml += `<option value="${e.name}">${e.name} (${e.type})</option>`;
-          });
+        // "סוג עובד למשימה" — שומר על הבחירה הקיימת
+        const _ttSel = document.getElementById("newTaskTargetType");
+        if (_ttSel) {
+          const _curTT = _ttSel.value;
+          _ttSel.innerHTML =
+            `<option value="">כל הסוגים</option>` +
+            (window.roleTypes || [])
+              .map(
+                (rt) =>
+                  `<option value="${window.escapeHtml(rt)}">${window.escapeHtml(rt)}</option>`,
+              )
+              .join("");
+          _ttSel.value = _curTT || "";
+        }
+        const _tt = _ttSel ? _ttSel.value : "";
         let empAssignee = document.getElementById("newTaskAssignee");
-        if (empAssignee) empAssignee.innerHTML = assigneeHtml;
+        if (empAssignee)
+          empAssignee.innerHTML = window._taskAssigneeOptionsHtml(_tt, true);
         let catHtml = "";
         window.taskCategories.forEach((c) => {
           catHtml += `<option value="${c}">${c}</option>`;
@@ -6358,7 +6466,7 @@
               : "";
             html += `<tr style="border-bottom:1px solid var(--md-divider); ${rowStyle}">
               <td data-label="תאריך" style="padding:8px; font-size:0.8rem; word-break:break-word;">${dateStr}</td>
-              <td data-label="משימה" style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${window.escapeHtml(t.category)}]</strong>${t.desc ? " " + window.escapeHtml(t.desc) : ""}</td>
+              <td data-label="משימה" style="padding:8px; word-break:break-word;"><strong style="color:var(--md-primary);">[${window.escapeHtml(t.category)}]</strong>${t.desc ? " " + window.escapeHtml(t.desc) : ""}${t.targetType ? ` <small style="color:var(--md-text-secondary);">· ${window.escapeHtml(t.targetType)}</small>` : ""}</td>
               <td data-label="עובד" style="padding:8px; font-size:0.8rem; word-break:break-word;">${_participantNames.length > 0 ? _participantNames.map(window.escapeHtml).join(", ") : volunteerBtn || "<span style='color:var(--text-muted);'>—</span>"}${swapBtn}</td>
               <td data-label="" style="padding:6px; text-align:center;" class="task-action-btn">
                 <button class="btn btn-outlined" title="${t.completed ? "בטל סיום" : "סמן כבוצע"}" style="padding:2px 6px; font-size:0.85rem; min-width:auto;" onclick="window.toggleTaskStatus(${t.id})">${btnText}</button>
@@ -6657,11 +6765,42 @@
           window.addTaskParticipantRow();
       };
 
+      // עובדים כשירים למשימה לפי "סוג עובד למשימה" (ריק = כל הסוגים הפעילים).
+      // מאפשר להקצות משימות גם לקבע/מילואים וכו', לא רק טכנאים/נחפפים.
+      window._taskEligibleStaff = function (targetType) {
+        return (window.staff || []).filter((e) => {
+          if (e.isActive === false) return false;
+          if (!targetType) return true;
+          return e.type === targetType;
+        });
+      };
+      window._taskAssigneeOptionsHtml = function (targetType, includeBlank) {
+        let h = includeBlank
+          ? `<option value="">-- הקצה לעובד (לא חובה למשימה עתידית) --</option>`
+          : "";
+        window._taskEligibleStaff(targetType).forEach((e) => {
+          h += `<option value="${window.escapeHtml(e.name)}">${window.escapeHtml(e.name)} (${window.escapeHtml(e.type)})</option>`;
+        });
+        return h;
+      };
+      // שינוי "סוג עובד למשימה" → ריענון רשימת המוקצים (יחיד) ואיפוס שורות רב-משתתפים
+      window.onTaskTargetTypeChange = function () {
+        const tt = document.getElementById("newTaskTargetType")
+          ? document.getElementById("newTaskTargetType").value
+          : "";
+        const sel = document.getElementById("newTaskAssignee");
+        if (sel) sel.innerHTML = window._taskAssigneeOptionsHtml(tt, true);
+        const rows = document.getElementById("taskParticipantRows");
+        if (rows) rows.innerHTML = "";
+      };
+
       window.addTaskParticipantRow = function () {
         const container = document.getElementById("taskParticipantRows");
         if (!container) return;
-        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"));
-        const opts = activeStaff.map((e) => `<option value="${e.name}">${e.name} (${e.type})</option>`).join("");
+        const tt = document.getElementById("newTaskTargetType")
+          ? document.getElementById("newTaskTargetType").value
+          : "";
+        const opts = window._taskAssigneeOptionsHtml(tt, false);
         const row = document.createElement("div");
         row.style.cssText = "display:flex; gap:6px; align-items:center;";
         row.innerHTML = `<select class="task-participant-select" style="flex:1;">${opts}</select><button class="btn btn-error" style="padding:2px 8px;" onclick="this.parentElement.remove()">✕</button>`;
@@ -6843,6 +6982,9 @@
           category, desc,
           assignees,
           assignee: assignees[0]?.name || "",
+          targetType: document.getElementById("newTaskTargetType")
+            ? document.getElementById("newTaskTargetType").value
+            : "",
           date,
           completed: false,
         };
@@ -6924,9 +7066,14 @@
             : t.assignee
               ? [t.assignee]
               : [];
-        const activeStaff = (window.staff || []).filter(
-          (e) => e.isActive !== false && (e.type === "טכנאי" || e.type === "נחפף"),
-        );
+        const activeStaff = window._taskEligibleStaff(t.targetType || "");
+        // לכלול מוקצים קיימים גם אם אינם בסוג היעד — כדי לא לאבד אותם בעריכה
+        participants.forEach((pn) => {
+          if (!activeStaff.find((e) => e.name === pn)) {
+            const g = (window.staff || []).find((e) => e.name === pn);
+            if (g) activeStaff.push(g);
+          }
+        });
         const rows = document.getElementById("editTaskAssigneeRows");
         if (rows) {
           rows.innerHTML = activeStaff
@@ -7385,7 +7532,7 @@
           if (emp.prefs) {
             emp.prefs.forEach((p, idx) => {
               count1++;
-              let displayLoc = window.getLocName(p.loc);
+              let displayLoc = window.getLocName(p.loc) || "כל מיקום";
               html1 += `<tr><td data-label="שם עובד"><strong>${emp.name}</strong></td><td data-label="יום">${p.day}</td><td data-label="משמרת">${p.shift}</td><td data-label="מיקום מבוקש"><span class="loc-title" style="border:none; margin:0; padding:0;">${displayLoc}</span></td><td data-label=""><button class="btn btn-error" style="padding:4px 12px;" onclick="window.removePrefFromPage(${emp.id}, ${idx})">מחק</button></td></tr>`;
             });
           }
@@ -8109,7 +8256,7 @@
             typeStr = `📚 יום לימודים<br><small>${r.note || ""}</small>`;
           else if (r.type === "constraint")
             typeStr = `⏳ אילוץ: <b>${r.note}</b>`;
-          else typeStr = `📍 העדפת שיבוץ (${window.getLocName(r.loc)})`;
+          else typeStr = `📍 העדפת שיבוץ (${window.getLocName(r.loc) || "כל מיקום"})`;
           let shiftStr =
             r.type === "vacation" || r.type === "study" ? "-" : r.shift;
           // התנגשות עם חג מלוח השנה — רק לבקשות חופש/לימודים (יום שלם)

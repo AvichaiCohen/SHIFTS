@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260823h";
+        var BUILD = "20260827a";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -804,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260823h" />
+    <link rel="stylesheet" href="style.css?v=20260827a" />
   </head>
   <body>
     <div
@@ -1809,6 +1809,7 @@
                   border: 1px solid var(--md-divider);
                 "
               >
+                <option value="">📍 בלי העדפת מיקום (כל מיקום)</option>
                 <option value='מת"ל'>🏢 העדפת מיקום: מת"ל / 200</option>
                 <option value="זירה">🎯 העדפת מיקום: זירה</option>
               </select>
@@ -1975,6 +1976,22 @@
                     />
                     <span>משימה רבת משתתפים</span>
                   </label>
+                </div>
+                <div style="width: 100%">
+                  <label
+                    style="
+                      font-size: 0.8rem;
+                      color: var(--md-text-secondary);
+                      display: block;
+                      margin-bottom: 3px;
+                    "
+                    >סוג עובד למשימה</label
+                  >
+                  <select
+                    id="newTaskTargetType"
+                    style="width: 100%"
+                    onchange="window.onTaskTargetTypeChange()"
+                  ></select>
                 </div>
                 <div id="taskSingleAssigneeWrapper" style="width: 100%">
                   <select id="newTaskAssignee" style="width: 100%">
@@ -4947,6 +4964,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260823h"></script>
+    <script src="script.js?v=20260827a"></script>
   </body>
 </html>
