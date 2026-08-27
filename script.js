@@ -3317,10 +3317,14 @@
         const prevDay = dIdx > 0 ? days[dIdx - 1] : null;
         const empConst = emp.constraints || [];
 
+        // עובד "מרותק למיקום" עובד ברצף באותו מקום בכוונה — לא מציגים לו אזהרות
+        // מנוחה על משמרות רצופות (לפי בחירת המנהל בכרטיס העובד).
+        const _tied = emp.tiedToLoc === true;
+
         // בדיקת "מנוחה אחרי לילה/24ש" רלוונטית רק א'-ה' — שישי/שבת הם סבב סופ"ש
         // רציף בכוונה (חמישי-לילה/שישי/שבת נחשבים משמרת אחת ארוכה, לא הפרה),
         // וראשון נבדק בנפרד לפי הדגל workedLastWeekend (לא לפי משמרת ליל שבת ממש)
-        if (prevDay && dIdx >= 1 && dIdx <= 4) {
+        if (!_tied && prevDay && dIdx >= 1 && dIdx <= 4) {
           const workedPrevNight = baseLocs.some(
             (l) =>
               window.currentSchedule[`${prevDay}-לילה`] &&
@@ -3548,7 +3552,30 @@
       // specEntries הגולמיים (ממוינים) לשימוש בטבלת "ניהול חופשים" המפורטת.
       window._computeVacUsage = function (e) {
         const empConst = e.constraints || [];
-        const uniqueDaysOff = new Set(
+        const specEntries = (window.specialStatuses || [])
+          .filter(
+            (s) =>
+              String(s.empId) === String(e.id) &&
+              ["חופש", "חופשה", "מחלה"].some((v) => (s.status || "").includes(v)),
+          )
+          .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+        // תאריכי החופש מהסטטוסים המיוחדים (חוצה-שבועות, מצטבר) — כקבוצת תאריכים
+        // ייחודיים כדי לא לספור חפיפות פעמיים.
+        const specDates = new Set();
+        specEntries.forEach((s) => {
+          if (!s.startDate) return;
+          const start = new Date(s.startDate);
+          const end = new Date(s.endDate || s.startDate);
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1))
+            specDates.add(
+              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+            );
+        });
+        const specVacDays = specDates.size;
+        // ימי חופש-מלא (constraints) בשבוע המוצג שאינם כבר בסטטוס מיוחד — כדי
+        // לא לספור פעמיים ימים ידניים (שכעת נרשמים גם כסטטוס מיוחד).
+        const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        const fullDayNames = new Set(
           empConst
             .filter((c) => {
               const d = c.split("-")[0];
@@ -3559,18 +3586,15 @@
               );
             })
             .map((c) => c.split("-")[0]),
-        ).size;
-        const specEntries = (window.specialStatuses || [])
-          .filter(
-            (s) =>
-              String(s.empId) === String(e.id) &&
-              ["חופש", "חופשה", "מחלה"].some((v) => (s.status || "").includes(v)),
-          )
-          .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
-        let specVacDays = 0;
-        specEntries.forEach((s) => {
-          if (s.startDate && s.endDate)
-            specVacDays += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
+        );
+        let uniqueDaysOff = 0;
+        fullDayNames.forEach((dayName) => {
+          const idx = days.indexOf(dayName);
+          if (idx < 0) return;
+          const cd = new Date(weekSun);
+          cd.setDate(cd.getDate() + idx);
+          const key = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, "0")}-${String(cd.getDate()).padStart(2, "0")}`;
+          if (!specDates.has(key)) uniqueDaysOff++;
         });
         const quota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
         const used = uniqueDaysOff + specVacDays;
@@ -8571,6 +8595,7 @@
           emp.canZiraEvening || false;
         document.getElementById("editWeekendCloser").checked =
           emp.isWeekendCloserCandidate || false;
+        document.getElementById("editTiedToLoc").checked = emp.tiedToLoc === true;
         document.getElementById("editTechLevel").value = emp.techLevel || "";
         // בדיקה אם העובד כבר ברשימת המפקדים (גם ללא empId — לפי שם)
         let linkedCmd = window.commanders.find(
@@ -8642,6 +8667,44 @@
         document.getElementById(`con_${day}_בוקר`).checked = isFull;
         document.getElementById(`con_${day}_ערב`).checked = isFull;
         document.getElementById(`con_${day}_לילה`).checked = isFull;
+        // רישום חופש ידני כסטטוס מיוחד חוצה-שבועות — כדי שיצטבר ב"ניהול חופשים"
+        // (אילוצים הם פר-שבוע ולא מצטברים בין שבועות).
+        window._syncManualVacationStatus(emp, day, isFull);
+      };
+
+      // יוצר/מסיר סטטוס "חופש" ידני לתאריך של יום נתון בשבוע המוצג. returnsToShift
+      // = true כי החסימה בפועל נעשית ע"י ה-constraint; זה רק לתיעוד וספירה מצטברת.
+      window._syncManualVacationStatus = function (emp, dayName, isVac) {
+        const idx = days.indexOf(dayName);
+        if (idx < 0 || !emp) return;
+        const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        const cd = new Date(weekSun);
+        cd.setDate(cd.getDate() + idx);
+        const dateKey = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, "0")}-${String(cd.getDate()).padStart(2, "0")}`;
+        window.specialStatuses = window.specialStatuses || [];
+        window.specialStatuses = window.specialStatuses.filter(
+          (s) =>
+            !(
+              String(s.empId) === String(emp.id) &&
+              s.startDate === dateKey &&
+              s._manualVac === true
+            ),
+        );
+        if (isVac) {
+          window.specialStatuses.push({
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            empId: emp.id,
+            empName: emp.name,
+            status: "חופש",
+            text: "(הוזן ידנית)",
+            startDate: dateKey,
+            endDate: dateKey,
+            returnsToShift: true,
+            _manualVac: true,
+          });
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("specialStatuses", window.specialStatuses);
       };
 
       window.closeModal = async function () {
@@ -8683,6 +8746,7 @@
           document.getElementById("editZiraEvening").checked;
         emp.isWeekendCloserCandidate =
           document.getElementById("editWeekendCloser").checked;
+        emp.tiedToLoc = document.getElementById("editTiedToLoc").checked;
         emp.techLevel = document.getElementById("editTechLevel").value;
 
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
@@ -8771,6 +8835,7 @@
           globalEmp.ziraWeekendAllowed = emp.ziraWeekendAllowed;
           globalEmp.canZiraEvening = emp.canZiraEvening;
           globalEmp.isWeekendCloserCandidate = emp.isWeekendCloserCandidate;
+          globalEmp.tiedToLoc = emp.tiedToLoc === true;
           globalEmp.techLevel = emp.techLevel;
           globalEmp.isCommander = emp.isCommander === true;
           globalEmp.commanderPhone = emp.commanderPhone || "";

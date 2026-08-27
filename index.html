@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827a";
+        var BUILD = "20260827b";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -804,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827a" />
+    <link rel="stylesheet" href="style.css?v=20260827b" />
   </head>
   <body>
     <div
@@ -3645,6 +3645,22 @@
               />
               מועמד לסגירת סופ"ש/חג (יוצע ב"קבע סוגרי סופ"ש")</label
             >
+            <label
+              style="
+                cursor: pointer;
+                color: #b45309;
+                font-size: 0.875rem;
+                display: block;
+                margin-top: 10px;
+                font-weight: bold;
+              "
+              ><input
+                type="checkbox"
+                id="editTiedToLoc"
+                style="vertical-align: middle"
+              />
+              🔒 מרותק למיקום — ללא אזהרת מנוחה על משמרות רצופות</label
+            >
             <div
               id="lblTechLevel"
               style="
@@ -4964,6 +4980,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827a"></script>
+    <script src="script.js?v=20260827b"></script>
   </body>
 </html>
