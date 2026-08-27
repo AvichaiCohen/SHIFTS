@@ -10374,6 +10374,13 @@
         const container = document.getElementById("mobileCardsOutput");
         if (!container) return;
         window._initMobileSwipe();
+        // שער "טרם פורסם" — חייב להיבדק גם כאן ולא רק ב-renderTable, כי ניווט
+        // בין ימים בנייד (selectMobileDay/changeMobileDay) קורא ישירות לפונקציה
+        // זו ואחרת היה מציג לעובד את השיבוץ של שבוע לא-מפורסם.
+        if ((window.isWorkerMode || window.isViewOnly) && data && !data.isPublished) {
+          container.innerHTML = `<div style="text-align:center; padding:50px 20px; color:var(--md-text-secondary);"><h2 style="font-size:2rem; margin-bottom:10px;">🔒</h2><h3>המשמרות לשבוע זה טרם פורסמו</h3><p>המנהל עדיין עובד על סידור העבודה. אנא חזור מאוחר יותר.</p></div>`;
+          return;
+        }
         if (!data || Object.keys(data).length <= 1) {
           container.innerHTML = "<em>אין נתונים / לוח ריק</em>";
           return;
