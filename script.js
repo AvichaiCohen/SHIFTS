@@ -7443,12 +7443,29 @@
           (specByEmp[k] = specByEmp[k] || []).push(sp);
         });
         const shiftIcon = { בוקר: "🌅", ערב: "🌆", "24 שעות": "🕐" };
+        const _dayIdx = days.indexOf(selectedDay);
+        const _prevDay = _dayIdx > 0 ? days[_dayIdx - 1] : null;
         function chipsFor(emp) {
           const chips = [];
+          const cons = emp.constraints || [];
+          const specList = specByEmp[String(emp.id)] || [];
+          // חופש: יום-חופש-מלא (אילוץ בכל 3 המשמרות) או סטטוס מיוחד "חופש/חופשה"
+          const fullDayOff =
+            cons.includes(`${selectedDay}-בוקר`) &&
+            cons.includes(`${selectedDay}-ערב`) &&
+            cons.includes(`${selectedDay}-לילה`);
+          const hasVacSpecial = specList.some(
+            (sp) => !sp._taskId && /חופש|חופשה/.test(sp.status || ""),
+          );
+          const onVacation = fullDayOff || hasVacSpecial;
+
+          // שיבוצים היום
+          let assignedToday = false;
           SHIFT_KEYS.forEach((s) => {
             baseLocs.forEach((loc) => {
               const slot = window.currentSchedule[`${selectedDay}-${s}`];
               if (slot && slot[loc] && slot[loc].find((e) => e.id === emp.id)) {
+                assignedToday = true;
                 const locName = window.getLocName(loc);
                 if (s === "לילה")
                   chips.push({ cls: "night", txt: `🌙 לפני לילה · ${locName}` });
@@ -7460,7 +7477,21 @@
               }
             });
           });
-          (specByEmp[String(emp.id)] || []).forEach((sp) => {
+
+          // אחרי לילה: עבד/ה משמרת לילה אתמול (באותו שבוע) ולא משובץ/ת היום
+          if (!assignedToday && !onVacation && _prevDay) {
+            baseLocs.forEach((loc) => {
+              const slot = window.currentSchedule[`${_prevDay}-לילה`];
+              if (slot && slot[loc] && slot[loc].find((e) => e.id === emp.id))
+                chips.push({
+                  cls: "night",
+                  txt: `🌙 אחרי לילה · ${window.getLocName(loc)}`,
+                });
+            });
+          }
+
+          // סטטוסים מיוחדים ומשימות
+          specList.forEach((sp) => {
             if (sp._taskId) {
               const cat = window.specStatusLabel(sp) || "משימה";
               chips.push({ cls: "task", txt: `🎯 ${cat}`, title: sp.text || "" });
@@ -7469,6 +7500,11 @@
               chips.push({ cls: "special", txt: `🏖️ ${lbl}` });
             }
           });
+
+          // חופש מאילוץ יום-מלא (רק אם לא כבר הוצג כסטטוס מיוחד)
+          if (fullDayOff && !hasVacSpecial)
+            chips.push({ cls: "special", txt: "🏖️ חופש" });
+
           return chips;
         }
 
