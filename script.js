@@ -2966,6 +2966,22 @@
             window.currentSchedule,
             window.currentNotesLog,
           );
+        // סנכרון תצוגת הנוכחות שמתחת ללוח לאותו יום שמוצג בלוח
+        if (typeof window._syncTrackingToBoardDay === "function")
+          window._syncTrackingToBoardDay(days[dayIndex - 1]);
+      };
+
+      // מיישר את בורר-היום של טבלת הנוכחות ליום שמוצג בלוח (הלוח מעל), ומרנדר
+      // מחדש — כדי שהנוכחות תמיד תשקף את אותו יום שהמנהל מסתכל עליו בלוח.
+      window._syncTrackingToBoardDay = function (dayName) {
+        if (!dayName || days.indexOf(dayName) < 0) return;
+        window.trackingSelectedDay = dayName;
+        const s1 = document.getElementById("trackingDaySelect");
+        const s2 = document.getElementById("trackingDaySelectFull");
+        if (s1) s1.value = dayName;
+        if (s2) s2.value = dayName;
+        if (typeof window.renderTrackingPage === "function")
+          window.renderTrackingPage();
       };
 
       // מעבר יום קדימה/אחורה בנייד (חצים / החלקה) — חוצה שבועות:
@@ -7488,6 +7504,18 @@
                   txt: `🌙 אחרי לילה · ${window.getLocName(loc)}`,
                 });
             });
+          }
+
+          // אחרי סופ"ש: ביום ראשון, מי שסומן/ה שעבד/ה בסופ"ש האחרון (המערכת
+          // מגדירה מנוחה ביום ראשון לפי הדגל workedLastWeekend), ואינו משובץ/ת.
+          if (
+            !assignedToday &&
+            !onVacation &&
+            selectedDay === "ראשון" &&
+            emp.workedLastWeekend &&
+            emp.type !== "נחפף"
+          ) {
+            chips.push({ cls: "night", txt: '🛌 אחרי סופ"ש' });
           }
 
           // סטטוסים מיוחדים ומשימות
