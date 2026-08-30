@@ -998,6 +998,43 @@
       body.dark-mode .td-special-cell {
         background: #2e1065 !important;
       }
+      /* צ'יפ סטטוס בתצוגת נוכחות "לפי עובד" — צבע לפי סוג, מודע ל-dark mode */
+      .pres-chip {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .pres-chip.day {
+        background: rgba(13, 148, 136, 0.14);
+        color: #0f766e;
+      }
+      .pres-chip.night {
+        background: rgba(99, 102, 241, 0.16);
+        color: #4338ca;
+      }
+      .pres-chip.task {
+        background: rgba(245, 158, 11, 0.18);
+        color: #b45309;
+      }
+      .pres-chip.special {
+        background: rgba(239, 68, 68, 0.13);
+        color: #dc2626;
+      }
+      body.dark-mode .pres-chip.day {
+        color: #5eead4;
+      }
+      body.dark-mode .pres-chip.night {
+        color: #a5b4fc;
+      }
+      body.dark-mode .pres-chip.task {
+        color: #fcd34d;
+      }
+      body.dark-mode .pres-chip.special {
+        color: #fca5a5;
+      }
       /* טבלאות - גלילה אופקית במובייל למניעת חריגה מהמסך */
       @media (max-width: 1024px) {
         .container table,

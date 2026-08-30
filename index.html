@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827f";
+        var BUILD = "20260827g";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -804,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827f" />
+    <link rel="stylesheet" href="style.css?v=20260827g" />
   </head>
   <body>
     <div
@@ -1588,6 +1588,29 @@
               <option value="שישי">יום שישי</option>
               <option value="שבת">יום שבת</option>
             </select>
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                margin-bottom: 16px;
+                flex-wrap: wrap;
+              "
+            >
+              <button
+                id="trackViewEmpBtn"
+                class="btn btn-contained"
+                onclick="window.setTrackingView('byEmployee')"
+              >
+                👤 לפי עובד
+              </button>
+              <button
+                id="trackViewLocBtn"
+                class="btn btn-outlined"
+                onclick="window.setTrackingView('byLocation')"
+              >
+                📍 לפי מיקום
+              </button>
+            </div>
             <div id="trackingTableContainer"></div>
           </div>
         </div>
@@ -5007,6 +5030,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827f"></script>
+    <script src="script.js?v=20260827g"></script>
   </body>
 </html>

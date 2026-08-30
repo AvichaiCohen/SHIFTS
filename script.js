@@ -7410,6 +7410,108 @@
         }
       };
 
+      // ===== נוכחות: מצב תצוגה (לפי עובד / לפי מיקום) =====
+      window.trackingViewMode =
+        localStorage.getItem("tracking_view_mode_v1") || "byEmployee";
+      window.setTrackingView = function (mode) {
+        window.trackingViewMode = mode;
+        try {
+          localStorage.setItem("tracking_view_mode_v1", mode);
+        } catch (e) {}
+        window.renderTrackingPage();
+      };
+      window._syncTrackingToggle = function () {
+        const mode = window.trackingViewMode || "byEmployee";
+        const be = document.getElementById("trackViewEmpBtn");
+        const bl = document.getElementById("trackViewLocBtn");
+        if (be)
+          be.className =
+            mode === "byEmployee" ? "btn btn-contained" : "btn btn-outlined";
+        if (bl)
+          bl.className =
+            mode === "byLocation" ? "btn btn-contained" : "btn btn-outlined";
+      };
+
+      // תצוגת נוכחות "לפי עובד": כל העובדים מקובצים לפי סוג (קבע/טכנאי/נחפף...),
+      // וליד כל אחד צ'יפ סטטוס ליום הנבחר — משמרת+מיקום (בוקר·מת"ל), "לפני לילה"
+      // (מי שמשובץ ללילה נח ביום), חופש/מחלה/לימודים, ומשימות (חניונים וכו').
+      window._buildTrackingByEmployee = function (selectedDay, specs) {
+        const SHIFT_KEYS = ["בוקר", "ערב", "לילה", "24 שעות"];
+        const specByEmp = {};
+        (specs || []).forEach((sp) => {
+          const k = String(sp.id);
+          (specByEmp[k] = specByEmp[k] || []).push(sp);
+        });
+        const shiftIcon = { בוקר: "🌅", ערב: "🌆", "24 שעות": "🕐" };
+        function chipsFor(emp) {
+          const chips = [];
+          SHIFT_KEYS.forEach((s) => {
+            baseLocs.forEach((loc) => {
+              const slot = window.currentSchedule[`${selectedDay}-${s}`];
+              if (slot && slot[loc] && slot[loc].find((e) => e.id === emp.id)) {
+                const locName = window.getLocName(loc);
+                if (s === "לילה")
+                  chips.push({ cls: "night", txt: `🌙 לפני לילה · ${locName}` });
+                else
+                  chips.push({
+                    cls: "day",
+                    txt: `${shiftIcon[s] || ""} ${s} · ${locName}`,
+                  });
+              }
+            });
+          });
+          (specByEmp[String(emp.id)] || []).forEach((sp) => {
+            if (sp._taskId) {
+              const cat = window.specStatusLabel(sp) || "משימה";
+              chips.push({ cls: "task", txt: `🎯 ${cat}`, title: sp.text || "" });
+            } else {
+              const lbl = window.specStatusLabel(sp) || sp.status || "";
+              chips.push({ cls: "special", txt: `🏖️ ${lbl}` });
+            }
+          });
+          return chips;
+        }
+
+        const active = [...window.staff].filter((e) => e.isActive !== false);
+        const orderedTypes = (window.roleTypes || []).filter((t) =>
+          active.some((e) => e.type === t),
+        );
+        const leftover = active.filter((e) => orderedTypes.indexOf(e.type) < 0);
+        const groups = orderedTypes.map((t) => ({
+          label: t,
+          emps: active.filter((e) => e.type === t),
+        }));
+        if (leftover.length) groups.push({ label: "אחר", emps: leftover });
+
+        let html = `<div style="display:flex; flex-wrap:wrap; gap:16px;">`;
+        groups.forEach((g) => {
+          const emps = g.emps
+            .slice()
+            .sort((a, b) => (a.name || "").localeCompare(b.name || "", "he"));
+          if (!emps.length) return;
+          html += `<div class="card-paper" style="flex:1; min-width:290px; padding:16px; border-top:4px solid var(--md-primary);">`;
+          html += `<h3 style="margin:0 0 12px; color:var(--md-primary);">👥 ${window.escapeHtml(g.label)} (${emps.length})</h3>`;
+          emps.forEach((emp) => {
+            const chips = chipsFor(emp);
+            const chipsHtml = chips.length
+              ? chips
+                  .map(
+                    (c) =>
+                      `<span class="pres-chip ${c.cls}"${c.title ? ` title="${window.escapeHtml(c.title)}"` : ""}>${c.txt}</span>`,
+                  )
+                  .join(" ")
+              : `<span style="color:var(--md-text-secondary); font-style:italic; font-size:0.8rem;">לא משובץ</span>`;
+            html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+              <span style="font-weight:600;">👤 ${window.escapeHtml(emp.name)}</span>
+              <span style="display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end;">${chipsHtml}</span>
+            </div>`;
+          });
+          html += `</div>`;
+        });
+        html += `</div>`;
+        return html;
+      };
+
       window.renderTrackingPage = function (source) {
         let sortedStaff = [...window.staff]
           .filter((e) => e.isActive !== false)
@@ -7436,6 +7538,23 @@
           ? window.getSpecialsForDay(selectedDay, window.currentSchedule)
           : (window.currentSchedule.special && window.currentSchedule.special[selectedDay]) || [];
         const specialEmpIds = new Set(specs.map((s) => String(s.id)));
+
+        if (typeof window._syncTrackingToggle === "function")
+          window._syncTrackingToggle();
+
+        // תצוגת "לפי עובד" — בונה HTML נפרד וכותב לאותם מיכלים, ומסיים כאן.
+        if ((window.trackingViewMode || "byEmployee") === "byEmployee") {
+          const htmlE = window._buildTrackingByEmployee(selectedDay, specs);
+          const tcE = document.getElementById("fullTrackingTableContainer");
+          if (tcE) tcE.innerHTML = htmlE;
+          const schedTcE = document.querySelector(
+            "#page-schedule #trackingTableContainer",
+          );
+          if (schedTcE) schedTcE.innerHTML = htmlE;
+          const trackTcE = document.getElementById("trackingTableContainer");
+          if (trackTcE) trackTcE.innerHTML = htmlE;
+          return;
+        }
 
         // בדיקה אם עובד משובץ לאיזשהי משמרת ביום הנבחר
         const _allPossibleShifts = [...(window.currentShifts || [])];
