@@ -1185,7 +1185,13 @@
         };
         const typeStr = typeMap[req.type] || "בקשה";
         const title = `📋 בקשה חדשה - ${req.empName}`;
-        const body = `${typeStr} ביום ${req.day || ""} — נדרש אישורך`;
+        const dateStr = req.date ? req.date.split("-").reverse().join(".") : "";
+        const whenStr = dateStr
+          ? `${dateStr}${req.day ? ` (יום ${req.day})` : ""}`
+          : req.day
+            ? `יום ${req.day}`
+            : "";
+        const body = `${typeStr} — 📅 ${whenStr} — נדרש אישורך`;
         const notifOptions = {
           body,
           icon: "https://cdn-icons-png.flaticon.com/512/3652/3652191.png",
