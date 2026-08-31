@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827k";
+        var BUILD = "20260827l";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -804,7 +804,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827k" />
+    <link rel="stylesheet" href="style.css?v=20260827l" />
   </head>
   <body>
     <div
@@ -3447,7 +3447,13 @@
             <label
               style="display: block; margin-bottom: 4px; font-size: 0.875rem"
               >יתרת חופש שנתית</label
-            ><input type="number" id="editVacation" style="width: 100%" />
+            ><input
+              type="number"
+              id="editVacation"
+              min="0"
+              step="0.5"
+              style="width: 100%"
+            />
             <div
               id="editVacationBalance"
               style="
@@ -5030,6 +5036,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827k"></script>
+    <script src="script.js?v=20260827l"></script>
   </body>
 </html>

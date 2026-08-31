@@ -3589,6 +3589,13 @@
       // חישוב ניצול ימי חופש לעובד: מכסה, ימי אילוץ-יום-שלם בשבוע הנוכחי +
       // טווחי סטטוס-מיוחד גלובליים (חופש/חופשה/מחלה) מכל השבועות. מוחזר גם
       // specEntries הגולמיים (ממוינים) לשימוש בטבלת "ניהול חופשים" המפורטת.
+      // מציג מספר חופש עם עד חצי — "13" נשאר שלם, "13.5" מוצג עם החצי,
+      // בלי זנב עשרוני מיותר (13.0 → 13).
+      window._fmtVac = function (n) {
+        const r = Math.round(Number(n) * 2) / 2;
+        return Number.isInteger(r) ? String(r) : r.toFixed(1);
+      };
+
       window._computeVacUsage = function (e) {
         const empConst = e.constraints || [];
         const specEntries = (window.specialStatuses || [])
@@ -3745,9 +3752,9 @@
           html += `<tr style="border-bottom:1px solid var(--md-divider);">
             <td data-label="שם"><b>${window.escapeHtml(e.name)}</b></td>
             <td data-label="דרג">${window.escapeHtml(e.type || "")}</td>
-            <td data-label="מכסה" style="text-align:center;">${vac.quota}</td>
-            <td data-label="נוצל" style="text-align:center;">${vac.used}</td>
-            <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${vac.remaining}</td>
+            <td data-label="מכסה" style="text-align:center;">${window._fmtVac(vac.quota)}</td>
+            <td data-label="נוצל" style="text-align:center;">${window._fmtVac(vac.used)}</td>
+            <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${window._fmtVac(vac.remaining)}</td>
             <td data-label="נותר לאחר בקשות" style="text-align:center; font-weight:bold; color:${afterReqColor};">${afterReqCell}</td>
             <td data-label="פירוט חופשות">${combinedDetail}</td>
           </tr>`;
@@ -4041,7 +4048,7 @@
                             <div style="font-size:0.85em; color:var(--text-muted); display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
                                 <span>דרג: <b>${e.type}</b></span>
                                 <span>שיוך: <b>${displayFixed}</b></span>
-                                <span style="grid-column:1/-1; color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--text-muted)'};">חופשים: <b>${_vacUsed} / ${_vacQuota}</b> (נשארו: <b style="color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${_vacRemaining}</b>)</span>
+                                <span style="grid-column:1/-1; color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--text-muted)'};">חופשים: <b>${window._fmtVac(_vacUsed)} / ${window._fmtVac(_vacQuota)}</b> (נשארו: <b style="color:${_vacRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${window._fmtVac(_vacRemaining)}</b>)</span>
                             </div>
                             <div class="super-only" style="background:var(--md-bg); padding:8px; border-radius:6px; margin-top:10px; font-size:0.85em;">
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -6699,9 +6706,9 @@
                 : "var(--md-success)";
           html += `<div style="background:var(--md-bg); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:0.9rem; display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
             <span style="font-weight:bold; color:#0d9488;">🌴 חופשים</span>
-            <span>מכסה: <b>${_v.quota}</b></span>
-            <span>נוצלו: <b>${_v.used}</b></span>
-            <span>נותרו: <b style="color:${_remColor};">${_v.remaining}</b></span>
+            <span>מכסה: <b>${window._fmtVac(_v.quota)}</b></span>
+            <span>נוצלו: <b>${window._fmtVac(_v.used)}</b></span>
+            <span>נותרו: <b style="color:${_remColor};">${window._fmtVac(_v.remaining)}</b></span>
           </div>`;
         }
 
@@ -8781,7 +8788,7 @@
         });
         const _oMRemaining = _oMQuota - _oMUsed;
         const _balEl = document.getElementById("editVacationBalance");
-        if (_balEl) _balEl.innerHTML = `נוצלו: <b>${_oMUsed}</b> | נשארו: <b style="color:${_oMRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${_oMRemaining}</b>`;
+        if (_balEl) _balEl.innerHTML = `נוצלו: <b>${window._fmtVac(_oMUsed)}</b> | נשארו: <b style="color:${_oMRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${window._fmtVac(_oMRemaining)}</b>`;
 
         // שדות מנהל על
         document.getElementById("editPersonalId").value = emp.personalId || "";
@@ -8963,7 +8970,7 @@
         emp.type = document.getElementById("editType").value;
         emp.fixedLoc = document.getElementById("editFixedLoc").value;
         emp.vacationQuota =
-          parseInt(document.getElementById("editVacation").value) || 0;
+          parseFloat(document.getElementById("editVacation").value) || 0;
         emp.birthday = document.getElementById("editBirthday").value || "";
         // זמינות משמרות
         emp.canMorning = document.getElementById("editCanMorning").checked;
