@@ -8733,6 +8733,29 @@
           isActiveRow.style.display = type === "קבינט בכיר" ? "none" : "inline-block";
       };
 
+      // מסיר עובד מכל שיבוצי המשמרות בשבוע המוצג (currentSchedule) — משמש
+      // כשעובד הופך ל"קבינט בכיר"/לא-בשיבוץ, כדי שלא יישאר משובץ בפועל.
+      // מחזיר את מספר השיבוצים שהוסרו.
+      window._removeEmpFromScheduleSlots = function (empId) {
+        const sch = window.currentSchedule;
+        if (!sch) return 0;
+        let removed = 0;
+        Object.keys(sch).forEach((key) => {
+          const dayPart = key.split("-")[0];
+          if (days.indexOf(dayPart) < 0) return; // רק מפתחות של "יום-משמרת"
+          const slot = sch[key];
+          if (!slot || typeof slot !== "object") return;
+          baseLocs.forEach((loc) => {
+            if (Array.isArray(slot[loc])) {
+              const before = slot[loc].length;
+              slot[loc] = slot[loc].filter((e) => e.id != empId);
+              removed += before - slot[loc].length;
+            }
+          });
+        });
+        return removed;
+      };
+
       window.openModal = function (id) {
         window.currentId = id;
         const emp = window.staff.find((e) => e.id === id);
@@ -8936,6 +8959,7 @@
         }
 
         emp.name = document.getElementById("editName").value;
+        const _prevType = emp.type;
         emp.type = document.getElementById("editType").value;
         emp.fixedLoc = document.getElementById("editFixedLoc").value;
         emp.vacationQuota =
@@ -9019,6 +9043,18 @@
           emp.workedLastWeekend = false;
         }
         emp.isActive = document.getElementById("editIsActive").checked;
+        // "קבינט בכיר" = לא בשיבוץ: תמיד isActive=false, ובמעבר לתפקיד זה גם
+        // מסירים אותו משיבוצי המשמרות הקיימים בשבוע (לא רק מהשיבוץ העתידי).
+        if (emp.type === "קבינט בכיר") {
+          emp.isActive = false;
+          if (_prevType !== "קבינט בכיר") {
+            const _rem = window._removeEmpFromScheduleSlots(emp.id);
+            if (_rem > 0)
+              window.toast(
+                `ℹ️ ${emp.name} הוגדר/ה כקבינט בכיר והוסר/ה מ-${_rem} שיבוצים בשבוע זה.`,
+              );
+          }
+        }
         const prefRows = document.querySelectorAll(".pref-row");
         emp.prefs = Array.from(prefRows)
           .map((row) => ({
