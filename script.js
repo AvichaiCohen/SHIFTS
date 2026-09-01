@@ -9856,6 +9856,27 @@
               }
             }
 
+            // חג באמצע שבוע = יום סופ"ש: אותו צוות סוגר בוקר+לילה, בלי משמרת
+            // ערב נפרדת. הלילה כבר אויש לפי כלל הסופ"ש — משכפלים אותו צוות גם
+            // למשמרת הבוקר (חפיפה), כך שהבוקר לא נשאר ריק כמו עד היום.
+            if (window.isHoliday(day)) {
+              baseLocs.forEach((loc) => {
+                if (window.isShiftLocked(day, "בוקר", loc)) return;
+                const nightArr =
+                  (window.currentSchedule[`${day}-לילה`] &&
+                    window.currentSchedule[`${day}-לילה`][loc]) ||
+                  [];
+                const morningArr =
+                  window.currentSchedule[`${day}-בוקר`] &&
+                  window.currentSchedule[`${day}-בוקר`][loc];
+                if (!morningArr) return;
+                nightArr.forEach((e) => {
+                  if (!morningArr.find((x) => x.id === e.id))
+                    morningArr.push({ ...e });
+                });
+              });
+            }
+
             const eveningSk = `${day}-ערב`;
             if (!window.isOffDay(day)) {
               baseLocs.forEach((loc) => {
