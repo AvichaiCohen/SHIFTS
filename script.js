@@ -3357,8 +3357,9 @@
 
         // בדיקת "מנוחה אחרי לילה/24ש" רלוונטית רק א'-ה' — שישי/שבת הם סבב סופ"ש
         // רציף בכוונה (חמישי-לילה/שישי/שבת נחשבים משמרת אחת ארוכה, לא הפרה),
-        // וראשון נבדק בנפרד לפי הדגל workedLastWeekend (לא לפי משמרת ליל שבת ממש)
-        if (!_restExempt && prevDay && dIdx >= 1 && dIdx <= 4) {
+        // וראשון נבדק בנפרד לפי הדגל workedLastWeekend (לא לפי משמרת ליל שבת ממש).
+        // חג באמצע שבוע מתנהג כמו סופ"ש — משמרות חופפות מותרות, אין אזהרת מנוחה.
+        if (!_restExempt && !window.isOffDay(day) && prevDay && dIdx >= 1 && dIdx <= 4) {
           const workedPrevNight = baseLocs.some(
             (l) =>
               window.currentSchedule[`${prevDay}-לילה`] &&
@@ -10310,6 +10311,12 @@
       // הסרת הכוכבים (★) מפונקציות הציור שכבר קיימות בקוד שלך
       window.renderTable = function (data, notesLog) {
         if (!window.currentMobileDay) window.currentMobileDay = 1;
+        // אם המנהל אישר את כל השיבוץ ("בדוק שיבוץ מלא" — כולם אושרו והלוח לא
+        // השתנה מאז) — לא מציגים יותר את סימוני האזהרה (⚠️) על הלוח.
+        const _suppressWarns =
+          !window.isWorkerMode &&
+          typeof window._isStaffingFullyChecked === "function" &&
+          window._isStaffingFullyChecked();
         const pubBtn = document.getElementById("publishBtn");
         if (pubBtn && data) {
           pubBtn.innerText = data.isPublished
@@ -10485,7 +10492,7 @@
                   window.loggedInUser && window.loggedInUser.id === e.id
                     ? " highlight-me"
                     : "";
-                const _warns = (!window.isWorkerMode && window._getAssignmentWarnings)
+                const _warns = (!window.isWorkerMode && !_suppressWarns && window._getAssignmentWarnings)
                   ? window._getAssignmentWarnings(e, d, r.shift)
                   : [];
                 const warnIcon = _warns.length
@@ -10618,6 +10625,12 @@
           return;
         }
 
+        // כמו בדסקטופ: אם השיבוץ אושר במלואו — לא מציגים אזהרות (⚠️) על הלוח.
+        const _suppressWarns =
+          !window.isWorkerMode &&
+          typeof window._isStaffingFullyChecked === "function" &&
+          window._isStaffingFullyChecked();
+
         let html = "";
         let mobileDayIdx = window.currentMobileDay || 1;
         let d = days[mobileDayIdx - 1];
@@ -10725,7 +10738,7 @@
                   : window.isEditMode
                     ? `<span style="cursor:pointer; margin-left:4px; opacity:0.4;" onclick="window.toggleLock('${d}','${r.shift}','${safeLoc}',${emp.id})">🔓</span>`
                     : "";
-              const _mWarns = (!window.isWorkerMode && window._getAssignmentWarnings)
+              const _mWarns = (!window.isWorkerMode && !_suppressWarns && window._getAssignmentWarnings)
                 ? window._getAssignmentWarnings(emp, d, r.shift)
                 : [];
               const mWarnIcon = _mWarns.length
