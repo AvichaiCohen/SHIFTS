@@ -3681,31 +3681,90 @@
 
       // ===== ניהול חופשים — טבלה מרוכזת לטכנאים + קבע: מכסה/נוצל/נותר לכל
       // עובד, יחד עם פירוט טווחי החופשות עצמם (מ-specialStatuses הגלובלי) =====
+      // סינון לפי חודש בטבלת ניהול החופשים ("" = כל החודשים)
+      window._vacMonthFilter = window._vacMonthFilter || "";
+      window._setVacMonthFilter = function (v) {
+        window._vacMonthFilter = v || "";
+        window.renderVacationManagementTable();
+      };
+      // כמה ימים מתוך רשומת חופשה (טווח תאריכים) נופלים בחודש נתון "YYYY-MM"
+      window._vacEntryDaysInMonth = function (startDate, endDate, ym) {
+        if (!startDate) return 0;
+        let c = 0;
+        const start = new Date(startDate);
+        const end = new Date(endDate || startDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (m === ym) c++;
+        }
+        return c;
+      };
+
       window.renderVacationManagementTable = function () {
         const cont = document.getElementById("vacationManagementTable");
         if (!cont) return;
+        const monthFilter = window._vacMonthFilter || "";
+        // כולל נחפפים בנוסף לטכנאי/קבע
         const list = (window.staff || [])
-          .filter((e) => e.type === "טכנאי" || e.type === "קבע")
+          .filter((e) => ["טכנאי", "קבע", "נחפף"].includes(e.type))
           .sort((a, b) => a.name.localeCompare(b.name));
         if (list.length === 0) {
-          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/אנשי קבע במאגר.</p>`;
+          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/קבע/נחפפים במאגר.</p>`;
           return;
         }
-        let html = `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr>
+
+        // איסוף כל החודשים שיש בהם חופשה (מסטטוסים + בקשות עתידיות) לרשימת הסינון
+        const HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+        const monthLabel = (m) => { const [y, mo] = m.split("-"); return `${HEB_MONTHS[+mo - 1]} ${y}`; };
+        const monthSet = new Set();
+        list.forEach((e) => {
+          window._computeVacUsage(e).specEntries.forEach((s) => {
+            if (!s.startDate) return;
+            const start = new Date(s.startDate);
+            const end = new Date(s.endDate || s.startDate);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1))
+              monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          });
+          const fut = (window._vacationFutureApproved && window._vacationFutureApproved[String(e.id)]) || [];
+          fut.forEach((item) => (item.dates || []).forEach((dt) => monthSet.add(dt.slice(0, 7))));
+        });
+        const months = Array.from(monthSet).sort();
+        const monthOpts =
+          `<option value="">כל החודשים</option>` +
+          months.map((m) => `<option value="${m}" ${m === monthFilter ? "selected" : ""}>${monthLabel(m)}</option>`).join("");
+        let html = `<div style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <label style="font-size:0.85rem; font-weight:bold;">📅 סינון חודש:</label>
+          <select onchange="window._setVacMonthFilter(this.value)" style="padding:6px 10px; border-radius:8px;">${monthOpts}</select>
+          ${monthFilter ? `<span style="font-size:0.8rem; color:var(--text-muted);">מוצגים רק מי שיש להם חופשה ב${monthLabel(monthFilter)}</span>` : ""}
+        </div>`;
+        html += `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr>
           <th>שם</th><th>דרג</th><th>מכסה</th><th>נוצל</th><th>נותר</th><th>נותר לאחר בקשות</th><th>פירוט חופשות</th>
         </tr>`;
         list.forEach((e) => {
           const vac = window._computeVacUsage(e);
+          // סינון לפי חודש — מדלגים על מי שאין לו חופשה בחודש הנבחר
+          let monthDays = 0;
+          if (monthFilter) {
+            vac.specEntries.forEach((s) => {
+              monthDays += window._vacEntryDaysInMonth(s.startDate, s.endDate, monthFilter);
+            });
+            const _fut = (window._vacationFutureApproved && window._vacationFutureApproved[String(e.id)]) || [];
+            _fut.forEach((item) => (item.dates || []).forEach((dt) => { if (dt.slice(0, 7) === monthFilter) monthDays++; }));
+            if (monthDays === 0) return;
+          }
           const remainingColor =
             vac.remaining < 0
               ? "var(--md-error)"
               : vac.remaining === 0
                 ? "var(--md-warning)"
                 : "var(--md-success)";
+          const _specForDetail = monthFilter
+            ? vac.specEntries.filter((s) => window._vacEntryDaysInMonth(s.startDate, s.endDate, monthFilter) > 0)
+            : vac.specEntries;
           const detail =
-            vac.specEntries.length === 0
+            _specForDetail.length === 0
               ? ""
-              : vac.specEntries
+              : _specForDetail
                   .map((s) => {
                     const sd = (s.startDate || "").split("-").reverse().join(".");
                     const ed = (s.endDate || "").split("-").reverse().join(".");
@@ -3721,6 +3780,7 @@
               window._vacationFutureApproved[String(e.id)]) ||
             [];
           const futureDetail = futureItems
+            .filter((item) => !monthFilter || (item.dates || []).some((dt) => dt.slice(0, 7) === monthFilter))
             .map((item) => {
               const first = item.dates[0];
               const last = item.dates[item.dates.length - 1];
@@ -3731,8 +3791,11 @@
               return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">📥 בקשה מאושרת: ${label}${countStr}</span>`;
             })
             .join(" ");
+          const monthChip = monthFilter
+            ? `<span style="display:inline-block; background:#0d9488; color:#fff; border-radius:6px; padding:2px 8px; margin:2px 2px 6px; font-size:0.8rem; font-weight:bold;">📅 ${monthLabel(monthFilter)}: ${window._fmtVac(monthDays)} ימים</span> `
+            : "";
           const combinedDetail =
-            detail + futureDetail ||
+            (monthChip + detail + futureDetail) ||
             `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`;
           // סך ימי הבקשות העתידיות המאושרות → "נותר לאחר בקשות" = נותר פחות אלה
           const futureDaysCount = futureItems.reduce(
@@ -6713,6 +6776,26 @@
           </div>`;
         }
 
+        // כל הסופ"ש שהעובד סגר (מהיסטוריית הסופ"ש)
+        const _weekends = (window.weekendHistory && window.weekendHistory[name]) || [];
+        const _wkMeta = (window.weekendHistoryMeta && window.weekendHistoryMeta[name]) || {};
+        html += `<h4 style="margin:8px 0; color:var(--md-primary);">🏕️ סופ"ש שנסגרו (${_weekends.length})</h4>`;
+        if (_weekends.length === 0) {
+          html += `<p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 12px;">אין סופ"ש רשומים. (לחץ "🔄 רענן וחשב מחדש מהענן" בטבלת ההוגנות כדי לבנות את ההיסטוריה.)</p>`;
+        } else {
+          const _sortedWk = [..._weekends].sort((a, b) =>
+            typeof window._parseWeekendLabelTime === "function"
+              ? window._parseWeekendLabelTime(b) - window._parseWeekendLabelTime(a)
+              : 0,
+          );
+          html += `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">${_sortedWk
+            .map((lbl) => {
+              const thu = _wkMeta[lbl] && _wkMeta[lbl].thursdayOnly;
+              return `<span style="display:inline-block; background:var(--md-bg); border:1px solid var(--md-divider); border-radius:6px; padding:3px 9px; font-size:0.8rem;">🏕️ ${window.escapeHtml(lbl)}${thu ? ' <small style="color:var(--md-warning);">(חמישי בלבד)</small>' : ""}</span>`;
+            })
+            .join("")}</div>`;
+        }
+
         // טבלת משימות
         html += `<h4 style="margin:8px 0; color:var(--md-primary);">📋 משימות</h4>`;
         if (empTasks.length === 0) {
@@ -8778,18 +8861,13 @@
         const _oMQuota = emp.vacationQuota !== undefined ? emp.vacationQuota : 14;
         document.getElementById("editVacation").value = _oMQuota;
         document.getElementById("editBirthday").value = emp.birthday || "";
-        // חישוב יתרה: נוצלו (אילוצים + סטטוסים מיוחדים)
-        const _oMConstraints = emp.constraints || [];
-        let _oMUsed = 0;
-        days.forEach(d => {
-          if (_oMConstraints.includes(`${d}-בוקר`) && _oMConstraints.includes(`${d}-ערב`) && _oMConstraints.includes(`${d}-לילה`)) _oMUsed++;
-        });
-        (window.specialStatuses || []).filter(s => String(s.empId) === String(emp.id) && ["חופש","חופשה","מחלה"].some(v => (s.status||"").includes(v))).forEach(s => {
-          if (s.startDate && s.endDate) _oMUsed += Math.ceil((new Date(s.endDate) - new Date(s.startDate)) / 86400000) + 1;
-        });
-        const _oMRemaining = _oMQuota - _oMUsed;
+        // חישוב יתרה — דרך אותו חישוב מרוכז של טבלת ניהול החופשים, כדי שחופש
+        // ידני (שנרשם גם כאילוץ וגם כסטטוס מיוחד) לא ייספר פעמיים, וכדי שהמצב
+        // כאן יהיה זהה למצב בכל שאר המקומות.
+        const _oMVac = window._computeVacUsage(emp);
+        const _oMRemaining = _oMVac.remaining;
         const _balEl = document.getElementById("editVacationBalance");
-        if (_balEl) _balEl.innerHTML = `נוצלו: <b>${window._fmtVac(_oMUsed)}</b> | נשארו: <b style="color:${_oMRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${window._fmtVac(_oMRemaining)}</b>`;
+        if (_balEl) _balEl.innerHTML = `נוצלו: <b>${window._fmtVac(_oMVac.used)}</b> | נשארו: <b style="color:${_oMRemaining < 0 ? 'var(--md-error)' : 'var(--md-success)'}">${window._fmtVac(_oMRemaining)}</b>`;
 
         // שדות מנהל על
         document.getElementById("editPersonalId").value = emp.personalId || "";
@@ -8884,8 +8962,11 @@
         const hasM = emp.constraints.includes(`${day}-בוקר`);
         const hasE = emp.constraints.includes(`${day}-ערב`);
         const hasN = emp.constraints.includes(`${day}-לילה`);
-        document.getElementById(`con_${day}_full`).checked =
-          hasM && hasE && hasN;
+        const _isFull = hasM && hasE && hasN;
+        document.getElementById(`con_${day}_full`).checked = _isFull;
+        // גם סימון 3 המשמרות ידנית = יום חופש מלא → מסנכרן סטטוס מצטבר
+        // (כמו כפתור "🌴 חופש"), כדי שיירד ממכסת החופש.
+        window._syncManualVacationStatus(emp, day, _isFull);
       };
 
       window.toggleFullDay = function (id, day) {
