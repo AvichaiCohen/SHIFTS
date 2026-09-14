@@ -71,6 +71,14 @@
           ".write": "auth != null && !data.exists()"
         }
       }
+    },
+    "shiftSwapRequests": {
+      "$id": {
+        ".write": "auth != null && !data.exists()",
+        "targetResponse": {
+          ".write": "auth != null && !data.exists()"
+        }
+      }
     }
   }
 }

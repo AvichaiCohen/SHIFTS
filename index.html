@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827p";
+        var BUILD = "20260827q";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -760,6 +760,17 @@
               window.renderSwapRequestsManager();
           });
 
+          window.shiftSwapRequests = {};
+          onValue(ref(db, "shiftSwapRequests"), (snapshot) => {
+            window.shiftSwapRequests = snapshot.exists()
+              ? snapshot.val() || {}
+              : {};
+            if (typeof window.renderMySwapRequests === "function")
+              window.renderMySwapRequests();
+            if (typeof window.renderSwapRequestsManager === "function")
+              window.renderSwapRequestsManager();
+          });
+
           // לוח שנה של חגים — תאריכים אמיתיים, נכתב ע"י המנהל הראשי בלבד.
           // כל שינוי מרענן את הלוח (כי isHoliday תלוי בזה) ואת בדיקת ההתנגשות
           // בין בקשות חופש לחגים.
@@ -804,7 +815,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827p" />
+    <link rel="stylesheet" href="style.css?v=20260827q" />
   </head>
   <body>
     <div
@@ -5050,6 +5061,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827p"></script>
+    <script src="script.js?v=20260827q"></script>
   </body>
 </html>

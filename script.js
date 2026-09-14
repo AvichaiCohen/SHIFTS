@@ -5385,10 +5385,168 @@
         window.toast(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
       };
 
+      // ===== החלפת משמרת בודדת בין עובדים (מהסיכום השבועי; באישור מנהל) =====
+      // יום↔יום / לילה↔לילה: החלפת מקום/משמרת באותו יום.
+      // יום↔לילה: מתחלפים באותו יום, ובנוסף משמרת יום-D+1 של איש-היום עוברת
+      // לאיש-הלילה (כי איש-היום הפך ל"אחרי-לילה" וצריך לנוח למחרת).
+      window.shiftSwapRequests = window.shiftSwapRequests || {};
+      window._NIGHT_SHIFTS = ["לילה", "24 שעות"];
+
+      window.requestShiftSwap = async function (day, shift, loc) {
+        const me = window.loggedInWorker || window.loggedInUser;
+        if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
+        const data = window.currentSchedule || {};
+        const shiftsToCheck = [...(window.currentShifts || ["בוקר", "ערב", "לילה"])];
+        if ((data.matalUnderstaff || window.isEmergencyMode) && !shiftsToCheck.includes("24 שעות"))
+          shiftsToCheck.push("24 שעות");
+        const candidates = [];
+        (window.staff || [])
+          .filter((e) => e.isActive !== false && String(e.id) !== String(me.id))
+          .forEach((e) => {
+            let found = null;
+            shiftsToCheck.forEach((s) =>
+              baseLocs.forEach((l) => {
+                const arr = data[`${day}-${s}`] && data[`${day}-${s}`][l];
+                if (arr && arr.find((x) => String(x.id) === String(e.id))) found = { shift: s, loc: l };
+              }),
+            );
+            if (found) candidates.push({ emp: e, shift: found.shift, loc: found.loc });
+          });
+        if (candidates.length === 0) { window.toast(`אין עובדים אחרים משובצים ביום ${day} להחלפה.`); return; }
+        const target = await window.choiceDialog({
+          title: `🔄 החלפת משמרת — יום ${day}`,
+          message: `את/ה משובץ/ת ל${shift} · ${window.getLocName(loc)}.\nעם מי להחליף?`,
+          options: candidates.map((c) => ({
+            label: `${c.emp.name} — ${c.shift} · ${window.getLocName(c.loc)}`,
+            value: String(c.emp.id),
+          })),
+        });
+        if (!target) return;
+        const chosen = candidates.find((c) => String(c.emp.id) === String(target));
+        if (!chosen) return;
+        const id = Date.now() + Math.floor(Math.random() * 10000);
+        const req = {
+          id,
+          weekKey: window.currentSelectedWeek,
+          day,
+          fromEmpId: me.id, fromEmpName: me.name, fromShift: shift, fromLoc: loc,
+          toEmpId: chosen.emp.id, toEmpName: chosen.emp.name, toShift: chosen.shift, toLoc: chosen.loc,
+          ts: id,
+        };
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("shiftSwapRequests/" + id, req);
+        window.toast(`✅ בקשת ההחלפה נשלחה ל${chosen.emp.name}.\nלאחר שיאשר, הבקשה תעבור לאישור המנהל.`);
+      };
+
+      window.respondShiftSwap = function (reqId, approve) {
+        if (typeof window.saveToCloud !== "function") return;
+        window.saveToCloud("shiftSwapRequests/" + reqId + "/targetResponse", {
+          approved: approve, ts: Date.now(),
+        });
+        window.toast(approve ? "✅ אישרת את ההחלפה. הבקשה תועבר לאישור המנהל." : "הבקשה נדחתה.");
+      };
+
+      // מבצע בפועל את ההחלפה על אובייקט לוח נתון (sched) לפי הבקשה r
+      window._applyShiftSwap = function (sched, r) {
+        const isNight = (s) => window._NIGHT_SHIFTS.includes(s);
+        const slot = (day, s, loc) => (sched[`${day}-${s}`] && sched[`${day}-${s}`][loc]) || null;
+        const full = (empId, fallback) => {
+          const f = (window.staff || []).find((e) => String(e.id) === String(empId));
+          return f ? { ...f } : fallback ? { ...fallback } : { id: empId };
+        };
+        const takeOut = (arr, empId) => {
+          if (!arr) return null;
+          const i = arr.findIndex((x) => String(x.id) === String(empId));
+          return i > -1 ? arr.splice(i, 1)[0] : null;
+        };
+        const putIn = (arr, obj) => {
+          if (arr && !arr.find((x) => String(x.id) === String(obj.id))) arr.push(obj);
+        };
+
+        const fromNight = isNight(r.fromShift);
+        const toNight = isNight(r.toShift);
+
+        if (fromNight === toNight) {
+          // יום↔יום או לילה↔לילה — החלפת מקום/משמרת באותו יום
+          const aArr = slot(r.day, r.fromShift, r.fromLoc);
+          const bArr = slot(r.day, r.toShift, r.toLoc);
+          const a = takeOut(aArr, r.fromEmpId);
+          const b = takeOut(bArr, r.toEmpId);
+          if (a !== null || b !== null) {
+            putIn(aArr, { ...full(r.toEmpId, b), isLocked: a ? !!a.isLocked : false });
+            putIn(bArr, { ...full(r.fromEmpId, a), isLocked: b ? !!b.isLocked : false });
+          }
+          return;
+        }
+
+        // יום↔לילה — קובעים מי איש-הלילה (N) ומי איש-היום (Dy)
+        const N = fromNight
+          ? { id: r.fromEmpId, shift: r.fromShift, loc: r.fromLoc }
+          : { id: r.toEmpId, shift: r.toShift, loc: r.toLoc };
+        const Dy = fromNight
+          ? { id: r.toEmpId, shift: r.toShift, loc: r.toLoc }
+          : { id: r.fromEmpId, shift: r.fromShift, loc: r.fromLoc };
+        // 1) אותו יום: Dy → משמרת הלילה של N, N → משמרת היום של Dy
+        const nightArr = slot(r.day, N.shift, N.loc);
+        const dayArr = slot(r.day, Dy.shift, Dy.loc);
+        const nObj = takeOut(nightArr, N.id);
+        const dObj = takeOut(dayArr, Dy.id);
+        if (dObj) putIn(nightArr, { ...full(Dy.id, dObj), isLocked: nObj ? !!nObj.isLocked : false });
+        if (nObj) putIn(dayArr, { ...full(N.id, nObj), isLocked: dObj ? !!dObj.isLocked : false });
+        // 2) משמרת יום-D+1 של Dy עוברת ל-N (Dy כעת אחרי-לילה → נח למחרת)
+        const dIdx = days.indexOf(r.day);
+        if (dIdx > -1 && dIdx < days.length - 1) {
+          const nextDay = days[dIdx + 1];
+          const allShifts = [...new Set([...(window.currentShifts || ["בוקר", "ערב", "לילה"]), "לילה", "24 שעות"])];
+          allShifts.forEach((s) =>
+            baseLocs.forEach((l) => {
+              const arr = slot(nextDay, s, l);
+              if (!arr) return;
+              const i = arr.findIndex((x) => String(x.id) === String(Dy.id));
+              if (i > -1) {
+                const wasLocked = !!arr[i].isLocked;
+                arr[i] = { ...full(N.id, { id: N.id }), isLocked: wasLocked };
+              }
+            }),
+          );
+        }
+      };
+
+      window.finalizeShiftSwap = async function (reqId, approve) {
+        const r = (window.shiftSwapRequests || {})[reqId];
+        if (!r) return;
+        if (approve) {
+          const fb = window._fbImports;
+          let sched = null;
+          if (r.weekKey === window.currentSelectedWeek) sched = window.currentSchedule;
+          else if (fb && window._firebaseDb) {
+            try {
+              const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + r.weekKey));
+              sched = snap.exists() ? snap.val() : null;
+            } catch (e) {
+              window.toast("שגיאה בטעינת השבוע: " + (e.message || e));
+              return;
+            }
+          }
+          if (sched) {
+            window._applyShiftSwap(sched, r);
+            if (typeof window.saveToCloud === "function")
+              window.saveToCloud("schedules/" + r.weekKey, sched);
+            if (r.weekKey === window.currentSelectedWeek && typeof window.renderTable === "function")
+              window.renderTable(window.currentSchedule, window.currentNotesLog);
+          }
+        }
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("shiftSwapRequests/" + reqId + "/adminDecision", {
+            approved: approve, ts: Date.now(),
+          });
+        window.toast(approve ? "✅ ההחלפה בוצעה." : "הבקשה נדחתה.");
+      };
+
       // ===== תצוגה מאוחדת של כל בקשות ההחלפה (משימות + חגים + סופ"שים) =====
       // מחליפה את מה שהיה קודם 2-3 טבלאות נפרדות — כדי שגם למשתמש שממתין
       // לתגובה וגם למנהל שמאשר סופית יהיה מקום אחד לכל סוגי ההחלפות.
-      window._SWAP_KIND_LABELS = { task: "משימה", holiday: "חג", weekend: 'סופ"ש' };
+      window._SWAP_KIND_LABELS = { task: "משימה", holiday: "חג", weekend: 'סופ"ש', shift: "משמרת" };
       window._collectMySwapItems = function () {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) return [];
@@ -5397,6 +5555,7 @@
           ["task", window.taskSwapRequests],
           ["holiday", window.holidaySwapRequests],
           ["weekend", window.weekendSwapRequests],
+          ["shift", window.shiftSwapRequests],
         ].forEach(([kind, pool]) => {
           Object.values(pool || {})
             .filter(Boolean)
@@ -5409,6 +5568,9 @@
         return items;
       };
       window._swapItemDetail = function (kind, r) {
+        if (kind === "shift") {
+          return `יום ${window.escapeHtml(r.day)}: ${window.escapeHtml(r.fromShift)}·${window.escapeHtml(window.getLocName(r.fromLoc))} ↔ ${window.escapeHtml(r.toShift)}·${window.escapeHtml(window.getLocName(r.toLoc))}`;
+        }
         if (kind === "task") {
           const fDate = r.date ? r.date.split("-").reverse().join(".") : "";
           return `${window.escapeHtml(r.taskLabel)}${fDate ? " (" + window.escapeHtml(fDate) + ")" : ""}`;
@@ -5420,8 +5582,8 @@
           .join(", ");
         return `${window.escapeHtml(r.weekLabel)}${daysStr ? " (" + window.escapeHtml(daysStr) + ")" : ""}`;
       };
-      window._SWAP_RESPOND_FN = { task: "respondTaskSwap", holiday: "respondHolidaySwap", weekend: "respondWeekendSwap" };
-      window._SWAP_FINALIZE_FN = { task: "finalizeTaskSwap", holiday: "finalizeHolidaySwap", weekend: "finalizeWeekendSwap" };
+      window._SWAP_RESPOND_FN = { task: "respondTaskSwap", holiday: "respondHolidaySwap", weekend: "respondWeekendSwap", shift: "respondShiftSwap" };
+      window._SWAP_FINALIZE_FN = { task: "finalizeTaskSwap", holiday: "finalizeHolidaySwap", weekend: "finalizeWeekendSwap", shift: "finalizeShiftSwap" };
 
       // רשימת בקשות החלפה שממתינות לתגובתי (אני העובד המוזמן) — כל הסוגים יחד
       window.renderMySwapRequests = function () {
@@ -5455,6 +5617,7 @@
           ["task", window.taskSwapRequests],
           ["holiday", window.holidaySwapRequests],
           ["weekend", window.weekendSwapRequests],
+          ["shift", window.shiftSwapRequests],
         ].forEach(([kind, pool]) => {
           Object.values(pool || {})
             .filter(Boolean)
@@ -5783,9 +5946,12 @@
             new Date().toDateString() === cd.toDateString()
               ? "background:rgba(25,118,210,0.08);"
               : "";
+          const _swapBtn = foundShift
+            ? `<button class="btn btn-outlined" style="margin-right:10px; padding:2px 10px; font-size:0.72rem;" onclick="window.requestShiftSwap('${d}','${foundShift}','${(foundLoc || "").replace(/"/g, "&quot;")}')" title="בקשת החלפת משמרת (באישור המנהל)">🔄 החלף</button>`
+            : "";
           rows += `<tr style="border-bottom:1px solid var(--md-divider); ${isTodayRow}">
             <td style="padding:10px;"><b style="font-size:1.05rem;">${d}</b> <small style="color:var(--md-text-secondary);">${dateStr}</small></td>
-            <td style="padding:10px; color:${color}; font-weight:bold;">${val}</td>
+            <td style="padding:10px; color:${color}; font-weight:bold;">${val}${_swapBtn}</td>
           </tr>`;
         });
         const weekLabel = window.formatWeekString(weekSun);
