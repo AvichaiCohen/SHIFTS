@@ -1035,6 +1035,17 @@
       body.dark-mode .pres-chip.special {
         color: #fca5a5;
       }
+      /* אחמ"ש — הדגשת מי שסומן כאחראי משמרת כשלוחצים על כפתור "👑 אחמ"ש" */
+      body.highlight-achmash .name-chip:not(.is-achmash),
+      body.highlight-achmash .mobile-emp-chip:not(.is-achmash) {
+        opacity: 0.3;
+      }
+      body.highlight-achmash .name-chip.is-achmash,
+      body.highlight-achmash .mobile-emp-chip.is-achmash {
+        outline: 2px solid #d97706;
+        box-shadow: 0 0 0 3px rgba(217, 158, 11, 0.35) !important;
+        font-weight: 700;
+      }
       /* טבלאות - גלילה אופקית במובייל למניעת חריגה מהמסך */
       @media (max-width: 1024px) {
         .container table,

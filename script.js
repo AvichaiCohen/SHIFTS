@@ -2962,6 +2962,30 @@
         return !!(window.currentSchedule.shiftLocks && window.currentSchedule.shiftLocks[`${day}-${shift}-${loc}`]);
       };
 
+      // ===== אחמ"ש (אחראי משמרת) — אחד לכל משמרת (day-shift-loc) =====
+      // נשמר במפה currentSchedule.achmash[`${day}-${shift}-${loc}`] = empId.
+      window._isAchmash = function (day, shift, loc, empId) {
+        const m = (window.currentSchedule && window.currentSchedule.achmash) || {};
+        return String(m[`${day}-${shift}-${loc}`]) === String(empId);
+      };
+      window.toggleAchmash = function (day, shift, loc, empId) {
+        if (!window.currentSchedule.achmash) window.currentSchedule.achmash = {};
+        const key = `${day}-${shift}-${loc}`;
+        if (String(window.currentSchedule.achmash[key]) === String(empId))
+          delete window.currentSchedule.achmash[key];
+        else window.currentSchedule.achmash[key] = empId;
+        window.triggerUnsavedChanges(); // מרנדר מחדש את הלוח (הכתר יופיע/ייעלם)
+      };
+      // כפתור "👑 אחמ"ש" — מדגיש את כל האחמ"שים ומעמעם את השאר (CSS בלבד).
+      window.toggleAchmashHighlight = function () {
+        const on = document.body.classList.toggle("highlight-achmash");
+        const btn = document.getElementById("achmashHighlightBtn");
+        if (btn)
+          btn.className = on
+            ? "btn btn-contained manager-only"
+            : "btn btn-outlined manager-only";
+      };
+
       window.selectMobileDay = function (dayIndex) {
         window.currentMobileDay = dayIndex;
         const daySelect = document.getElementById("mobileDaySelect");
@@ -10600,7 +10624,14 @@
                 const warnIcon = _warns.length
                   ? ` <span class="assign-warn-icon" title="${_warns.join(" | ").replace(/"/g, "&quot;")}" style="cursor:help;">⚠️</span>`
                   : "";
-                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${noteBtn}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
+                const _isAch = window._isAchmash(d, r.shift, r.loc, e.id);
+                const achEl =
+                  window.isEditMode && !window.isWorkerMode
+                    ? `<a class="remove-btn" style="color:${_isAch ? "#d97706" : "#cbd5e1"}; text-decoration:none;" onclick="window.toggleAchmash('${d}','${r.shift}','${safeLoc}',${e.id})" title="${_isAch ? "בטל אחמ״ש" : "סמן כאחמ״ש"}">👑</a>`
+                    : _isAch
+                      ? `<span title="אחמ״ש" style="margin-left:2px;">👑</span>`
+                      : "";
+                html += `<span class="name-chip chip-${t.replace(/\s+/g, "-")}${isMe}${_isAch ? " is-achmash" : ""}" data-role="${e.type}" data-name="${e.name}" ${dragAttr}>${removeBtn}${noteBtn}${achEl}${lockIcon}${e.name}${extraNote}${warnIcon}</span>`;
               });
             } else {
               html += `<span style="color:transparent;">.</span>`;
@@ -10865,8 +10896,15 @@
               const chipShadow = _isPendingSwapSrc
                 ? "0 0 0 2px #f59e0b"
                 : "0 1px 2px rgba(0,0,0,0.02)";
+              const _mIsAch = window._isAchmash(d, r.shift, r.loc, emp.id);
+              const mAchEl =
+                window.isEditMode && !window.isWorkerMode
+                  ? `<span style="margin-right:8px; color:${_mIsAch ? "#d97706" : "#cbd5e1"}; cursor:pointer; padding:2px 6px;" onclick="window.toggleAchmash('${d}','${r.shift}','${safeLoc}',${emp.id})" title="${_mIsAch ? "בטל אחמ״ש" : "סמן כאחמ״ש"}">👑</span>`
+                  : _mIsAch
+                    ? `<span title="אחמ״ש" style="margin-right:4px;">👑</span>`
+                    : "";
               // הכוכב הוסר כאן
-              html += `<div class="mobile-emp-chip${isMe}" style="display:inline-flex; align-items:center; background:var(--md-bg); padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid var(--md-divider); box-shadow:${chipShadow};">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${swapBtn}${noteBtn}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:var(--md-text-secondary); margin-right:4px;">(${window.escapeHtml(emp.note)})</small>` : ""}${mWarnIcon}</div>`;
+              html += `<div class="mobile-emp-chip${isMe}${_mIsAch ? " is-achmash" : ""}" style="display:inline-flex; align-items:center; background:var(--md-bg); padding:10px 16px; margin:6px 4px; border-radius:20px; font-size:1rem; border:1px solid var(--md-divider); box-shadow:${chipShadow};">${!window.isWorkerMode ? `<span class="mobile-remove-btn" style="margin-right:12px; color:#ef4444; font-weight:bold; cursor:pointer; padding:2px 6px;" onclick="window.removeEmp('${d}','${r.shift}','${safeLoc}',${emp.id})">✕</span>` : ""}${swapBtn}${noteBtn}${mAchEl}${lockIcon}<span style="font-weight:500;">👤 ${emp.name}</span>${emp.note ? `<small style="color:var(--md-text-secondary); margin-right:4px;">(${window.escapeHtml(emp.note)})</small>` : ""}${mWarnIcon}</div>`;
             });
           }
           if (window.isEditMode && !window.isWorkerMode) {
