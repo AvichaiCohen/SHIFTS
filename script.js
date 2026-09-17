@@ -1618,6 +1618,49 @@
                 : type || "בקשה";
       };
 
+      // ===== שורת מצב תפעולי מעל הלוח (מנהל) =====
+      // מרכזת "מה דורש ממני פעולה" במבט אחד, וכל אריח הוא קיצור דרך לפעולה.
+      window.renderOpsKpiBar = function () {
+        const bar = document.getElementById("opsKpiBar");
+        if (!bar) return;
+        if (window.isWorkerMode) { bar.innerHTML = ""; return; }
+        let pending = 0, swaps = 0, noShift = 0, checked = false;
+        try { pending = (window._pendingRequestsThisWeek() || []).length; } catch (e) {}
+        try {
+          [
+            window.taskSwapRequests,
+            window.holidaySwapRequests,
+            window.weekendSwapRequests,
+            window.shiftSwapRequests,
+          ].forEach((pool) =>
+            Object.values(pool || {})
+              .filter(Boolean)
+              .forEach((r) => {
+                if (r.targetResponse && r.targetResponse.approved === true && !r.adminDecision)
+                  swaps++;
+              }),
+          );
+        } catch (e) {}
+        try {
+          noShift = (window._buildStaffingCheckRows() || []).filter(
+            (r) => (r.shiftCount || 0) === 0,
+          ).length;
+        } catch (e) {}
+        try { checked = window._isStaffingFullyChecked(); } catch (e) {}
+
+        const tile = (icon, label, value, warn, onclick, title) =>
+          `<button class="ops-kpi${warn ? " warn" : ""}" onclick="${onclick}" title="${title}"><span class="ops-kpi-v">${icon} ${value}</span><span class="ops-kpi-l">${label}</span></button>`;
+
+        bar.innerHTML =
+          tile("⏳", "בקשות ממתינות", pending, pending > 0, "window.showPage('page-requests')", "מעבר לריכוז הבקשות") +
+          tile("🔄", "החלפות לאישור", swaps, swaps > 0, "window.showPage('page-tasks')", "מעבר לבקשות ההחלפה") +
+          tile("⬜", "בלי משמרת השבוע", noShift, noShift > 0, "window.checkFullStaffing()", "פתיחת בדיקת שיבוץ מלא") +
+          tile(checked ? "✅" : "⚠️", "בדיקת שיבוץ", checked ? "אושר" : "טרם", !checked, "window.checkFullStaffing()", "בדיקת שיבוץ מלא") +
+          (window.hasUnsavedChanges
+            ? tile("💾", "מצב שמירה", "לא נשמר", true, "window.commitChangesToCloud()", "שמור לענן")
+            : "");
+      };
+
       window.openStaffingCheckModal = function () {
         const rows = window
           ._buildStaffingCheckRows()
@@ -5669,6 +5712,7 @@
 
       // עבור המנהל: בקשות מכל הסוגים שאושרו ע"י העובד המוזמן וממתינות לאישור סופי
       window.renderSwapRequestsManager = function () {
+        if (typeof window.renderOpsKpiBar === "function") window.renderOpsKpiBar();
         const cont = document.getElementById("swapRequestsManagerContainer");
         if (!cont) return;
         const items = [];
@@ -8885,7 +8929,42 @@
             </table>
           </div>`;
         });
-        queueContainer.innerHTML = html;
+        queueContainer.innerHTML =
+          `<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-contained" style="background:#16a34a; padding:5px 14px; font-size:0.85rem;" onclick="window.approveAllPendingRequests()">✅ אשר הכל (${keys.length})</button>
+            <span style="font-size:0.78rem; color:var(--md-text-secondary);">מאשר את כל הבקשות הממתינות ומחיל אותן על הלוח</span>
+          </div>` + html;
+      };
+
+      // אישור מרוכז (Batch) של כל הבקשות הממתינות — חוסך לחיצה נפרדת לכל בקשה.
+      // מריץ ברצף (await) כי כל אישור כותב את הלוח של השבוע הרלוונטי.
+      window.approveAllPendingRequests = async function () {
+        const pending = {};
+        const idx = window._allPending || {};
+        Object.keys(idx).forEach((id) => { if (idx[id]) pending[id] = idx[id]; });
+        const cur =
+          (window.currentSchedule && window.currentSchedule.pendingRequests) || {};
+        Object.keys(cur).forEach((id) => { if (cur[id] && !pending[id]) pending[id] = cur[id]; });
+        const ids = Object.keys(pending);
+        if (ids.length === 0) { window.toast("אין בקשות ממתינות."); return; }
+        const ok = await window.confirmDialog({
+          title: "אישור כל הבקשות",
+          message: `לאשר את כל ${ids.length} הבקשות הממתינות?\nהן יוחלו על הלוח של השבוע הרלוונטי לכל בקשה.`,
+          confirmText: "אשר הכל",
+        });
+        if (!ok) return;
+        let done = 0;
+        for (const id of ids) {
+          try {
+            await window.processRequest(id, true, true);
+            done++;
+          } catch (e) {}
+        }
+        if (typeof window.renderPendingRequestsManager === "function")
+          window.renderPendingRequestsManager();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast(`✅ אושרו ${done} בקשות.`);
       };
 
       // החלת אישור בקשה על אובייקט לוח (constraint/pref) — משותף לשבוע נוכחי ועתידי
@@ -10664,6 +10743,7 @@
         if (!window.currentMobileDay) window.currentMobileDay = 1;
         if (typeof window._updateUnsavedIndicator === "function")
           window._updateUnsavedIndicator();
+        if (typeof window.renderOpsKpiBar === "function") window.renderOpsKpiBar();
         // אם המנהל אישר את כל השיבוץ ("בדוק שיבוץ מלא" — כולם אושרו והלוח לא
         // השתנה מאז) — לא מציגים יותר את סימוני האזהרה (⚠️) על הלוח.
         const _suppressWarns =

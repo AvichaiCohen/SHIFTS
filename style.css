@@ -1035,6 +1035,53 @@
       body.dark-mode .pres-chip.special {
         color: #fca5a5;
       }
+      /* שורת מצב תפעולי מעל הלוח — סטטוס במבט אחד + קיצור דרך לפעולה */
+      #opsKpiBar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+      #opsKpiBar:empty {
+        display: none;
+      }
+      .ops-kpi {
+        flex: 1 1 130px;
+        min-width: 118px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        background: transparent;
+        border: 1px solid var(--md-divider);
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+        text-align: right;
+        font-family: inherit;
+      }
+      .ops-kpi:hover {
+        border-color: var(--md-primary);
+      }
+      .ops-kpi.warn {
+        background: rgba(245, 158, 11, 0.1);
+        border-color: #f59e0b;
+      }
+      .ops-kpi-v {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: var(--md-text);
+      }
+      .ops-kpi.warn .ops-kpi-v {
+        color: #b45309;
+      }
+      body.dark-mode .ops-kpi.warn .ops-kpi-v {
+        color: #fcd34d;
+      }
+      .ops-kpi-l {
+        font-size: 0.75rem;
+        color: var(--md-text-secondary);
+      }
       /* סרגל "שינויים לא שמורים" — צף, מופיע רק כשיש שינויים ממתינים */
       #unsavedBar {
         position: fixed;
