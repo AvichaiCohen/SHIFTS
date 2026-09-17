@@ -1046,6 +1046,43 @@
       body.dark-mode .pres-chip.special {
         color: #fca5a5;
       }
+      /* אקורדיון וידג'טים בנייד — במקום עמוד אינסופי, כל פאנל הוא כותרת לחיצה */
+      .m-widget-toggle {
+        display: none;
+      }
+      @media (max-width: 1024px) {
+        .m-widget-toggle {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          background: var(--md-bg);
+          border: 1px solid var(--md-divider);
+          border-radius: 10px;
+          padding: 12px 14px;
+          font-family: inherit;
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: var(--md-text);
+          cursor: pointer;
+          text-align: start;
+        }
+        .m-widget-caret {
+          transition: transform 0.18s ease;
+          color: var(--md-primary);
+          font-size: 1.05rem;
+        }
+        [data-widget-key].m-collapsed .m-widget-caret {
+          transform: rotate(-90deg);
+        }
+        [data-widget-key].m-collapsed > .widget-body {
+          display: none !important;
+        }
+        [data-widget-key].m-collapsed {
+          padding-bottom: 0 !important;
+        }
+      }
       /* שורת מצב תפעולי מעל הלוח — סטטוס במבט אחד + קיצור דרך לפעולה */
       #opsKpiBar {
         display: flex;

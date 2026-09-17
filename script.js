@@ -657,6 +657,43 @@
       // שלו (מקורי או שהועבר אליו), ומיישם מיקום/הסתרה/גודל שמורים. ווידג'
       // בלי מיקום שמור (ראשוני, או חדש שנוסף בעדכון) מקבל מיקום ע"י
       // bin-packing פעם אחת בלבד — מכאן והלאה המשתמש שולט לגמרי בגרירה.
+      // ===== אקורדיון וידג'טים בנייד =====
+      // עמודים כמו "משימות" מכילים 7 פאנלים; בנייד כולם נפרסים לגובה מלא
+      // ויוצרים גלילה אינסופית. כאן כל פאנל מקבל כותרת-לחיצה ומכווץ כברירת
+      // מחדל, כך שהעמוד הופך לרשימת מקטעים קצרה. המצב נשמר ב-localStorage.
+      window._mWidgetOpen = function () {
+        try { return JSON.parse(localStorage.getItem("m_widget_open_v1")) || {}; }
+        catch (e) { return {}; }
+      };
+      window.toggleMobileWidget = function (key) {
+        const el = document.getElementById("widget-" + key);
+        if (!el) return;
+        const state = window._mWidgetOpen();
+        const nowOpen = el.classList.contains("m-collapsed"); // עומד להיפתח
+        el.classList.toggle("m-collapsed", !nowOpen);
+        state[key] = nowOpen;
+        try { localStorage.setItem("m_widget_open_v1", JSON.stringify(state)); } catch (e) {}
+      };
+      window._initMobileWidgetAccordion = function () {
+        const isMobile = window.innerWidth <= 1024;
+        const state = window._mWidgetOpen();
+        document.querySelectorAll("[data-widget-key]").forEach((el) => {
+          const key = el.getAttribute("data-widget-key");
+          let bar = el.querySelector(":scope > .m-widget-toggle");
+          if (!bar) {
+            const label = (window.WIDGET_REGISTRY[key] || {}).label || key;
+            bar = document.createElement("button");
+            bar.className = "m-widget-toggle";
+            bar.type = "button";
+            bar.innerHTML = `<span>${window.escapeHtml(label)}</span><span class="m-widget-caret">▾</span>`;
+            bar.addEventListener("click", () => window.toggleMobileWidget(key));
+            el.insertBefore(bar, el.firstChild);
+          }
+          // בדסקטופ לעולם לא מכווץ; בנייד — מכווץ אלא אם המשתמש פתח אותו
+          el.classList.toggle("m-collapsed", isMobile && state[key] !== true);
+        });
+      };
+
       window._applyWidgetPrefs = function () {
         const prefs0 = window._loadWidgetPrefs();
         const pagesNeeded = new Set();
@@ -694,7 +731,16 @@
           ),
         );
         pageIds.forEach((pageId) => window._updateHiddenWidgetsBtn(pageId));
+        window._initMobileWidgetAccordion();
       };
+      // מעבר בין נייד לדסקטופ (סיבוב מסך/שינוי גודל) — מיישר את מצב האקורדיון
+      window.addEventListener("resize", function () {
+        clearTimeout(window._mWidgetResizeT);
+        window._mWidgetResizeT = setTimeout(() => {
+          if (typeof window._initMobileWidgetAccordion === "function")
+            window._initMobileWidgetAccordion();
+        }, 200);
+      });
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", window._applyWidgetPrefs);
         document.addEventListener("DOMContentLoaded", window._flushPendingToast);
@@ -1341,19 +1387,111 @@
             "<p style='color:var(--text-muted); font-style:italic; text-align:center;'>אין הודעות.</p>";
           return;
         }
-        cont.innerHTML = sorted
+        // ניקוי הודעות — רק למנהל הראשי (הוא היחיד עם הרשאת כתיבה ל-notifications)
+        const canDelete = window.currentUserRole === "superAdmin";
+        const DAY = 86400000;
+        const oldCount = sorted.filter((n) => Date.now() - (n.ts || 0) > 30 * DAY).length;
+        let html = "";
+        if (canDelete) {
+          html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            ${oldCount > 0 ? `<button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.clearOldNotifications(30)">🧹 נקה ישנות מ-30 יום (${oldCount})</button>` : ""}
+            <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.clearAllNotifications()">🗑 מחק הכל</button>
+          </div>`;
+        }
+        html += sorted
           .map((n) => {
             const d = n.ts ? new Date(n.ts) : null;
             const dateStr = d
               ? `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
               : "";
-            return `<div style="border-bottom:1px solid var(--md-divider); padding:10px 4px;">
-              <div style="font-weight:bold; color:var(--md-primary);">${window.escapeHtml(n.title)}</div>
+            const isOld = Date.now() - (n.ts || 0) > 30 * DAY;
+            const delBtn = canDelete
+              ? `<button title="מחק הודעה" style="background:none; border:none; cursor:pointer; color:var(--md-error); font-size:1rem; line-height:1;" onclick="window.deleteMyNotification('${n.id}')">🗑</button>`
+              : "";
+            return `<div style="border-bottom:1px solid var(--md-divider); padding:10px 4px; ${isOld ? "opacity:0.65;" : ""}">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                <div style="font-weight:bold; color:var(--md-primary);">${window.escapeHtml(n.title)}</div>
+                ${delBtn}
+              </div>
               <div style="font-size:0.9rem; margin-top:4px; white-space:pre-wrap;">${window.escapeHtml(n.body)}</div>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${dateStr}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${dateStr}${isOld ? " · ישנה" : ""}</div>
             </div>`;
           })
           .join("");
+        cont.innerHTML = html;
+      };
+
+      // ===== ניקוי תיבת ההודעות (מנהל ראשי בלבד) =====
+      window._removeNotifFromCloud = function (notifId) {
+        const myKey = window._myNotifKey();
+        const { ref, remove } = window._fbImports || {};
+        if (!myKey || !ref || !remove || !window._firebaseDb) return;
+        remove(ref(window._firebaseDb, "notifications/" + myKey + "/" + notifId));
+      };
+
+      window.deleteMyNotification = async function (notifId) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול למחוק הודעות.");
+          return;
+        }
+        if (!(await window.confirmDialog({
+          title: "מחיקת הודעה",
+          message: "למחוק את ההודעה הזו?",
+          confirmText: "מחק",
+          danger: true,
+        }))) return;
+        window._removeNotifFromCloud(notifId);
+        window.myNotifications = (window.myNotifications || []).filter(
+          (n) => String(n.id) !== String(notifId),
+        );
+        window.renderNotifications();
+        window._updateNotifBadge();
+      };
+
+      window.clearOldNotifications = async function (days) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול למחוק הודעות.");
+          return;
+        }
+        const cutoff = Date.now() - (days || 30) * 86400000;
+        const old = (window.myNotifications || []).filter((n) => (n.ts || 0) < cutoff);
+        if (old.length === 0) { window.toast("אין הודעות ישנות למחיקה."); return; }
+        if (!(await window.confirmDialog({
+          title: "ניקוי הודעות ישנות",
+          message: `למחוק ${old.length} הודעות שישנות מ-${days} יום?`,
+          confirmText: "נקה",
+          danger: true,
+        }))) return;
+        old.forEach((n) => window._removeNotifFromCloud(n.id));
+        window.myNotifications = (window.myNotifications || []).filter(
+          (n) => (n.ts || 0) >= cutoff,
+        );
+        window.renderNotifications();
+        window._updateNotifBadge();
+        window.toast(`🧹 נמחקו ${old.length} הודעות ישנות.`);
+      };
+
+      window.clearAllNotifications = async function () {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול למחוק הודעות.");
+          return;
+        }
+        const all = window.myNotifications || [];
+        if (all.length === 0) { window.toast("אין הודעות."); return; }
+        if (!(await window.confirmDialog({
+          title: "מחיקת כל ההודעות",
+          message: `למחוק את כל ${all.length} ההודעות בתיבה? הפעולה אינה הפיכה.`,
+          confirmText: "מחק הכל",
+          danger: true,
+        }))) return;
+        const myKey = window._myNotifKey();
+        const { ref, remove } = window._fbImports || {};
+        if (myKey && ref && remove && window._firebaseDb)
+          remove(ref(window._firebaseDb, "notifications/" + myKey));
+        window.myNotifications = [];
+        window.renderNotifications();
+        window._updateNotifBadge();
+        window.toast("🗑 תיבת ההודעות נוקתה.");
       };
 
       // בונה את בוחר היעדים: "כל הצוות" + קבוצות לפי תפקיד + עובדים ספציפיים.
@@ -2341,20 +2479,99 @@
       };
 
       // רשימת הבקשות של העובד וסטטוסן (בעמוד הגשת הבקשות)
+      // ===== הסתרת בקשות ישנות (מקומית למכשיר) =====
+      // עובד אנונימי אינו יכול למחוק מ-myRequests בענן (חוק create-only), לכן
+      // "ניקוי" הוא הסתרה מקומית ב-localStorage — הנתון בענן נשאר לתיעוד.
+      window._loadHiddenReqs = function () {
+        try {
+          return new Set(JSON.parse(localStorage.getItem("my_req_hidden_v1")) || []);
+        } catch (e) { return new Set(); }
+      };
+      window._saveHiddenReqs = function (set) {
+        try { localStorage.setItem("my_req_hidden_v1", JSON.stringify([...set])); } catch (e) {}
+      };
+      window.hideMyRequest = function (reqId) {
+        const s = window._loadHiddenReqs();
+        s.add(String(reqId));
+        window._saveHiddenReqs(s);
+        window.renderMyRequestsList();
+      };
+      window.unhideAllMyRequests = function () {
+        window._saveHiddenReqs(new Set());
+        window.renderMyRequestsList();
+        window.toast("↩️ כל הבקשות המוסתרות הוחזרו.");
+      };
+      window.hideResolvedMyRequests = async function () {
+        const reqs = window._myRequests || {};
+        const done = Object.values(reqs).filter(
+          (r) => r && r.status && r.status !== "pending",
+        );
+        if (done.length === 0) { window.toast("אין בקשות סגורות להסתרה."); return; }
+        if (!(await window.confirmDialog({
+          title: "ניקוי בקשות סגורות",
+          message: `להסתיר ${done.length} בקשות שכבר טופלו (אושרו/נדחו/בוטלו)?\nהן יוסתרו מהרשימה שלך במכשיר הזה בלבד — הנתונים נשמרים.`,
+          confirmText: "הסתר",
+        }))) return;
+        const s = window._loadHiddenReqs();
+        done.forEach((r) => s.add(String(r.id)));
+        window._saveHiddenReqs(s);
+        window.renderMyRequestsList();
+        window.toast(`🧹 הוסתרו ${done.length} בקשות.`);
+      };
+      window._myReqFilters = window._myReqFilters || { month: "", type: "", status: "" };
+      window.setMyReqFilter = function (key, val) {
+        window._myReqFilters[key] = val || "";
+        window.renderMyRequestsList();
+      };
+
       window.renderMyRequestsList = function () {
         const cont = document.getElementById("myRequestsList");
         if (!cont) return;
         const reqs = window._myRequests || {};
-        const arr = Object.keys(reqs)
+        const hidden = window._loadHiddenReqs();
+        const all = Object.keys(reqs)
           .map((k) => reqs[k])
           .filter((r) => r && r.date && r.type) // התעלם מרשומות לא תקינות
           .sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        if (arr.length === 0) {
+        if (all.length === 0) {
           cont.innerHTML =
             "<i style='color:var(--md-text-secondary)'>עדיין לא הגשת בקשות.</i>";
           return;
         }
-        let html = "";
+
+        // --- בוררי סינון: חודש / סוג / סטטוס ---
+        const f = window._myReqFilters;
+        const HEB_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+        const months = [...new Set(all.map((r) => (r.date || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+        const statusOf = (r) => (!r.status || r.status === "pending" ? "pending" : r.status);
+        const STATUS_LBL = { pending: "⏳ ממתינה", approved: "✅ אושרה", rejected: "❌ נדחתה", cancelled: "🚫 בוטלה" };
+        const types = [...new Set(all.map((r) => r.type).filter(Boolean))];
+        const sel = (id, key, cur, opts, allLabel) =>
+          `<select onchange="window.setMyReqFilter('${key}', this.value)" style="padding:5px 9px; border-radius:8px; border:1px solid var(--md-divider); font-size:0.82rem;">
+            <option value="">${allLabel}</option>
+            ${opts.map((o) => `<option value="${o.v}" ${cur === o.v ? "selected" : ""}>${o.l}</option>`).join("")}
+          </select>`;
+
+        let list = all.filter((r) => !hidden.has(String(r.id)));
+        if (f.month) list = list.filter((r) => (r.date || "").slice(0, 7) === f.month);
+        if (f.type) list = list.filter((r) => r.type === f.type);
+        if (f.status) list = list.filter((r) => statusOf(r) === f.status);
+
+        const resolvedCount = all.filter((r) => r.status && r.status !== "pending" && !hidden.has(String(r.id))).length;
+        let html = `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+          ${sel("m", "month", f.month, months.map((m) => ({ v: m, l: `${HEB_M[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}` })), "📅 כל החודשים")}
+          ${sel("t", "type", f.type, types.map((t) => ({ v: t, l: window._reqTypeLabel(t) })), "📋 כל הסוגים")}
+          ${sel("s", "status", f.status, Object.keys(STATUS_LBL).map((k) => ({ v: k, l: STATUS_LBL[k] })), "🏷️ כל הסטטוסים")}
+          ${resolvedCount > 0 ? `<button class="btn btn-outlined" style="padding:4px 10px; font-size:0.78rem;" onclick="window.hideResolvedMyRequests()">🧹 נקה סגורות (${resolvedCount})</button>` : ""}
+          ${hidden.size > 0 ? `<button class="btn btn-outlined" style="padding:4px 10px; font-size:0.78rem;" onclick="window.unhideAllMyRequests()">↩️ הצג מוסתרות (${hidden.size})</button>` : ""}
+        </div>`;
+
+        if (list.length === 0) {
+          html += `<i style="color:var(--md-text-secondary)">אין בקשות שתואמות לסינון.</i>`;
+          cont.innerHTML = html;
+          return;
+        }
+        const arr = list;
         arr.forEach((r) => {
           const badge =
             r.status === "approved"
@@ -2368,7 +2585,7 @@
           const isPending = !r.status || r.status === "pending";
           const cancelBtn = isPending
             ? `<button class="btn btn-outlined" style="padding:3px 10px; font-size:0.78rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.cancelMyRequest('${r.id}')">בטל</button>`
-            : "";
+            : `<button title="הסתר מהרשימה שלי" style="background:none; border:none; cursor:pointer; color:var(--md-text-secondary); font-size:0.95rem; line-height:1;" onclick="window.hideMyRequest('${r.id}')">🗑</button>`;
           html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--md-divider);">
             <div><div style="font-weight:500;">${window._reqDesc(r)}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${window.escapeHtml(r.note)}</div>` : ""}</div>
             <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">${badge}${cancelBtn}</div>
