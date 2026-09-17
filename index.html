@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827t";
+        var BUILD = "20260827u";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -817,7 +817,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827t" />
+    <link rel="stylesheet" href="style.css?v=20260827u" />
   </head>
   <body>
     <div
@@ -1298,12 +1298,12 @@
               style="display: flex; gap: 10px; flex-wrap: wrap"
             >
               <button
-                class="btn btn-contained"
-                style="background: #16a34a"
+                class="btn btn-outlined"
+                style="padding: 5px 10px; font-size: 0.8rem"
                 onclick="window.commitChangesToCloud()"
-                title="שמירת הלוח הנוכחי לענן"
+                title="שמירת הלוח הנוכחי לענן (כשיש שינויים — יופיע גם סרגל שמירה צף)"
               >
-                💾 שמור לענן
+                💾
               </button>
               <button
                 class="btn btn-outlined"
@@ -4116,6 +4116,28 @@
       </div>
     </div>
 
+    <!-- מרכז פעולות — כל מה שדורש אישור, צף מעל המסך הנוכחי -->
+    <div id="actionCenterModal" class="modal">
+      <div class="modal-content" style="max-width: 820px">
+        <h3 style="color: var(--md-primary); margin-top: 0">⚡ מרכז פעולות</h3>
+        <p
+          style="
+            font-size: 0.82rem;
+            color: var(--md-text-secondary);
+            margin-top: 0;
+          "
+        >
+          כל מה שממתין להחלטה שלך, במקום אחד — בלי לעזוב את המסך הנוכחי.
+        </p>
+        <div id="actionCenterContent"></div>
+        <div style="text-align: left; margin-top: 16px">
+          <button class="btn btn-outlined" onclick="window.closeActionCenter()">
+            סגור
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="staffingCheckModal" class="modal">
       <div class="modal-content" style="max-width: 900px">
         <h3 style="color: var(--md-primary); margin-top: 0">
@@ -5086,6 +5108,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827t"></script>
+    <script src="script.js?v=20260827u"></script>
   </body>
 </html>

@@ -1446,8 +1446,20 @@
       window._updateUnsavedIndicator = function () {
         const bar = document.getElementById("unsavedBar");
         if (!bar) return;
-        if (window.hasUnsavedChanges) bar.classList.add("show");
-        else bar.classList.remove("show");
+        if (window._cloudSaving) {
+          // מצב טעינה — פידבק מיידי שהשמירה בעיצומה
+          bar.innerHTML = `<span>⏳ שומר לענן…</span>`;
+          bar.classList.add("show");
+          return;
+        }
+        if (window.hasUnsavedChanges) {
+          bar.innerHTML =
+            `<span>⚠️ יש שינויים שלא נשמרו</span>` +
+            `<button onclick="window.commitChangesToCloud()">💾 שמור עכשיו</button>`;
+          bar.classList.add("show");
+        } else {
+          bar.classList.remove("show");
+        }
       };
 
       // רשת ביטחון: אזהרה לפני סגירה/רענון כשיש שינויים שטרם נשמרו לענן
@@ -1468,6 +1480,15 @@
 
       window.commitChangesToCloud = function () {
         if (typeof window.saveToCloud !== "function") return;
+        if (window._cloudSaving) return; // מניעת לחיצה כפולה בזמן שמירה
+        window._cloudSaving = true;
+        window._updateUnsavedIndicator();
+        // רשת ביטחון: אם מסיבה כלשהי השמירה לא מסתיימת, לא נשארים תקועים ב"שומר…"
+        clearTimeout(window._cloudSavingTimer);
+        window._cloudSavingTimer = setTimeout(() => {
+          window._cloudSaving = false;
+          window._updateUnsavedIndicator();
+        }, 8000);
         window.currentSchedule.staff = window.staff;
         const wk = window.currentSelectedWeek;
 
@@ -1515,6 +1536,8 @@
           if (typeof window.updateWeekendHistory === "function")
             window.updateWeekendHistory();
           window.hasUnsavedChanges = false;
+          window._cloudSaving = false;
+          clearTimeout(window._cloudSavingTimer);
           window._updateUnsavedIndicator();
           window.toast('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
         };
@@ -1677,6 +1700,135 @@
                 : type || "בקשה";
       };
 
+      // ===== מרכז פעולות — כל הפריטים שממתינים להחלטת המנהל, במודל צף =====
+      // מחליף ניווט לעמודים (שהיה זורק את המנהל לעמוד ריק ומאלץ חזרה ידנית).
+      window._collectAllPending = function () {
+        const pending = {};
+        const idx = window._allPending || {};
+        Object.keys(idx).forEach((id) => { if (idx[id]) pending[id] = idx[id]; });
+        const cur =
+          (window.currentSchedule && window.currentSchedule.pendingRequests) || {};
+        Object.keys(cur).forEach((id) => {
+          if (cur[id] && !pending[id])
+            pending[id] = Object.assign({}, cur[id], {
+              weekKey: window.currentSelectedWeek,
+            });
+        });
+        return pending;
+      };
+
+      window._collectPendingSwaps = function () {
+        const items = [];
+        [
+          ["task", window.taskSwapRequests],
+          ["holiday", window.holidaySwapRequests],
+          ["weekend", window.weekendSwapRequests],
+          ["shift", window.shiftSwapRequests],
+        ].forEach(([kind, pool]) =>
+          Object.values(pool || {})
+            .filter(Boolean)
+            .forEach((r) => {
+              if (r.targetResponse && r.targetResponse.approved === true && !r.adminDecision)
+                items.push({ kind, r });
+            }),
+        );
+        items.sort((a, b) => (a.r.ts || 0) - (b.r.ts || 0));
+        return items;
+      };
+
+      window.openActionCenter = function (section) {
+        window._acSection = section || "";
+        window.renderActionCenter();
+        const m = document.getElementById("actionCenterModal");
+        if (m) m.style.display = "flex";
+      };
+      window.closeActionCenter = function () {
+        const m = document.getElementById("actionCenterModal");
+        if (m) m.style.display = "none";
+      };
+
+      window.renderActionCenter = function () {
+        const cont = document.getElementById("actionCenterContent");
+        if (!cont) return;
+        const section = window._acSection || "";
+        const emptyBox = (icon, text) =>
+          `<div style="text-align:center; padding:18px 10px; color:var(--md-text-secondary); background:var(--md-bg); border-radius:10px;"><div style="font-size:1.6rem;">${icon}</div><div style="font-size:0.88rem; margin-top:4px;">${text}</div></div>`;
+        const head = (icon, title, n, hint) =>
+          `<h4 style="margin:18px 0 6px; color:var(--md-primary);">${icon} ${title} ${n ? `<span style="background:#f59e0b; color:#fff; border-radius:999px; padding:1px 9px; font-size:0.78rem;">${n}</span>` : ""}</h4>
+           <p style="margin:0 0 8px; font-size:0.78rem; color:var(--md-text-secondary);">${hint}</p>`;
+
+        let html = "";
+
+        // --- בקשות ממתינות ---
+        const pending = window._collectAllPending();
+        const pIds = Object.keys(pending).sort((a, b) =>
+          (pending[a].date || "").localeCompare(pending[b].date || ""),
+        );
+        if (!section || section === "requests") {
+          html += head("⏳", "בקשות ממתינות", pIds.length,
+            "בקשות חופש/אילוץ/העדפה שהעובדים הגישו וטרם טופלו.");
+          if (pIds.length === 0) {
+            html += emptyBox("🎉", "אין בקשות ממתינות — הכל טופל.");
+          } else {
+            html += `<div style="margin-bottom:8px;"><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; font-size:0.82rem;" onclick="window.approveAllPendingRequests()">✅ אשר הכל (${pIds.length})</button></div>`;
+            html += `<div style="max-height:260px; overflow-y:auto;">`;
+            pIds.forEach((id) => {
+              const r = pending[id];
+              const d = r.date ? r.date.split("-").reverse().join(".") : "";
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 4px; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+                <span><b>${window.escapeHtml(r.empName || "")}</b> — ${d}${r.day ? " · " + window.escapeHtml(r.day) : ""} · ${window.escapeHtml(window._reqTypeLabel(r.type))}${r.note ? ` <small style="color:var(--md-text-secondary);">(${window.escapeHtml(r.note)})</small>` : ""}</span>
+                <span style="display:flex; gap:5px;">
+                  <button class="btn btn-contained" style="background:#16a34a; padding:3px 10px; font-size:0.78rem;" onclick="window.processRequest('${id}', true).then(()=>window.renderActionCenter())">✅</button>
+                  <button class="btn btn-error" style="padding:3px 10px; font-size:0.78rem;" onclick="window.processRequest('${id}', false).then(()=>window.renderActionCenter())">❌</button>
+                </span>
+              </div>`;
+            });
+            html += `</div>`;
+          }
+        }
+
+        // --- החלפות לאישור ---
+        if (!section || section === "swaps") {
+          const swaps = window._collectPendingSwaps();
+          html += head("🔄", "החלפות לאישור", swaps.length,
+            "החלפות שהעובד השני כבר אישר — ממתינות לאישור הסופי שלך.");
+          if (swaps.length === 0) {
+            html += emptyBox("👍", "אין בקשות החלפה שממתינות לאישורך.");
+          } else {
+            html += `<div style="max-height:260px; overflow-y:auto;">`;
+            swaps.forEach(({ kind, r }) => {
+              const fn = window._SWAP_FINALIZE_FN[kind];
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 4px; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+                <span><span style="background:#ede9fe; color:#7c3aed; border-radius:6px; padding:1px 8px; font-size:0.72rem; margin-left:6px;">${window._SWAP_KIND_LABELS[kind]}</span><b>${window.escapeHtml(r.fromEmpName)}</b> ↔ <b>${window.escapeHtml(r.toEmpName)}</b> — ${window._swapItemDetail(kind, r)}</span>
+                <span style="display:flex; gap:5px;">
+                  <button class="btn btn-contained" style="background:#16a34a; padding:3px 10px; font-size:0.78rem;" onclick="Promise.resolve(window.${fn}('${r.id}', true)).then(()=>window.renderActionCenter())">✅</button>
+                  <button class="btn btn-error" style="padding:3px 10px; font-size:0.78rem;" onclick="Promise.resolve(window.${fn}('${r.id}', false)).then(()=>window.renderActionCenter())">❌</button>
+                </span>
+              </div>`;
+            });
+            html += `</div>`;
+          }
+        }
+
+        // --- עובדים בלי משמרת ---
+        if (!section || section === "noshift") {
+          let rows = [];
+          try { rows = (window._buildStaffingCheckRows() || []).filter((r) => (r.shiftCount || 0) === 0); } catch (e) {}
+          html += head("⬜", "בלי משמרת השבוע", rows.length,
+            "עובדים פעילים שאין להם אף משמרת אמיתית בשבוע המוצג.");
+          if (rows.length === 0) {
+            html += emptyBox("✅", "לכל העובדים הפעילים יש שיבוץ השבוע.");
+          } else {
+            html += `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">${rows
+              .map((r) => `<span style="background:rgba(245,158,11,0.14); color:#b45309; border-radius:999px; padding:3px 10px; font-size:0.82rem; font-weight:600;">👤 ${window.escapeHtml(r.emp.name)}</span>`)
+              .join("")}</div>
+              <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.82rem;" onclick="window.closeActionCenter(); window.checkFullStaffing();">🔍 פתח בדיקת שיבוץ מלא</button>`;
+          }
+        }
+
+        cont.innerHTML = html;
+      };
+
       // ===== שורת מצב תפעולי מעל הלוח (מנהל) =====
       // מרכזת "מה דורש ממני פעולה" במבט אחד, וכל אריח הוא קיצור דרך לפעולה.
       window.renderOpsKpiBar = function () {
@@ -1710,10 +1862,19 @@
         const tile = (icon, label, value, warn, onclick, title) =>
           `<button class="ops-kpi${warn ? " warn" : ""}" onclick="${onclick}" title="${title}"><span class="ops-kpi-v">${icon} ${value}</span><span class="ops-kpi-l">${label}</span></button>`;
 
+        const totalOpen = pending + swaps;
         bar.innerHTML =
-          tile("⏳", "בקשות ממתינות", pending, pending > 0, "window.showPage('page-requests')", "מעבר לריכוז הבקשות") +
-          tile("🔄", "החלפות לאישור", swaps, swaps > 0, "window.showPage('page-tasks')", "מעבר לבקשות ההחלפה") +
-          tile("⬜", "בלי משמרת השבוע", noShift, noShift > 0, "window.checkFullStaffing()", "פתיחת בדיקת שיבוץ מלא") +
+          `<div style="flex:1 1 100%; display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+            <span style="font-weight:800; font-size:0.9rem; color:var(--md-primary);">⚡ מצב תפעולי</span>
+            <span style="font-size:0.75rem; color:var(--md-text-secondary);">${
+              totalOpen > 0
+                ? `${totalOpen} פריטים ממתינים להחלטה שלך — לחץ על אריח כדי לטפל בו כאן, בלי לעזוב את הלוח.`
+                : "אין פריטים שממתינים להחלטה. לחיצה על אריח פותחת פירוט."
+            }</span>
+          </div>` +
+          tile("⏳", "בקשות ממתינות", pending, pending > 0, "window.openActionCenter('requests')", "פתח את הבקשות הממתינות") +
+          tile("🔄", "החלפות לאישור", swaps, swaps > 0, "window.openActionCenter('swaps')", "פתח את בקשות ההחלפה") +
+          tile("⬜", "בלי משמרת השבוע", noShift, noShift > 0, "window.openActionCenter('noshift')", "מי לא משובץ השבוע") +
           tile(checked ? "✅" : "⚠️", "בדיקת שיבוץ", checked ? "אושר" : "טרם", !checked, "window.checkFullStaffing()", "בדיקת שיבוץ מלא") +
           (window.hasUnsavedChanges
             ? tile("💾", "מצב שמירה", "לא נשמר", true, "window.commitChangesToCloud()", "שמור לענן")

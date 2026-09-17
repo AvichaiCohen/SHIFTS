@@ -37,6 +37,17 @@
         --border-color: #334155;
         --text-muted: #94a3b8;
       }
+      /* ארגונומיה: מרים את בסיס ה-rem ב-~4% — כל הטקסטים הקטנים (0.75–0.85rem)
+         שמפוזרים במערכת גדלים יחד איתו, בלי לגעת במאות מקומות. */
+      html {
+        font-size: 16.6px;
+      }
+      /* רצפת קריאוּת לטקסט המשני/הזעיר — מונע ירידה מתחת ל-12.5px */
+      small,
+      .ops-kpi-l,
+      .app-dialog-msg {
+        font-size: max(0.78rem, 12.5px);
+      }
       body {
         font-family: "Roboto", sans-serif;
         background: var(--md-bg);
