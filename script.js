@@ -145,6 +145,44 @@
         });
       };
 
+      // שדה קלט מעוצב (מחליף prompt) → Promise<string|null>. null = ביטול.
+      // opts: { title, message, placeholder, defaultValue, password, confirmText }
+      window.promptDialog = function (opts) {
+        opts = opts || {};
+        return new Promise((resolve) => {
+          const overlay = document.createElement("div");
+          overlay.className = "app-dialog-overlay";
+          overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+            ${opts.title ? `<h3>${window.escapeHtml(opts.title)}</h3>` : ""}
+            ${opts.message ? `<p class="app-dialog-msg">${window.escapeHtml(opts.message)}</p>` : ""}
+            <input class="app-dialog-input" type="${opts.password ? "password" : "text"}"
+              placeholder="${window.escapeHtml(opts.placeholder || "")}"
+              value="${window.escapeHtml(opts.defaultValue || "")}" />
+            <div class="app-dialog-actions">
+              <button class="btn btn-outlined" data-act="cancel">ביטול</button>
+              <button class="btn btn-contained" data-act="ok">${window.escapeHtml(opts.confirmText || "אישור")}</button>
+            </div>
+          </div>`;
+          const input = overlay.querySelector(".app-dialog-input");
+          const done = (val) => window._closeAppDialog(overlay, resolve, val);
+          overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) done(null);
+          });
+          overlay.querySelector('[data-act="cancel"]').onclick = () => done(null);
+          overlay.querySelector('[data-act="ok"]').onclick = () => done(input.value);
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); done(input.value); }
+          });
+          overlay._onKey = (e) => {
+            if (e.key === "Escape") done(null);
+          };
+          document.addEventListener("keydown", overlay._onKey);
+          document.body.appendChild(overlay);
+          input.focus();
+          input.select();
+        });
+      };
+
       // ===== ווידג'טים בגריד — מיקום חופשי (גרירה ל-2D), הסתרה, שינוי גודל,
       // העברה בין עמודים ===== כל טבלה/פאנל בעמודי "משימות" ו"בקשות" עטוף
       // ב-HTML סטטי עם id="widget-<key>" ו-data-widget-key="<key>" (ר'
@@ -691,8 +729,16 @@
         const sun = window.weekKeyToSunday(weekKey);
         return sun ? window.formatWeekString(sun) : "שבוע לא ידוע";
       };
-      window.navigateWeek = function (direction) {
-        if (window.hasUnsavedChanges && !confirm("יש שינויים שלא נשמרו — לעבור שבוע בלי לשמור?"))
+      window.navigateWeek = async function (direction) {
+        if (
+          window.hasUnsavedChanges &&
+          !(await window.confirmDialog({
+            title: "שינויים שלא נשמרו",
+            message: "יש שינויים שטרם נשמרו לענן. לעבור שבוע בלי לשמור?",
+            confirmText: "עבור בלי לשמור",
+            danger: true,
+          }))
+        )
           return;
         window.currentWeekOffset += direction;
         let sun = window.getSunday(window.currentWeekOffset);
@@ -704,9 +750,17 @@
           window.loadWeekFromCloud(window.currentSelectedWeek);
       };
 
-      window.navigateToDate = function (dateStr) {
+      window.navigateToDate = async function (dateStr) {
         if (!dateStr) return;
-        if (window.hasUnsavedChanges && !confirm("יש שינויים שלא נשמרו — לעבור לתאריך בלי לשמור?"))
+        if (
+          window.hasUnsavedChanges &&
+          !(await window.confirmDialog({
+            title: "שינויים שלא נשמרו",
+            message: "יש שינויים שטרם נשמרו לענן. לעבור לתאריך בלי לשמור?",
+            confirmText: "עבור בלי לשמור",
+            danger: true,
+          }))
+        )
           return;
         const d = new Date(dateStr);
         const dayOfWeek = d.getDay(); // 0=ראשון
@@ -889,8 +943,13 @@
         window.toast("✅ ההרשאות נשמרו והוחלו על כל העובדים.");
       };
 
-      window.promptNewRole = function () {
-        let nr = prompt("הכנס שם דרג חדש:");
+      window.promptNewRole = async function () {
+        let nr = await window.promptDialog({
+          title: "דרג חדש",
+          message: "הכנס שם דרג חדש:",
+          placeholder: "למשל: מילואים",
+          confirmText: "הוסף",
+        });
         if (nr && nr.trim() !== "" && !window.roleTypes.includes(nr.trim())) {
           window.roleTypes.push(nr.trim());
           localStorage.setItem(
@@ -1737,18 +1796,21 @@
         window.openStaffingCheckModal();
       };
 
-      window.togglePublish = function () {
+      window.togglePublish = async function () {
         if (!window.currentSchedule) window.currentSchedule = {};
         const willPublish = !window.currentSchedule.isPublished;
         if (willPublish) {
           const missing = window._getUnstaffedEmployees();
           if (
             missing.length > 0 &&
-            !confirm(
-              `⚠️ לעובדים הבאים אין אף משמרת אמיתית השבוע:\n\n${missing
-                .map((m) => "• " + m.name + (m.hasPartialCoverage ? " (יש כיסוי חלקי בסטטוס מיוחד — בדוק בטבלת \"בדוק שיבוץ מלא\")" : " (אין כיסוי כלל)"))
+            !(await window.confirmDialog({
+              title: "⚠️ יש עובדים ללא משמרת",
+              message: `לעובדים הבאים אין אף משמרת אמיתית השבוע:\n\n${missing
+                .map((m) => "• " + m.name + (m.hasPartialCoverage ? " (כיסוי חלקי בסטטוס מיוחד)" : " (אין כיסוי כלל)"))
                 .join("\n")}\n\nלפרסם בכל זאת?`,
-            )
+              confirmText: "פרסם בכל זאת",
+              danger: true,
+            }))
           )
             return;
         }
@@ -2266,11 +2328,15 @@
       };
 
       // שחזור גרסה — טוען למסך (לא נשמר עד שהמנהל לוחץ שמור)
-      window.restoreBackup = function (weekKey, ts) {
+      window.restoreBackup = async function (weekKey, ts) {
         if (
-          !confirm(
-            "לשחזר את הגרסה הזו?\nהלוח שעל המסך יוחלף בגרסה השמורה — אך זה לא יישמר עד שתלחץ 'שמור לענן'.",
-          )
+          !(await window.confirmDialog({
+            title: "שחזור גרסה",
+            message:
+              "לשחזר את הגרסה הזו?\nהלוח שעל המסך יוחלף בגרסה השמורה — זה לא יישמר עד שתלחץ 'שמור לענן'.",
+            confirmText: "שחזר",
+            danger: true,
+          }))
         )
           return;
         const { ref, get } = window._fbImports;
@@ -2453,7 +2519,12 @@
           window.toast("רק מנהל ראשי יכול להחליף את סיסמת המנהל.");
           return;
         }
-        const cur = prompt("הסיסמה הנוכחית:");
+        const cur = await window.promptDialog({
+          title: "החלפת סיסמת מנהל",
+          message: "הזן את הסיסמה הנוכחית:",
+          password: true,
+          confirmText: "המשך",
+        });
         if (!cur) return;
         const curHash = await window._sha256Hex(
           `${ADMIN_UID}:${cur.trim()}:${ADMIN_SALT}`,
@@ -2463,7 +2534,12 @@
           window.toast("הסיסמה הנוכחית שגויה.");
           return;
         }
-        const next = prompt("סיסמה חדשה (לפחות 8 תווים, רצוי אותיות ומספרים):");
+        const next = await window.promptDialog({
+          title: "סיסמה חדשה",
+          message: "לפחות 8 תווים, רצוי אותיות ומספרים:",
+          password: true,
+          confirmText: "שמור סיסמה",
+        });
         if (!next || next.trim().length < 8) {
           window.toast("הסיסמה החדשה קצרה מדי — נדרשים לפחות 8 תווים.");
           return;
@@ -2501,10 +2577,13 @@
           window.toast("שגיאה: רכיב ההזדהות לא נטען.");
           return;
         }
-        const pw = prompt(
-          "בחר סיסמה חזקה וחדשה למנהל הראשי (לפחות 8 תווים).\n" +
-            "זו תהיה הסיסמה שלך לכניסה למערכת מעכשיו:",
-        );
+        const pw = await window.promptDialog({
+          title: "הקמת חשבון מנהל ראשי",
+          message:
+            "בחר סיסמה חזקה וחדשה למנהל הראשי (לפחות 8 תווים).\nזו תהיה הסיסמה שלך לכניסה למערכת מעכשיו:",
+          password: true,
+          confirmText: "צור חשבון",
+        });
         if (!pw || pw.trim().length < 8) {
           window.toast("הסיסמה קצרה מדי — נדרשים לפחות 8 תווים.");
           return;
@@ -2772,13 +2851,23 @@
           window.toast("רק עובד מחובר יכול לשנות סיסמה.");
           return;
         }
-        const cur = prompt("הסיסמה הנוכחית שלך:");
+        const cur = await window.promptDialog({
+          title: "החלפת סיסמה",
+          message: "הזן את הסיסמה הנוכחית שלך:",
+          password: true,
+          confirmText: "המשך",
+        });
         if (cur === null) return;
         if (!(await window.verifyPassword(cur.trim(), window.getEffectivePassword(me)))) {
           window.toast("הסיסמה הנוכחית שגויה.");
           return;
         }
-        const next = prompt("סיסמה חדשה (לפחות 4 תווים):");
+        const next = await window.promptDialog({
+          title: "סיסמה חדשה",
+          message: "לפחות 4 תווים:",
+          password: true,
+          confirmText: "שמור סיסמה",
+        });
         if (next === null) return;
         const np = (next || "").trim();
         if (np.length < 4) {
@@ -3165,10 +3254,15 @@
         }
       };
 
-      window.toggleMatalUnderstaff = function () {
+      window.toggleMatalUnderstaff = async function () {
         const current = window.currentSchedule.matalUnderstaff === true;
         if (current) {
-          if (!confirm('ביטול מצב חוסר כוח אדם — מת"ל יחזור למשמרת בוקר+לילה. להמשיך?')) return;
+          if (!(await window.confirmDialog({
+            title: "ביטול מצב חוסר כוח אדם",
+            message: 'מת"ל יחזור למשמרת בוקר+לילה. להמשיך?',
+            confirmText: "בטל מצב חוסר",
+            danger: true,
+          }))) return;
           window.currentSchedule.matalUnderstaff = false;
           window.updateMatalUnderstaffUI();
           window.triggerUnsavedChanges();
@@ -3204,9 +3298,14 @@
         window.triggerUnsavedChanges();
       };
 
-      window.toggleEmergency = function () {
+      window.toggleEmergency = async function () {
         if (window.isEmergencyMode) {
-          if (!confirm("ביטול מצב חירום. להמשיך?")) return;
+          if (!(await window.confirmDialog({
+            title: "ביטול מצב חירום",
+            message: "לבטל את מצב החירום ולחזור לסידור רגיל?",
+            confirmText: "בטל מצב חירום",
+            danger: true,
+          }))) return;
           window.isEmergencyMode = false;
           window.currentShifts = normalShifts;
           window.currentSchedule.isEmergencyMode = false;
@@ -4109,15 +4208,25 @@
         window.triggerUnsavedChanges();
       };
 
-      window.removeSpecialStatus = function (specialId) {
-        if (!confirm("להסיר את הסטטוס המיוחד?")) return;
+      window.removeSpecialStatus = async function (specialId) {
+        if (!(await window.confirmDialog({
+          title: "הסרת סטטוס מיוחד",
+          message: "להסיר את הסטטוס המיוחד?",
+          confirmText: "הסר",
+          danger: true,
+        }))) return;
         window.specialStatuses = (window.specialStatuses || []).filter((s) => s.id !== specialId);
         window.saveToCloud("specialStatuses", window.specialStatuses);
         if (typeof window.renderRequestsPage === "function") window.renderRequestsPage();
       };
 
-      window.removeLegacySpecial = function (day, empId) {
-        if (!confirm("להסיר את הסטטוס המיוחד?")) return;
+      window.removeLegacySpecial = async function (day, empId) {
+        if (!(await window.confirmDialog({
+          title: "הסרת סטטוס מיוחד",
+          message: "להסיר את הסטטוס המיוחד?",
+          confirmText: "הסר",
+          danger: true,
+        }))) return;
         if (window.currentSchedule.special && window.currentSchedule.special[day])
           window.currentSchedule.special[day] = window.currentSchedule.special[day].filter((e) => e.id != empId);
         window.triggerUnsavedChanges();
@@ -4284,7 +4393,7 @@
         ev.currentTarget.classList.remove("drag-over");
       };
 
-      window.drop = function (ev, targetDay, targetShift, targetLoc) {
+      window.drop = async function (ev, targetDay, targetShift, targetLoc) {
         if (!window.isEditMode) return;
         ev.preventDefault();
         ev.currentTarget.classList.remove("drag-over");
@@ -4299,9 +4408,12 @@
             : [];
         if (
           _dropWarnings.length > 0 &&
-          !confirm(
-            `⚠️ שים לב לפני שיבוץ ${emp ? emp.name : "העובד"} ל-${targetDay} ${targetShift}:\n\n${_dropWarnings.map((w) => "• " + w).join("\n")}\n\nלשבץ בכל זאת?`,
-          )
+          !(await window.confirmDialog({
+            title: `⚠️ שיבוץ ${emp ? emp.name : "העובד"} ל-${targetDay} ${targetShift}`,
+            message: `${_dropWarnings.map((w) => "• " + w).join("\n")}\n\nלשבץ בכל זאת?`,
+            confirmText: "שבץ בכל זאת",
+            danger: true,
+          }))
         ) {
           window.draggedData = null;
           return;
@@ -4781,17 +4893,20 @@
       // ===== הערה חופשית על שיבוץ ספציפי (למשל "מגיע ב-14") =====
       // נשמרת ישירות על ה-entry בתא (emp.note) — נקראת גם בדסקטופ (extraNote)
       // וגם במובייל (ליד השם), בלי צורך בשינוי אחר בכל פונקציות הרינדור.
-      window.setShiftNote = function (day, shift, loc, empId) {
+      window.setShiftNote = async function (day, shift, loc, empId) {
         if (!window.isEditMode) return;
         const arr =
           window.currentSchedule[`${day}-${shift}`] &&
           window.currentSchedule[`${day}-${shift}`][loc];
         const entry = arr && arr.find((e) => String(e.id) === String(empId));
         if (!entry) return;
-        const val = prompt(
-          `הערה למשמרת של ${entry.name} (למשל: "מגיע ב-14")\nהשאר ריק כדי למחוק:`,
-          entry.note || "",
-        );
+        const val = await window.promptDialog({
+          title: `הערה למשמרת — ${entry.name}`,
+          message: 'למשל: "מגיע ב-14". השאר ריק כדי למחוק את ההערה.',
+          placeholder: "הערה...",
+          defaultValue: entry.note || "",
+          confirmText: "שמור הערה",
+        });
         if (val === null) return; // בוטל
         const trimmed = val.trim();
         if (trimmed === "") delete entry.note;
@@ -4886,7 +5001,7 @@
         if (modal) modal.style.display = "flex";
       };
 
-      window.confirmMobileAddEmp = function () {
+      window.confirmMobileAddEmp = async function () {
         const sel = document.getElementById("mobileAddEmpSelect");
         const empId = sel ? sel.value : "";
         if (!empId) {
@@ -4905,9 +5020,9 @@
           preventDefault: () => {},
           currentTarget: { classList: { remove: () => {} } },
         };
-        window.drop(fakeEvent, target.day, target.shift, target.loc);
         const modal = document.getElementById("mobileAddEmpModal");
         if (modal) modal.style.display = "none";
+        await window.drop(fakeEvent, target.day, target.shift, target.loc);
       };
 
       window.toggleMobileMenu = function () {
@@ -5261,8 +5376,13 @@
         if (m) m.style.display = "none";
       };
 
-      window.deleteHolidayLog = function (id) {
-        if (confirm("למחוק את הרישום הזה?")) {
+      window.deleteHolidayLog = async function (id) {
+        if (await window.confirmDialog({
+          title: "מחיקת רישום חג",
+          message: "למחוק את הרישום הזה?",
+          confirmText: "מחק",
+          danger: true,
+        })) {
           window.holidaysLog = window.holidaysLog.filter((l) => l.id !== id);
           if (typeof window.saveToCloud === "function")
             window.saveToCloud("holidaysLog", window.holidaysLog);
@@ -5327,7 +5447,7 @@
       // ===== החלפת חגים בין עובדים (אותו תבנית כמו החלפת משימות) =====
       window.holidaySwapRequests = window.holidaySwapRequests || {};
 
-      window.requestHolidaySwap = function (logId) {
+      window.requestHolidaySwap = async function (logId) {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const log = (window.holidaysLog || []).find((l) => l.id === logId);
@@ -5336,12 +5456,14 @@
           (e) => e.isActive !== false && String(e.id) !== String(me.id),
         );
         if (others.length === 0) { window.toast("אין עובדים אחרים להחלפה."); return; }
-        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
-        const choice = prompt(`למי לשלוח בקשת החלפת חג?\n\n${optionsStr}\n\nהקלד את המספר:`);
-        if (!choice) return;
-        const idx = parseInt(choice.trim(), 10) - 1;
-        const target = others[idx];
-        if (!target) { window.toast("בחירה לא תקינה."); return; }
+        const _choiceId = await window.choiceDialog({
+          title: "🔄 החלפת חג",
+          message: "למי לשלוח את בקשת ההחלפה?",
+          options: others.map((e) => ({ label: e.name, value: String(e.id) })),
+        });
+        if (!_choiceId) return;
+        const target = others.find((e) => String(e.id) === String(_choiceId));
+        if (!target) return;
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -5393,7 +5515,7 @@
       // באותו שבוע-סופ"ש, כך שההחלפה מזיזה את כל הסגירה כיחידה אחת.
       window.weekendSwapRequests = window.weekendSwapRequests || {};
 
-      window.requestWeekendSwap = function (idx) {
+      window.requestWeekendSwap = async function (idx) {
         const item = (window._myUpcomingClosuresResults || [])[idx];
         if (!item) return;
         const me = window.loggedInWorker || window.loggedInUser;
@@ -5405,14 +5527,14 @@
             String(e.id) !== String(me.id),
         );
         if (others.length === 0) { window.toast("אין עובדים מתאימים להחלפת סופ\"ש."); return; }
-        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
-        const choice = prompt(
-          `למי לשלוח בקשת החלפת סופ"ש (${item.weekLabel})?\n\n${optionsStr}\n\nהקלד את המספר:`,
-        );
-        if (!choice) return;
-        const cIdx = parseInt(choice.trim(), 10) - 1;
-        const target = others[cIdx];
-        if (!target) { window.toast("בחירה לא תקינה."); return; }
+        const _choiceId = await window.choiceDialog({
+          title: '🔄 החלפת סופ"ש',
+          message: `סופ"ש ${item.weekLabel} — למי לשלוח את בקשת ההחלפה?`,
+          options: others.map((e) => ({ label: e.name, value: String(e.id) })),
+        });
+        if (!_choiceId) return;
+        const target = others.find((e) => String(e.id) === String(_choiceId));
+        if (!target) return;
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -6142,12 +6264,17 @@
         document.getElementById("demandKeep").value = "";
       };
 
-      window.deleteDemand = function (id) {
+      window.deleteDemand = async function (id) {
         if (window.currentUserRole !== "superAdmin") {
           window.toast("רק המנהל הראשי יכול למחוק דרישות.");
           return;
         }
-        if (!confirm("למחוק את הדרישה?")) return;
+        if (!(await window.confirmDialog({
+          title: "מחיקת דרישה",
+          message: "למחוק את הדרישה?",
+          confirmText: "מחק",
+          danger: true,
+        }))) return;
         if (window._fbImports && window._firebaseDb)
           window._fbImports.remove(
             window._fbImports.ref(window._firebaseDb, "forceDemands/" + id),
@@ -6259,7 +6386,11 @@
           .slice(0, topN)
           .map((r) => r.emp.name)
           .join(", ")}) כסוגרי הסופ"ש הקרוב?`;
-        if (!confirm(msg)) return;
+        if (!(await window.confirmDialog({
+          title: "אישור פעולה",
+          message: msg,
+          confirmText: "אשר",
+        }))) return;
         ranked.slice(0, topN).forEach((r) => {
           r.emp.isNextWeekend = true;
           r.emp.workedLastWeekend = false;
@@ -6345,7 +6476,11 @@
         msg += `🎯 זירה: ${finalZira.map((r) => r.emp.name).join(", ") || "—"}\n`;
         msg += `🏢 מת"ל: ${finalMatal.map((r) => r.emp.name).join(", ") || "—"}\n\n`;
         msg += 'לקבוע ולנעול את השיבוץ הזה? (שאר ימי השבוע לא ייפגעו — אפשר להמשיך לתכנן אותם בנפרד)';
-        if (!confirm(msg)) return;
+        if (!(await window.confirmDialog({
+          title: "אישור פעולה",
+          message: msg,
+          confirmText: "אשר",
+        }))) return;
 
         if (typeof window.initSchedule === "function") window.initSchedule();
 
@@ -6656,8 +6791,13 @@
         window.renderCommandersUI();
       };
 
-      window.deleteCommander = function (id) {
-        if (!confirm("למחוק מפקד זה מהרשימה?")) return;
+      window.deleteCommander = async function (id) {
+        if (!(await window.confirmDialog({
+          title: "מחיקת מפקד",
+          message: "למחוק מפקד זה מהרשימה?",
+          confirmText: "מחק",
+          danger: true,
+        }))) return;
         window.commanders = window.commanders.filter((c) => c.id !== id);
         localStorage.setItem(
           "shift_commanders_v1",
@@ -7149,8 +7289,13 @@
         content.innerHTML = html;
       };
 
-      window.addNewTaskCategory = function () {
-        let newCat = prompt("הכנס שם קטגוריית משימה חדשה:");
+      window.addNewTaskCategory = async function () {
+        let newCat = await window.promptDialog({
+          title: "קטגוריית משימה חדשה",
+          message: "הכנס שם קטגוריה:",
+          placeholder: "למשל: חניונים",
+          confirmText: "הוסף",
+        });
         if (newCat && newCat.trim() !== "") {
           if (!window.taskCategories.includes(newCat.trim())) {
             window.taskCategories.push(newCat.trim());
@@ -7280,7 +7425,7 @@
       window.taskSwapRequests = window.taskSwapRequests || {};
 
       // עובד A מבקש מעובד B להחליף אותו במשימה שטרם בוצעה
-      window.requestTaskSwap = function (taskId) {
+      window.requestTaskSwap = async function (taskId) {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const task = (window.systemTasks || []).find((t) => t.id === taskId);
@@ -7289,12 +7434,14 @@
           (e) => e.isActive !== false && String(e.id) !== String(me.id),
         );
         if (others.length === 0) { window.toast("אין עובדים אחרים להחלפה."); return; }
-        const optionsStr = others.map((e, i) => `${i + 1}. ${e.name}`).join("\n");
-        const choice = prompt(`למי לשלוח בקשת החלפה למשימה?\n\n${optionsStr}\n\nהקלד את המספר:`);
-        if (!choice) return;
-        const idx = parseInt(choice.trim(), 10) - 1;
-        const target = others[idx];
-        if (!target) { window.toast("בחירה לא תקינה."); return; }
+        const _choiceId = await window.choiceDialog({
+          title: "🔄 החלפת משימה",
+          message: `${task.category || "משימה"}${task.desc ? " — " + task.desc : ""}\nלמי לשלוח את בקשת ההחלפה?`,
+          options: others.map((e) => ({ label: e.name, value: String(e.id) })),
+        });
+        if (!_choiceId) return;
+        const target = others.find((e) => String(e.id) === String(_choiceId));
+        if (!target) return;
         const id = Date.now() + Math.floor(Math.random() * 10000);
         const req = {
           id,
@@ -7358,7 +7505,7 @@
       // עובד אנונימי לא יכול לכתוב ל-systemTasks ישירות, לכן נכתבת בקשה בנתיב
       // create-only ייעודי; המנהל הראשי (שיש לו הרשאת כתיבה מלאה) מיישם אותה
       // אוטומטית ברגע שהוא מחובר (ראה listener ב-index.html), בדומה ל-passwordOverrides.
-      window.volunteerForTask = function (taskId) {
+      window.volunteerForTask = async function (taskId) {
         const me = window.loggedInWorker || window.loggedInUser;
         if (!me || me.id == null) { window.toast("לא מזוהה עובד מחובר."); return; }
         const task = (window.systemTasks || []).find((t) => t.id === taskId);
@@ -7370,9 +7517,11 @@
           return;
         }
         if (
-          !confirm(
-            `להתנדב למשימה: [${task.category || ""}]${task.desc ? " " + task.desc : ""}?`,
-          )
+          !(await window.confirmDialog({
+            title: "התנדבות למשימה",
+            message: `להתנדב למשימה: [${task.category || ""}]${task.desc ? " " + task.desc : ""}?`,
+            confirmText: "התנדב",
+          }))
         )
           return;
         // עדכון אופטימי מקומי — מוצג מיד; ייכתב בפועל ל-systemTasks כשהמנהל הראשי מחובר
@@ -7478,8 +7627,13 @@
         }
       };
 
-      window.deleteTask = function (id) {
-        if (confirm("למחוק את המשימה?")) {
+      window.deleteTask = async function (id) {
+        if (await window.confirmDialog({
+          title: "מחיקת משימה",
+          message: "למחוק את המשימה?",
+          confirmText: "מחק",
+          danger: true,
+        })) {
           const task = window.systemTasks.find((x) => x.id === id);
           window.systemTasks = window.systemTasks.filter((x) => x.id !== id);
           window._saveTasks();
@@ -8242,11 +8396,15 @@
         window.renderRequestsPage();
       };
 
-      window.clearAllStaffConstraints = function () {
+      window.clearAllStaffConstraints = async function () {
         if (
-          confirm(
-            'פעולה זו תמחק:\n• כל האילוצים והחופשות\n• כל הבקשות הממתינות לאישור\n• סטטוס סופ"ש (לפני/אחרי) של כלל העובדים\n\n⚠️ שם משתמש, סיסמה והרשאות לא יאופסו.\nהאם להמשיך?',
-          )
+          await window.confirmDialog({
+            title: "⚠️ איפוס אילוצים ובקשות",
+            message:
+              'פעולה זו תמחק:\n• כל האילוצים והחופשות\n• כל הבקשות הממתינות לאישור\n• סטטוס סופ"ש (לפני/אחרי) של כלל העובדים\n\nשם משתמש, סיסמה והרשאות לא יאופסו.\nהאם להמשיך?',
+            confirmText: "אפס הכל",
+            danger: true,
+          })
         ) {
           window.staff.forEach((emp) => {
             // מאפס אך ורק שדות אילוצים ובקשות — לא נוגע בזהות/אבטחה
@@ -8381,8 +8539,13 @@
           window.renderTable(window.currentSchedule, window.currentNotesLog);
       };
 
-      window.removeHolidayCalendarEntry = function (id) {
-        if (!confirm("למחוק את החג הזה מלוח השנה?")) return;
+      window.removeHolidayCalendarEntry = async function (id) {
+        if (!(await window.confirmDialog({
+          title: "מחיקת חג",
+          message: "למחוק את החג הזה מלוח השנה?",
+          confirmText: "מחק",
+          danger: true,
+        }))) return;
         window.holidayCalendar = (window.holidayCalendar || []).filter((h) => h.id !== id);
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("holidayCalendar", window.holidayCalendar);
@@ -8712,11 +8875,13 @@
           if (_ve) _ve.value = "";
           if (typeof window.toggleVacRange === "function") window.toggleVacRange();
 
-          setTimeout(() => {
+          setTimeout(async () => {
             if (!window.waPromptEnabled) return;
-            let sendWa = confirm(
-              "האם תרצה גם לשלוח הודעת וואטסאפ למפקד?",
-            );
+            let sendWa = await window.confirmDialog({
+              title: "שליחת וואטסאפ",
+              message: "האם תרצה גם לשלוח הודעת וואטסאפ למפקד?",
+              confirmText: "שלח",
+            });
             if (sendWa) {
               let typeStr =
                 type === "vacation"
@@ -9515,12 +9680,20 @@
         }
       };
 
-      window.addNewEmployee = function () {
-        let pId = prompt(
-          "הכנס מספר אישי לעובד החדש (זה יהיה שם המשתמש שלו להתחברות):",
-        );
+      window.addNewEmployee = async function () {
+        let pId = await window.promptDialog({
+          title: "הוספת עובד — שלב 1/2",
+          message: "מספר אישי (ישמש כשם המשתמש להתחברות):",
+          placeholder: "מספר אישי",
+          confirmText: "המשך",
+        });
         if (!pId) return;
-        const name = prompt("שם מלא:");
+        const name = await window.promptDialog({
+          title: "הוספת עובד — שלב 2/2",
+          message: "שם מלא:",
+          placeholder: "שם מלא",
+          confirmText: "הוסף עובד",
+        });
         if (name) {
           let newEmp = {
             id: Date.now(),
@@ -9561,8 +9734,13 @@
         }
       };
 
-      window.deleteEmployee = function () {
-        if (confirm("בטוח למחוק? המחיקה תתבצע גם משבועות עתידיים.")) {
+      window.deleteEmployee = async function () {
+        if (await window.confirmDialog({
+          title: "מחיקת עובד",
+          message: "בטוח למחוק? המחיקה תתבצע גם משבועות עתידיים.",
+          confirmText: "מחק עובד",
+          danger: true,
+        })) {
           window.staff = window.staff.filter((e) => e.id !== window.currentId);
           window.globalStaff = window.globalStaff.filter(
             (e) => e.id !== window.currentId,
@@ -11635,7 +11813,7 @@
         modal.style.display = "flex";
       };
 
-      window.saveModeSettings = function () {
+      window.saveModeSettings = async function () {
         const type = window._modeSettingsType;
         const pending = window._modeSettingsPendingActivation;
         const startVal = document.getElementById("modeStartDate").value;
@@ -11646,7 +11824,12 @@
 
         if (pending) {
           if (type === "emergency") {
-            if (!confirm("הפעלת מצב חירום תאפס את הלוח הנוכחי. להמשיך?")) return;
+            if (!(await window.confirmDialog({
+              title: "הפעלת מצב חירום",
+              message: "הפעלת מצב חירום תאפס את הלוח הנוכחי. להמשיך?",
+              confirmText: "הפעל חירום",
+              danger: true,
+            }))) return;
             window._activateEmergency(startVal, endVal);
           } else {
             window.currentSchedule.matalUnderstaff = true;
@@ -11743,12 +11926,17 @@
         });
       };
 
-      window.applyDraft = function (draftId) {
+      window.applyDraft = async function (draftId) {
         const { ref, get } = window._fbImports || {};
         const db = window._firebaseDb;
         if (!ref || !get || !db) { window.toast("שגיאה: Firebase לא מחובר"); return; }
 
-        if (!confirm("טעינת הטיוטה תחליף את הלוח הנוכחי. להמשיך?")) return;
+        if (!(await window.confirmDialog({
+          title: "טעינת טיוטה",
+          message: "טעינת הטיוטה תחליף את הלוח הנוכחי. להמשיך?",
+          confirmText: "טען טיוטה",
+          danger: true,
+        }))) return;
 
         get(ref(db, "drafts/" + draftId)).then(function (snap) {
           if (!snap.exists()) { window.toast("הטיוטה לא נמצאה"); return; }
@@ -11765,8 +11953,13 @@
         }).catch(function (e) { window.toast("שגיאה: " + e.message); });
       };
 
-      window.deleteDraft = function (draftId) {
-        if (!confirm("למחוק את הטיוטה לצמיתות?")) return;
+      window.deleteDraft = async function (draftId) {
+        if (!(await window.confirmDialog({
+          title: "מחיקת טיוטה",
+          message: "למחוק את הטיוטה לצמיתות?",
+          confirmText: "מחק",
+          danger: true,
+        }))) return;
         const { ref, remove } = window._fbImports || {};
         const db = window._firebaseDb;
         if (!ref || !remove || !db) { window.toast("שגיאה: Firebase לא מחובר"); return; }

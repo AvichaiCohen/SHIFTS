@@ -1660,6 +1660,22 @@
         justify-content: flex-end;
         flex-wrap: wrap;
       }
+      .app-dialog-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 11px 14px;
+        margin-bottom: 16px;
+        border: 1px solid var(--md-divider);
+        border-radius: 10px;
+        background: var(--md-bg);
+        color: var(--md-text);
+        font-size: 0.95rem;
+        font-family: inherit;
+      }
+      .app-dialog-input:focus {
+        border-color: var(--md-primary);
+        outline: none;
+      }
       .app-dialog-choices {
         display: flex;
         flex-direction: column;
