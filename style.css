@@ -1035,6 +1035,49 @@
       body.dark-mode .pres-chip.special {
         color: #fca5a5;
       }
+      /* סרגל "שינויים לא שמורים" — צף, מופיע רק כשיש שינויים ממתינים */
+      #unsavedBar {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9000;
+        display: none;
+        align-items: center;
+        gap: 12px;
+        background: #b45309;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 999px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+        font-weight: 700;
+        font-size: 0.9rem;
+        max-width: 92vw;
+      }
+      #unsavedBar.show {
+        display: flex;
+      }
+      #unsavedBar button {
+        background: #fff;
+        color: #b45309;
+        border: none;
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #unsavedBar button:hover {
+        background: #fde68a;
+      }
+      @media (max-width: 1024px) {
+        #unsavedBar {
+          bottom: 76px;
+          font-size: 0.82rem;
+          padding: 9px 14px;
+        }
+      }
       /* אחמ"ש — הדגשת מי שסומן כאחראי משמרת כשלוחצים על כפתור "👑 אחמ"ש" */
       body.highlight-achmash .name-chip:not(.is-achmash),
       body.highlight-achmash .mobile-emp-chip:not(.is-achmash) {

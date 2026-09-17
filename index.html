@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827q";
+        var BUILD = "20260827r";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -347,6 +347,8 @@
               window.updateMatalUnderstaffUI();
 
             window.hasUnsavedChanges = false;
+            if (typeof window._updateUnsavedIndicator === "function")
+              window._updateUnsavedIndicator();
 
             if (typeof window.migrateOldRoles === "function")
               window.migrateOldRoles();
@@ -815,7 +817,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827q" />
+    <link rel="stylesheet" href="style.css?v=20260827r" />
   </head>
   <body>
     <div
@@ -2513,6 +2515,21 @@
               </button>
             </div>
           </div>
+          <input
+            type="text"
+            id="staffSearchInput"
+            placeholder="🔍 חיפוש עובד (שם או מספר אישי)..."
+            oninput="window.setStaffSearch(this.value)"
+            style="
+              width: 100%;
+              max-width: 420px;
+              padding: 9px 14px;
+              margin-bottom: 12px;
+              border: 1px solid var(--md-divider);
+              border-radius: 10px;
+              font-size: 0.9rem;
+            "
+          />
           <div id="staffGrid" class="staff-grid"></div>
         </div>
 
@@ -5060,7 +5077,13 @@
       </div>
     </div>
 
+    <!-- מחוון צף: יש שינויים שטרם נשמרו לענן (מנהל בלבד) -->
+    <div id="unsavedBar" class="manager-only" role="status" aria-live="polite">
+      <span>⚠️ יש שינויים שלא נשמרו</span>
+      <button onclick="window.commitChangesToCloud()">💾 שמור עכשיו</button>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827q"></script>
+    <script src="script.js?v=20260827r"></script>
   </body>
 </html>

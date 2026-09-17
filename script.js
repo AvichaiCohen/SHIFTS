@@ -1382,8 +1382,27 @@
         window.toast(`✅ ההודעה נשלחה ל-${empIds.length} עובדים.`);
       };
 
+      // מציג/מסתיר את הסרגל הצף "יש שינויים שלא נשמרו". נקרא בכל שינוי מצב
+      // וגם מתוך renderTable, כדי שהמחוון תמיד ישקף את המצב האמיתי.
+      window._updateUnsavedIndicator = function () {
+        const bar = document.getElementById("unsavedBar");
+        if (!bar) return;
+        if (window.hasUnsavedChanges) bar.classList.add("show");
+        else bar.classList.remove("show");
+      };
+
+      // רשת ביטחון: אזהרה לפני סגירה/רענון כשיש שינויים שטרם נשמרו לענן
+      window.addEventListener("beforeunload", function (e) {
+        if (window.hasUnsavedChanges && !window.isWorkerMode) {
+          e.preventDefault();
+          e.returnValue = "";
+          return "";
+        }
+      });
+
       window.triggerUnsavedChanges = function () {
         window.hasUnsavedChanges = true;
+        window._updateUnsavedIndicator();
         if (typeof window.renderTable === "function")
           window.renderTable(window.currentSchedule, window.currentNotesLog);
       };
@@ -1437,6 +1456,7 @@
           if (typeof window.updateWeekendHistory === "function")
             window.updateWeekendHistory();
           window.hasUnsavedChanges = false;
+          window._updateUnsavedIndicator();
           window.toast('🔒 הלוח נשמר! חוקי הסופ"ש קודמו אוטומטית לשבוע הבא.');
         };
 
@@ -3711,6 +3731,19 @@
         window._vacMonthFilter = v || "";
         window.renderVacationManagementTable();
       };
+      // חיפוש שם בטבלת ניהול החופשים. הטבלה נבנית מחדש בכל הקלדה, ולכן
+      // מחזירים את הפוקוס והסמן לסוף הטקסט אחרי הרינדור.
+      window._vacNameSearch = window._vacNameSearch || "";
+      window._setVacNameSearch = function (v) {
+        window._vacNameSearch = v || "";
+        window.renderVacationManagementTable();
+        const el = document.querySelector('#vacationManagementTable input[type="text"]');
+        if (el) {
+          el.focus();
+          const n = el.value.length;
+          try { el.setSelectionRange(n, n); } catch (err) {}
+        }
+      };
       // כמה ימים מתוך רשומת חופשה (טווח תאריכים) נופלים בחודש נתון "YYYY-MM"
       window._vacEntryDaysInMonth = function (startDate, endDate, ym) {
         if (!startDate) return 0;
@@ -3729,19 +3762,24 @@
         if (!cont) return;
         const monthFilter = window._vacMonthFilter || "";
         // כולל נחפפים בנוסף לטכנאי/קבע
-        const list = (window.staff || [])
+        const baseList = (window.staff || [])
           .filter((e) => ["טכנאי", "קבע", "נחפף"].includes(e.type))
           .sort((a, b) => a.name.localeCompare(b.name));
-        if (list.length === 0) {
+        if (baseList.length === 0) {
           cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/קבע/נחפפים במאגר.</p>`;
           return;
         }
+        // סינון לפי שם (רשימת החודשים נבנית מהרשימה המלאה כדי שתישאר יציבה)
+        const _nq = (window._vacNameSearch || "").trim().toLowerCase();
+        const list = _nq
+          ? baseList.filter((e) => (e.name || "").toLowerCase().includes(_nq))
+          : baseList;
 
         // איסוף כל החודשים שיש בהם חופשה (מסטטוסים + בקשות עתידיות) לרשימת הסינון
         const HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
         const monthLabel = (m) => { const [y, mo] = m.split("-"); return `${HEB_MONTHS[+mo - 1]} ${y}`; };
         const monthSet = new Set();
-        list.forEach((e) => {
+        baseList.forEach((e) => {
           window._computeVacUsage(e).specEntries.forEach((s) => {
             if (!s.startDate) return;
             const start = new Date(s.startDate);
@@ -3759,6 +3797,7 @@
         let html = `<div style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <label style="font-size:0.85rem; font-weight:bold;">📅 סינון חודש:</label>
           <select onchange="window._setVacMonthFilter(this.value)" style="padding:6px 10px; border-radius:8px;">${monthOpts}</select>
+          <input type="text" value="${window.escapeHtml(window._vacNameSearch || "")}" oninput="window._setVacNameSearch(this.value)" placeholder="🔍 חיפוש שם..." style="padding:6px 10px; border-radius:8px; border:1px solid var(--md-divider); min-width:160px;">
           ${monthFilter ? `<span style="font-size:0.8rem; color:var(--text-muted);">מוצגים רק מי שיש להם חופשה ב${monthLabel(monthFilter)}</span>` : ""}
         </div>`;
         html += `<table class="mobile-card-table" style="width:100%; text-align:right;"><tr>
@@ -3847,6 +3886,8 @@
             <td data-label="פירוט חופשות">${combinedDetail}</td>
           </tr>`;
         });
+        if (list.length === 0)
+          html += `<tr><td colspan="7" style="padding:12px; color:var(--text-muted); font-style:italic;">לא נמצא עובד התואם לחיפוש.</td></tr>`;
         html += `</table>`;
         cont.innerHTML = html;
       };
@@ -4084,6 +4125,13 @@
         }
       };
 
+      // חיפוש חי ברוסטר העובדים (שם / מספר אישי)
+      window._staffSearch = window._staffSearch || "";
+      window.setStaffSearch = function (v) {
+        window._staffSearch = (v || "").trim().toLowerCase();
+        window.renderStaff();
+      };
+
       window.renderStaff = function () {
         if (typeof window.renderRoleFilters === "function")
           window.renderRoleFilters();
@@ -4092,7 +4140,16 @@
 
         let grid = document.getElementById("staffGrid");
         if (grid && window.staff) {
-          grid.innerHTML = window.staff
+          // חיפוש חי — לפי שם או מספר אישי (ריק = הכל)
+          const _q = window._staffSearch || "";
+          const _list = _q
+            ? window.staff.filter(
+                (e) =>
+                  (e.name || "").toLowerCase().includes(_q) ||
+                  String(e.personalId || "").toLowerCase().includes(_q),
+              )
+            : window.staff;
+          grid.innerHTML = _list
             .map((e) => {
               const isInactive = e.isActive === false ? "emp-inactive" : "";
               let displayFixed = window.getLocName
@@ -4149,6 +4206,8 @@
                     </div>`;
             })
             .join("");
+          if (_list.length === 0)
+            grid.innerHTML = `<p style="color:var(--text-muted); font-style:italic; padding:12px;">לא נמצא עובד התואם לחיפוש "${window.escapeHtml(_q)}".</p>`;
         }
         if (
           typeof window.populateWorkerRequestNames === "function" &&
@@ -10603,6 +10662,8 @@
       // הסרת הכוכבים (★) מפונקציות הציור שכבר קיימות בקוד שלך
       window.renderTable = function (data, notesLog) {
         if (!window.currentMobileDay) window.currentMobileDay = 1;
+        if (typeof window._updateUnsavedIndicator === "function")
+          window._updateUnsavedIndicator();
         // אם המנהל אישר את כל השיבוץ ("בדוק שיבוץ מלא" — כולם אושרו והלוח לא
         // השתנה מאז) — לא מציגים יותר את סימוני האזהרה (⚠️) על הלוח.
         const _suppressWarns =
