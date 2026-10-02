@@ -201,6 +201,7 @@
         holidaysLogTable: { nativePage: "tasks", label: "מעקב סגירת חגים" },
         employeeSummaryContent: { nativePage: "tasks", label: "סיכום לפי עובד" },
         weekendJusticeTableContainer: { nativePage: "tasks", label: 'טבלת הוגנות סופ"ש' },
+        locationFairnessTable: { nativePage: "tasks", label: 'הוגנות מיקומים (זירה/מת"ל)' },
         vacationManagementTable: { nativePage: "tasks", label: "ניהול חופשים" },
         demandsListContainer: { nativePage: "demands", label: "דרישות פעילות", defaultColSpan: 18 },
       };
@@ -1734,11 +1735,19 @@
             }
             if (window.currentNotesLog && window.currentNotesLog[d]) {
               const note = window.currentNotesLog[d].find((n) => n.emp && n.emp.id === emp.id);
-              if (note) return { type: "rest", label: note.reason };
+              if (note) {
+                // "אחרי לילה"/"אחרי 24ש" אינם חוסר משמרת — הם התוצאה הישירה
+                // של משמרת שבוצעה, ולכן נספרים כמשמרת לכל דבר.
+                const isPostShift = /אחרי לילה|אחרי 24/.test(note.reason || "");
+                return { type: isPostShift ? "postnight" : "rest", label: note.reason };
+              }
             }
             return { type: "none", label: "—" };
           });
-          const shiftCount = dayInfo.filter((x) => x.type === "shift").length;
+          // "אחרי לילה"/"אחרי 24ש" נספרים כמשמרת (שני לילות = 4 משמרות)
+          const shiftCount = dayInfo.filter(
+            (x) => x.type === "shift" || x.type === "postnight",
+          ).length;
           const explainedCount = dayInfo.filter((x) => x.type === "special" || x.type === "rest").length;
           const noneCount = dayInfo.filter((x) => x.type === "none").length;
           return { emp, dayInfo, shiftCount, explainedCount, noneCount };
@@ -2040,6 +2049,7 @@
         const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
         const typeStyle = {
           shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
+          postnight: { icon: "🌙", bg: "rgba(99,102,241,0.14)" },
           special: { icon: "🟡", bg: "rgba(245,158,11,0.14)" },
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
@@ -5475,6 +5485,8 @@
           window.renderTasks();
           if (typeof window.renderWeekendJusticeTable === "function")
             window.renderWeekendJusticeTable();
+          if (typeof window.renderLocationFairnessTable === "function")
+            window.renderLocationFairnessTable();
         }
         if (
           p === "worker-requests" &&
@@ -7025,6 +7037,184 @@
         cont.innerHTML =
           renderSection("🗓️ סגירות אחרונות (עבר)", pastResults, false) +
           renderSection("📅 סגירות עתידיות", futureResults, canRequestSwap);
+      };
+
+      // ===== הוגנות מיקומים (זירה מול מת"ל) =====
+      // locationHistory[name][loc] = { count, lastOff, lastLabel }
+      // lastOff = היסט השבוע (0 = השבוע המוצג, -1 = שבוע שעבר...) שבו העובד
+      // הופיע לאחרונה במיקום. הכל יחסי לשבוע שהמנהל נמצא עליו כרגע.
+      window.LOC_FAIRNESS_WEEKS_BACK = 16;
+      window.LOC_ABSENCE_WARN_WEEKS = 2; // יותר משבועיים בלי המיקום → אזהרה
+      window.locationHistory =
+        JSON.parse(localStorage.getItem("shift_location_history_v1")) || {};
+      window.locationHistoryBaseWeek =
+        localStorage.getItem("shift_location_history_base_v1") || "";
+
+      window.rebuildLocationHistory = async function () {
+        const cont = document.getElementById("locationFairnessTable");
+        if (!window._fbImports || !window._firebaseDb) {
+          window.renderLocationFairnessTable();
+          return;
+        }
+        const { ref, get } = window._fbImports;
+        if (cont)
+          cont.innerHTML = "<i style='color:var(--text-muted);'>מחשב מחדש מהענן...</i>";
+        const WEEKS_BACK = window.LOC_FAIRNESS_WEEKS_BACK;
+        const hist = {};
+        const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
+        for (let off = -WEEKS_BACK; off <= 0; off++) {
+          const sun = window.getSunday((window.currentWeekOffset || 0) + off);
+          const wk = window.getWeekDbKey(sun);
+          const label = window.formatWeekString(sun);
+          let sched;
+          try {
+            const snap = await get(ref(window._firebaseDb, "schedules/" + wk));
+            if (!snap.exists()) continue;
+            sched = snap.val();
+          } catch (e) {
+            continue;
+          }
+          // לכל עובד — באילו מיקומים הוא הופיע בשבוע הזה (פעם אחת לשבוע למיקום)
+          const seen = {}; // name -> Set(loc)
+          days.forEach((d) =>
+            allShifts.forEach((s) =>
+              baseLocs.forEach((loc) => {
+                const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
+                if (!arr) return;
+                arr.forEach((e) => {
+                  if (!e || !e.name) return;
+                  if (!seen[e.name]) seen[e.name] = new Set();
+                  seen[e.name].add(loc);
+                });
+              }),
+            ),
+          );
+          Object.keys(seen).forEach((name) => {
+            if (!hist[name]) hist[name] = {};
+            seen[name].forEach((loc) => {
+              if (!hist[name][loc]) hist[name][loc] = { count: 0, lastOff: null, lastLabel: "" };
+              hist[name][loc].count++;
+              hist[name][loc].lastOff = off; // off עולה → נשאר האחרון
+              hist[name][loc].lastLabel = label;
+            });
+          });
+        }
+        window.locationHistory = hist;
+        window.locationHistoryBaseWeek = window.getWeekDbKey(
+          window.getSunday(window.currentWeekOffset || 0),
+        );
+        try {
+          localStorage.setItem("shift_location_history_v1", JSON.stringify(hist));
+          localStorage.setItem(
+            "shift_location_history_base_v1",
+            window.locationHistoryBaseWeek,
+          );
+        } catch (e) {}
+        window.renderLocationFairnessTable();
+        window.toast("✅ הוגנות המיקומים חושבה מחדש מהענן.");
+      };
+
+      window.renderLocationFairnessTable = function () {
+        const cont = document.getElementById("locationFairnessTable");
+        if (!cont) return;
+        const hist = window.locationHistory || {};
+        const curWeekKey = window.getWeekDbKey(
+          window.getSunday(window.currentWeekOffset || 0),
+        );
+        const stale =
+          window.locationHistoryBaseWeek &&
+          window.locationHistoryBaseWeek !== curWeekKey;
+        const list = (window.staff || [])
+          .filter((e) => e.isActive !== false && ["טכנאי", "קבע", "נחפף"].includes(e.type))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (list.length === 0) {
+          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין עובדים רלוונטיים.</p>`;
+          return;
+        }
+        if (Object.keys(hist).length === 0) {
+          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין נתונים עדיין — לחץ "🔄 רענן וחשב מחדש מהענן".</p>`;
+          return;
+        }
+
+        const WARN = window.LOC_ABSENCE_WARN_WEEKS;
+        const cell = (info) => {
+          if (!info || info.lastOff === null)
+            return {
+              html: `<span style="color:var(--md-error); font-weight:bold;">מעולם לא</span>`,
+              warn: true,
+              count: 0,
+              weeksAgo: Infinity,
+            };
+          const weeksAgo = -info.lastOff; // 0 = השבוע המוצג
+          const warn = weeksAgo > WARN;
+          const txt =
+            weeksAgo === 0 ? "השבוע" : weeksAgo === 1 ? "שבוע שעבר" : `לפני ${weeksAgo} שבועות`;
+          return {
+            html: `<b>${info.count}</b> <small style="color:${warn ? "var(--md-error)" : "var(--md-text-secondary)"};">(${txt})</small>`,
+            warn,
+            count: info.count,
+            weeksAgo,
+          };
+        };
+
+        let staleNote = stale
+          ? `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.82rem;">
+               ⚠️ הנתונים חושבו ביחס לשבוע אחר. לחץ "🔄 רענן" כדי ליישר לשבוע שאתה נמצא עליו.
+             </div>`
+          : "";
+
+        const warnRows = [];
+        let body = "";
+        list.forEach((e) => {
+          const h = hist[e.name] || {};
+          const z = cell(h[LOC_ZIRA]);
+          const m = cell(h[LOC_MATAL]);
+          const total = z.count + m.count;
+          // איזון: אחוז מהשבועות שבהם היה בזירה
+          const balance = total > 0 ? Math.round((z.count / total) * 100) : 0;
+          if (z.warn) warnRows.push(`${e.name} — זירה`);
+          if (m.warn) warnRows.push(`${e.name} — מת"ל`);
+          const rowWarn = z.warn || m.warn;
+          body += `<tr style="border-bottom:1px solid var(--md-divider); ${rowWarn ? "background:rgba(239,68,68,0.06);" : ""}">
+            <td data-label="שם" style="padding:7px 10px;"><b>${window.escapeHtml(e.name)}</b>${rowWarn ? ' <span title="לא היה באחד המיקומים מעל שבועיים">⚠️</span>' : ""}</td>
+            <td data-label="דרג" style="padding:7px 10px; color:var(--md-text-secondary); font-size:0.82rem;">${window.escapeHtml(e.type || "")}</td>
+            <td data-label="זירה" style="padding:7px 10px; text-align:center;">${z.html}</td>
+            <td data-label='מת"ל' style="padding:7px 10px; text-align:center;">${m.html}</td>
+            <td data-label="איזון" style="padding:7px 10px; text-align:center;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:center;">
+                <div style="flex:1; max-width:90px; height:8px; background:var(--md-divider); border-radius:999px; overflow:hidden;">
+                  <div style="width:${balance}%; height:100%; background:#0d9488;"></div>
+                </div>
+                <small style="color:var(--md-text-secondary); white-space:nowrap;">${total ? `${balance}% זירה` : "—"}</small>
+              </div>
+            </td>
+          </tr>`;
+        });
+
+        const warnBanner = warnRows.length
+          ? `<div style="background:rgba(239,68,68,0.1); border-right:4px solid var(--md-error); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.85rem;">
+               <b style="color:var(--md-error);">⚠️ לא היו במיקום מעל ${WARN} שבועות:</b> ${warnRows.map((w) => window.escapeHtml(w)).join(" · ")}
+             </div>`
+          : `<div style="background:rgba(22,163,74,0.1); border-right:4px solid #16a34a; border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.85rem;">
+               ✅ כל העובדים היו בשני המיקומים בשבועיים האחרונים.
+             </div>`;
+
+        cont.innerHTML =
+          staleNote +
+          warnBanner +
+          `<table class="mobile-card-table" style="width:100%; text-align:right; border-collapse:collapse;">
+            <tr style="background:var(--md-bg);">
+              <th style="padding:8px;">שם</th><th style="padding:8px;">דרג</th>
+              <th style="padding:8px;">זירה (שבועות)</th><th style="padding:8px;">מת"ל (שבועות)</th>
+              <th style="padding:8px;">איזון</th>
+            </tr>${body}</table>`;
+      };
+
+      window.exportLocationFairnessToCSV = function () {
+        window._exportContainerTablesToCSV(
+          document.getElementById("locationFairnessTable"),
+          `הוגנות_מיקומים_${window._todayFileStamp()}.csv`,
+        );
       };
 
       // חישוב מחדש של היסטוריית הסופ"שים מהלוחות השמורים בענן (16 שבועות אחורה)

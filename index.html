@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827v";
+        var BUILD = "20260827w";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -817,7 +817,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827v" />
+    <link rel="stylesheet" href="style.css?v=20260827w" />
   </head>
   <body>
     <div
@@ -2407,6 +2407,61 @@
                 </div>
                 <div
                   id="weekendJusticeTableContainer"
+                  style="overflow-x: auto"
+                ></div>
+                </div>
+              </div>
+
+              <div
+                class="card-paper manager-only"
+                id="widget-locationFairnessTable"
+                data-widget-key="locationFairnessTable"
+                style="border-left: 4px solid #0d9488"
+              >
+                <div class="widget-controls">
+                  <span class="widget-drag-handle" onpointerdown="window.widgetMoveStart(event,'locationFairnessTable')" title="גרור להזזה">⠿</span>
+                  <button title="הסתר/הצג" onclick="window.widgetToggleCollapse('locationFairnessTable')">👁</button>
+                  <button title="העבר לעמוד אחר" onclick="window.widgetMoveToPage('locationFairnessTable')">⇥</button>
+                </div>
+                <span class="widget-resize-handle" onpointerdown="window.widgetResizeStart(event,'locationFairnessTable')" title="גרור לשינוי גודל">⇲</span>
+                <div class="widget-body">
+                <h3 style="color: #0d9488; margin-top: 0">
+                  🔀 הוגנות מיקומים — זירה מול מת"ל
+                </h3>
+                <p
+                  style="
+                    font-size: 0.85rem;
+                    margin-top: 0;
+                    color: var(--md-text-secondary);
+                  "
+                >
+                  חלוקת המשמרות בין שני המיקומים, יחסית לשבוע שאתה נמצא עליו.
+                  מי שלא היה במיקום מעל שבועיים מסומן באזהרה.
+                </p>
+                <div
+                  style="
+                    margin-bottom: 12px;
+                    display: flex;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                  "
+                >
+                  <button
+                    class="btn btn-outlined manager-only"
+                    style="border-color: #0d9488; color: #0d9488"
+                    onclick="window.rebuildLocationHistory()"
+                  >
+                    🔄 רענן וחשב מחדש מהענן
+                  </button>
+                  <button
+                    class="btn btn-outlined manager-only"
+                    onclick="window.exportLocationFairnessToCSV()"
+                  >
+                    ⬇️ ייצוא לאקסל
+                  </button>
+                </div>
+                <div
+                  id="locationFairnessTable"
                   style="overflow-x: auto"
                 ></div>
                 </div>
@@ -4150,8 +4205,9 @@
             margin-top: 0;
           "
         >
-          ✅ משמרת אמיתית · 🟡 סטטוס מיוחד/מנוחה (ריחוף לפירוט) · ⬜ אין כלום
-          באותו יום. שורות עם 0 משמרות אמיתיות מודגשות למעלה.
+          ✅ משמרת אמיתית · 🌙 אחרי לילה/24ש (נספר כמשמרת) · 🟡 סטטוס
+          מיוחד/מנוחה (ריחוף לפירוט) · ⬜ אין כלום באותו יום. שורות עם 0
+          משמרות מודגשות למעלה.
         </p>
         <div id="staffingCheckContent" style="overflow-x: auto"></div>
         <div style="text-align: left; margin-top: 16px">
@@ -5108,6 +5164,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827v"></script>
+    <script src="script.js?v=20260827w"></script>
   </body>
 </html>
