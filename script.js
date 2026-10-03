@@ -7039,6 +7039,219 @@
           renderSection("📅 סגירות עתידיות", futureResults, canRequestSwap);
       };
 
+      // ===== ייבוא סגירות סופ"ש/חג מקובץ אקסל =====
+      // מבנה הקובץ: שורה 1 = כותרת; A1 טקסט חופשי, ואז עמודה לכל סופ"ש עם
+      // תאריך (תמיד שבת). עמודה A בשורות הנתונים = שם המיקום (זירה / מת"ל);
+      // תא ריק יורש מהשורה הקרובה שיש בה ערך (תמיכה בתאי מיזוג).
+      // כל עמודה = סופ"ש אחד; הייבוא דורס את בלוק הסופ"ש של אותו שבוע.
+      window._closuresImport = null;
+
+      window._xlsxSerialToDate = function (v) {
+        if (v instanceof Date) return v;
+        const n = Number(v);
+        if (!isNaN(n) && n > 20000 && n < 90000) {
+          // סריאל של אקסל (epoch 30/12/1899), מנורמל לחצות מקומית
+          const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+          return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+        }
+        const p = String(v || "").trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+        if (p) {
+          let y = Number(p[3]);
+          if (y < 100) y += 2000;
+          return new Date(y, Number(p[2]) - 1, Number(p[1]));
+        }
+        const d2 = new Date(v);
+        return isNaN(d2.getTime()) ? null : d2;
+      };
+
+      window.handleClosuresXlsx = function (input) {
+        const file = input && input.files && input.files[0];
+        input.value = ""; // כדי שאפשר יהיה לבחור שוב את אותו קובץ
+        if (!file) return;
+        if (typeof XLSX === "undefined") {
+          window.toast("⛔ רכיב קריאת האקסל לא נטען. רענן את הדף ונסה שוב.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const wb = XLSX.read(new Uint8Array(ev.target.result), { type: "array" });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+            window._parseClosuresGrid(grid);
+          } catch (e) {
+            window.toast("⛔ שגיאה בקריאת הקובץ: " + (e.message || e));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      window._parseClosuresGrid = function (grid) {
+        if (!grid || grid.length < 2) {
+          window.toast("⛔ הקובץ ריק או חסר שורות נתונים.");
+          return;
+        }
+        const header = grid[0] || [];
+        // עמודות תאריך (מדלגים על A, ועל תאים שאינם תאריך תקין)
+        const cols = [];
+        for (let c = 1; c < header.length; c++) {
+          const d = window._xlsxSerialToDate(header[c]);
+          if (d && !isNaN(d.getTime()) && d.getFullYear() > 2000) cols.push({ c, date: d });
+        }
+        if (cols.length === 0) {
+          window.toast("⛔ לא נמצאו עמודות תאריך בשורה הראשונה.");
+          return;
+        }
+        // מיקום לכל שורת נתונים — ירושה מהשורה הקרובה שיש בה ערך
+        const dataRows = [];
+        for (let r = 1; r < grid.length; r++) {
+          const raw = String((grid[r] || [])[0] || "").trim();
+          dataRows.push({ r, locRaw: raw });
+        }
+        const normLoc = (s) => {
+          const t = String(s || "").replace(/["'״]/g, "").trim();
+          if (!t) return "";
+          if (t.indexOf("זירה") !== -1) return LOC_ZIRA;
+          if (t.indexOf("מתל") !== -1 || t.indexOf("מת") === 0) return LOC_MATAL;
+          return "";
+        };
+        // מילוי כלפי מעלה ואז כלפי מטה
+        let last = "";
+        dataRows.forEach((row) => {
+          const n = normLoc(row.locRaw);
+          if (n) last = n;
+          row.loc = n || last;
+        });
+        for (let i = dataRows.length - 1; i >= 0; i--)
+          if (!dataRows[i].loc && dataRows[i + 1]) dataRows[i].loc = dataRows[i + 1].loc;
+        let firstLoc = "";
+        for (let i = 0; i < dataRows.length; i++) if (dataRows[i].loc) { firstLoc = dataRows[i].loc; break; }
+        dataRows.forEach((row) => { if (!row.loc) row.loc = firstLoc; });
+
+        const staffByName = {};
+        (window.staff || []).forEach((e) => {
+          if (e && e.name) staffByName[String(e.name).trim()] = e;
+        });
+
+        const weeks = [];
+        const unknown = new Set();
+        cols.forEach(({ c, date }) => {
+          const sun = new Date(date);
+          sun.setDate(sun.getDate() - sun.getDay()); // ראשון של אותו שבוע
+          const weekKey = window.getWeekDbKey(sun);
+          const byLoc = {};
+          baseLocs.forEach((l) => (byLoc[l] = []));
+          dataRows.forEach((row) => {
+            const nm = String((grid[row.r] || [])[c] || "").trim();
+            if (!nm) return;
+            if (!byLoc[row.loc]) byLoc[row.loc] = [];
+            const emp = staffByName[nm];
+            if (!emp) unknown.add(nm);
+            else if (!byLoc[row.loc].find((x) => x.id === emp.id)) byLoc[row.loc].push(emp);
+          });
+          weeks.push({
+            weekKey,
+            sunday: sun,
+            satDate: date,
+            label: window.formatWeekString(sun),
+            isSaturday: date.getDay() === 6,
+            byLoc,
+          });
+        });
+
+        window._closuresImport = { weeks, unknown: [...unknown] };
+        window._renderClosuresPreview();
+      };
+
+      window._renderClosuresPreview = function () {
+        const cont = document.getElementById("closuresImportPreview");
+        const data = window._closuresImport;
+        if (!cont || !data) return;
+        const fmt = (d) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+        let html = "";
+        if (data.unknown.length) {
+          html += `<div style="background:rgba(239,68,68,0.1); border-right:4px solid var(--md-error); border-radius:8px; padding:9px 11px; margin-bottom:10px; font-size:0.85rem;">
+            <b style="color:var(--md-error);">⚠️ שמות שלא נמצאו במאגר (יידלגו):</b> ${data.unknown.map((n) => window.escapeHtml(n)).join(" · ")}
+          </div>`;
+        }
+        const notSat = data.weeks.filter((w) => !w.isSaturday);
+        if (notSat.length) {
+          html += `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:9px 11px; margin-bottom:10px; font-size:0.85rem;">
+            ⚠️ ${notSat.length} עמודות שאינן יום שבת — שויכו לשבוע שבו נופל התאריך.
+          </div>`;
+        }
+        html += `<div style="background:rgba(22,163,74,0.08); border-radius:8px; padding:9px 11px; margin-bottom:10px; font-size:0.86rem;">
+          נמצאו <b>${data.weeks.length}</b> סופ"שים לייבוא — מ-${fmt(data.weeks[0].satDate)} עד ${fmt(data.weeks[data.weeks.length - 1].satDate)}.
+        </div>`;
+        html += `<div style="max-height:320px; overflow-y:auto;"><table class="mobile-card-table" style="width:100%; text-align:right; border-collapse:collapse; font-size:0.86rem;">
+          <tr style="background:var(--md-bg);"><th style="padding:7px;">שבת</th><th style="padding:7px;">שבוע</th><th style="padding:7px;">זירה</th><th style="padding:7px;">מת"ל</th></tr>`;
+        data.weeks.forEach((w) => {
+          const nm = (l) => (w.byLoc[l] || []).map((e) => window.escapeHtml(e.name)).join(", ") || "—";
+          html += `<tr style="border-bottom:1px solid var(--md-divider);">
+            <td data-label="שבת" style="padding:7px; white-space:nowrap;"><b>${fmt(w.satDate)}</b></td>
+            <td data-label="שבוע" style="padding:7px; color:var(--md-text-secondary); font-size:0.8rem; white-space:nowrap;">${window.escapeHtml(w.label)}</td>
+            <td data-label="זירה" style="padding:7px;">${nm(LOC_ZIRA)}</td>
+            <td data-label='מת"ל' style="padding:7px;">${nm(LOC_MATAL)}</td>
+          </tr>`;
+        });
+        html += `</table></div>`;
+        cont.innerHTML = html;
+        document.getElementById("closuresImportModal").style.display = "flex";
+      };
+
+      window.applyClosuresImport = async function () {
+        const data = window._closuresImport;
+        if (!data || !data.weeks.length) return;
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לייבא סגירות.");
+          return;
+        }
+        if (!(await window.confirmDialog({
+          title: "ייבוא סגירות",
+          message: `לייבא ${data.weeks.length} סופ"שים?\nשיבוץ הסופ"ש הקיים (חמישי־לילה, שישי, שבת) בשבועות האלה יידרס.`,
+          confirmText: "ייבא ודרוס",
+          danger: true,
+        }))) return;
+
+        const btn = document.getElementById("closuresImportApplyBtn");
+        if (btn) { btn.disabled = true; btn.textContent = "⏳ מייבא…"; }
+        const fb = window._fbImports;
+        let done = 0, failed = 0;
+        for (const w of data.weeks) {
+          let sched = null;
+          if (w.weekKey === window.currentSelectedWeek) sched = window.currentSchedule;
+          else if (fb && window._firebaseDb) {
+            try {
+              const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + w.weekKey));
+              sched = snap.exists() ? snap.val() : { isPublished: false, special: {}, dailyNotes: {} };
+            } catch (e) { failed++; continue; }
+          }
+          if (!sched) { failed++; continue; }
+          baseLocs.forEach((loc) => {
+            const people = w.byLoc[loc] || [];
+            const shifts = loc === LOC_MATAL ? weekendShiftsMATAL : weekendShiftsZira;
+            shifts.forEach((sk) => {
+              const [d, s] = sk.split("-");
+              const key = `${d}-${s}`;
+              if (!sched[key]) sched[key] = {};
+              // דריסה מלאה של המיקום הזה במשמרת הזו
+              sched[key][loc] = people.map((e) => ({ ...e, isPref: true }));
+            });
+          });
+          try {
+            window.saveToCloud("schedules/" + w.weekKey, sched);
+            done++;
+          } catch (e) { failed++; }
+        }
+        if (btn) { btn.disabled = false; btn.textContent = "✅ ייבא ודרוס"; }
+        document.getElementById("closuresImportModal").style.display = "none";
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast(
+          `✅ יובאו ${done} סופ"שים${failed ? ` (${failed} נכשלו)` : ""}.\nלחץ "🔄 רענן" בטבלאות ההוגנות כדי לעדכן את ההיסטוריה.`,
+        );
+      };
+
       // ===== הוגנות מיקומים (זירה מול מת"ל) =====
       // locationHistory[name][loc] = { count, lastOff, lastLabel }
       // lastOff = היסט השבוע (0 = השבוע המוצג, -1 = שבוע שעבר...) שבו העובד

@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260827w";
+        var BUILD = "20260827x";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -817,7 +817,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260827w" />
+    <link rel="stylesheet" href="style.css?v=20260827x" />
   </head>
   <body>
     <div
@@ -2404,6 +2404,21 @@
                   >
                     ⬇️ ייצוא לאקסל
                   </button>
+                  <button
+                    class="btn btn-outlined manager-only"
+                    style="border-color: #7c3aed; color: #7c3aed"
+                    onclick="document.getElementById('closuresXlsxInput').click()"
+                    title="טעינת סופ&quot;שים/חגים מקובץ אקסל"
+                  >
+                    📥 ייבוא סגירות מאקסל
+                  </button>
+                  <input
+                    type="file"
+                    id="closuresXlsxInput"
+                    accept=".xlsx,.xls"
+                    style="display: none"
+                    onchange="window.handleClosuresXlsx(this)"
+                  />
                 </div>
                 <div
                   id="weekendJusticeTableContainer"
@@ -4171,6 +4186,47 @@
       </div>
     </div>
 
+    <!-- תצוגה מקדימה לייבוא סגירות מאקסל (לפני דריסה בפועל) -->
+    <div id="closuresImportModal" class="modal">
+      <div class="modal-content" style="max-width: 880px">
+        <h3 style="color: #7c3aed; margin-top: 0">📥 ייבוא סגירות מאקסל</h3>
+        <p
+          style="
+            font-size: 0.82rem;
+            color: var(--md-text-secondary);
+            margin-top: 0;
+          "
+        >
+          בדוק את מה שזוהה לפני הייבוא. הייבוא <b>דורס</b> את שיבוץ הסופ"ש
+          (חמישי־לילה, שישי, שבת) בכל שבוע שמופיע בקובץ.
+        </p>
+        <div id="closuresImportPreview"></div>
+        <div
+          style="
+            display: flex;
+            gap: 8px;
+            justify-content: flex-start;
+            margin-top: 16px;
+          "
+        >
+          <button
+            id="closuresImportApplyBtn"
+            class="btn btn-contained"
+            style="background: #7c3aed"
+            onclick="window.applyClosuresImport()"
+          >
+            ✅ ייבא ודרוס
+          </button>
+          <button
+            class="btn btn-outlined"
+            onclick="document.getElementById('closuresImportModal').style.display='none'"
+          >
+            ביטול
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- מרכז פעולות — כל מה שדורש אישור, צף מעל המסך הנוכחי -->
     <div id="actionCenterModal" class="modal">
       <div class="modal-content" style="max-width: 820px">
@@ -5163,7 +5219,8 @@
       <button onclick="window.commitChangesToCloud()">💾 שמור עכשיו</button>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260827w"></script>
+    <script src="script.js?v=20260827x"></script>
   </body>
 </html>
