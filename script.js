@@ -7253,6 +7253,108 @@
         );
       };
 
+      // ===== מיגרציית שינוי-שם לעובד =====
+      // חלק מהנתונים מאוחסנים לפי שם ולא לפי מזהה (היסטוריית סופ"ש/מיקומים,
+      // יומן חגים, משימות, סטטוסים מיוחדים, ותצלומי שם בתוך הלוח). בלי
+      // מיגרציה, שינוי שם היה "מאפס" לעובד את כל מה שצבר.
+      window._migrateEmployeeRename = function (empId, oldName, newName) {
+        let touched = [];
+
+        // 1) מפות היסטוריה מקומיות (מפתח = שם)
+        [
+          ["weekendHistory", "shift_weekend_history_v1"],
+          ["weekendHistoryMeta", "shift_weekend_history_meta_v1"],
+          ["locationHistory", "shift_location_history_v1"],
+        ].forEach(([prop, lsKey]) => {
+          const map = window[prop];
+          if (map && Object.prototype.hasOwnProperty.call(map, oldName)) {
+            map[newName] = map[oldName];
+            delete map[oldName];
+            try { localStorage.setItem(lsKey, JSON.stringify(map)); } catch (e) {}
+            touched.push(prop);
+          }
+        });
+
+        // 2) יומן חגים (רשומות נושאות שם)
+        let holChanged = 0;
+        (window.holidaysLog || []).forEach((l) => {
+          if (l && l.name === oldName) { l.name = newName; holChanged++; }
+        });
+        if (holChanged && typeof window.saveToCloud === "function") {
+          window.saveToCloud("holidaysLog", window.holidaysLog);
+          touched.push("חגים");
+        }
+
+        // 3) משימות — assignee בודד ורשימת assignees
+        let taskChanged = 0;
+        (window.systemTasks || []).forEach((t) => {
+          if (!t) return;
+          if (t.assignee === oldName) { t.assignee = newName; taskChanged++; }
+          (t.assignees || []).forEach((a) => {
+            if (a && (a.name === oldName || String(a.id) === String(empId))) {
+              a.name = newName; taskChanged++;
+            }
+          });
+        });
+        if (taskChanged && typeof window._saveTasks === "function") {
+          window._saveTasks();
+          touched.push("משימות");
+        }
+
+        // 4) סטטוסים מיוחדים (empName) — המזהה הוא העוגן, השם רק לתצוגה
+        let specChanged = 0;
+        (window.specialStatuses || []).forEach((sp) => {
+          if (sp && String(sp.empId) === String(empId) && sp.empName !== newName) {
+            sp.empName = newName; specChanged++;
+          }
+        });
+        if (specChanged && typeof window.saveToCloud === "function") {
+          window.saveToCloud("specialStatuses", window.specialStatuses);
+          touched.push("סטטוסים");
+        }
+
+        // 5) תצלומי שם בתוך הלוח של השבוע המוצג (לוחות עבר נפתרים לפי מזהה)
+        const sched = window.currentSchedule || {};
+        Object.keys(sched).forEach((k) => {
+          if (days.indexOf(String(k).split("-")[0]) < 0) return;
+          const slot = sched[k];
+          if (!slot || typeof slot !== "object") return;
+          baseLocs.forEach((loc) => {
+            if (!Array.isArray(slot[loc])) return;
+            slot[loc].forEach((e) => {
+              if (e && String(e.id) === String(empId)) e.name = newName;
+            });
+          });
+        });
+
+        // 6) מפקדים
+        (window.commanders || []).forEach((c) => {
+          if (c && (String(c.empId) === String(empId) || c.name === oldName))
+            c.name = newName;
+        });
+        try {
+          localStorage.setItem("shift_commanders_v1", JSON.stringify(window.commanders || []));
+        } catch (e) {}
+
+        window.toast(
+          `✏️ השם עודכן מ"${oldName}" ל"${newName}".` +
+            (touched.length ? `\nההיסטוריה הועברה: ${[...new Set(touched)].join(", ")}.` : ""),
+        );
+      };
+
+      // שם נוכחי של עובד לפי המזהה שברשומה — כך ששינוי שם לא מאבד היסטוריה
+      // (לוחות עבר שמורים עם תצלום השם הישן; המזהה הוא העוגן היציב).
+      window._currentNameOf = function (entry) {
+        if (!entry) return "";
+        if (entry.id != null) {
+          const f =
+            (window.staff || []).find((x) => String(x.id) === String(entry.id)) ||
+            (window.globalStaff || []).find((x) => String(x.id) === String(entry.id));
+          if (f && f.name) return f.name;
+        }
+        return entry.name || "";
+      };
+
       // ===== הוגנות מיקומים (זירה מול מת"ל) =====
       // locationHistory[name][loc] = { count, lastOff, lastLabel }
       // lastOff = היסט השבוע (0 = השבוע המוצג, -1 = שבוע שעבר...) שבו העובד
@@ -7296,9 +7398,10 @@
                 const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
                 if (!arr) return;
                 arr.forEach((e) => {
-                  if (!e || !e.name) return;
-                  if (!seen[e.name]) seen[e.name] = new Set();
-                  seen[e.name].add(loc);
+                  const nm = window._currentNameOf(e);
+                  if (!nm) return;
+                  if (!seen[nm]) seen[nm] = new Set();
+                  seen[nm].add(loc);
                 });
               }),
             ),
@@ -7339,10 +7442,11 @@
           window.locationHistoryBaseWeek &&
           window.locationHistoryBaseWeek !== curWeekKey;
         const list = (window.staff || [])
-          .filter((e) => e.isActive !== false && ["טכנאי", "קבע", "נחפף"].includes(e.type))
+          // קבע אינו חלק מסבב זירה/מת"ל — רק טכנאים ונחפפים
+          .filter((e) => e.isActive !== false && ["טכנאי", "נחפף"].includes(e.type))
           .sort((a, b) => a.name.localeCompare(b.name));
         if (list.length === 0) {
-          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין עובדים רלוונטיים.</p>`;
+          cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/נחפפים במאגר.</p>`;
           return;
         }
         if (Object.keys(hist).length === 0) {
@@ -7467,9 +7571,10 @@
               const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
               if (arr)
                 arr.forEach((e) => {
-                  if (e && e.name) {
-                    if (!workerDays[e.name]) workerDays[e.name] = new Set();
-                    workerDays[e.name].add(d);
+                  const nm = window._currentNameOf(e);
+                  if (nm) {
+                    if (!workerDays[nm]) workerDays[nm] = new Set();
+                    workerDays[nm].add(d);
                   }
                 });
             });
@@ -10322,7 +10427,12 @@
           }
         }
 
+        const _prevName = emp.name;
         emp.name = document.getElementById("editName").value;
+        // שינוי שם — גוררים אחריו את כל מה שמאוחסן לפי שם (היסטוריה, חגים,
+        // משימות, סטטוסים), כדי שלא "ייעלם" לעובד כל מה שצבר.
+        if (_prevName && emp.name && _prevName !== emp.name)
+          window._migrateEmployeeRename(emp.id, _prevName, emp.name);
         const _prevType = emp.type;
         emp.type = document.getElementById("editType").value;
         emp.fixedLoc = document.getElementById("editFixedLoc").value;
