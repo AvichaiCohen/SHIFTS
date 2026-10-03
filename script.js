@@ -1736,17 +1736,18 @@
             if (window.currentNotesLog && window.currentNotesLog[d]) {
               const note = window.currentNotesLog[d].find((n) => n.emp && n.emp.id === emp.id);
               if (note) {
-                // "אחרי לילה"/"אחרי 24ש" אינם חוסר משמרת — הם התוצאה הישירה
-                // של משמרת שבוצעה, ולכן נספרים כמשמרת לכל דבר.
-                const isPostShift = /אחרי לילה|אחרי 24/.test(note.reason || "");
-                return { type: isPostShift ? "postnight" : "rest", label: note.reason };
+                // "אחרי לילה"/"אחרי 24ש"/"אחרי שבת" אינם חוסר משמרת — הם
+                // התוצאה הישירה של משמרת שבוצעה, ולכן נספרים כמשמרת לכל דבר.
+                const isPostShift = /אחרי לילה|אחרי 24|אחרי שבת/.test(note.reason || "");
+                return { type: isPostShift ? "postshift" : "rest", label: note.reason };
               }
             }
             return { type: "none", label: "—" };
           });
-          // "אחרי לילה"/"אחרי 24ש" נספרים כמשמרת (שני לילות = 4 משמרות)
+          // "אחרי לילה"/"אחרי 24ש"/"אחרי שבת" נספרים כמשמרת
+          // (למשל: שני לילות = 4 משמרות)
           const shiftCount = dayInfo.filter(
-            (x) => x.type === "shift" || x.type === "postnight",
+            (x) => x.type === "shift" || x.type === "postshift",
           ).length;
           const explainedCount = dayInfo.filter((x) => x.type === "special" || x.type === "rest").length;
           const noneCount = dayInfo.filter((x) => x.type === "none").length;
@@ -2049,7 +2050,7 @@
         const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
         const typeStyle = {
           shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
-          postnight: { icon: "🌙", bg: "rgba(99,102,241,0.14)" },
+          postshift: { icon: "🌙", bg: "rgba(99,102,241,0.14)" },
           special: { icon: "🟡", bg: "rgba(245,158,11,0.14)" },
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
