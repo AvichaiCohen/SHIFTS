@@ -7390,29 +7390,44 @@
           } catch (e) {
             continue;
           }
-          // לכל עובד — באילו מיקומים הוא הופיע בשבוע הזה (פעם אחת לשבוע למיקום)
-          const seen = {}; // name -> Set(loc)
+          // פילוח לכל עובד/מיקום בשבוע הזה: לילות חול, ימי חול, והאם סגר סופ"ש.
+          // בלוק הסופ"ש (חמישי-לילה/שישי/שבת) נספר כיחידה אחת ולא כלילות/ימים,
+          // כדי שהמדדים לא יחפפו זה את זה.
+          const acc = {}; // name -> loc -> { nights, days, weekendHit }
           days.forEach((d) =>
             allShifts.forEach((s) =>
               baseLocs.forEach((loc) => {
                 const arr = sched[`${d}-${s}`] && sched[`${d}-${s}`][loc];
                 if (!arr) return;
+                const sk = `${d}-${s}`;
+                const wkBlock = loc === LOC_MATAL ? weekendShiftsMATAL : weekendShiftsZira;
+                const isWeekendSlot = wkBlock.indexOf(sk) !== -1;
+                const isNight = s === "לילה" || s === "24 שעות";
                 arr.forEach((e) => {
                   const nm = window._currentNameOf(e);
                   if (!nm) return;
-                  if (!seen[nm]) seen[nm] = new Set();
-                  seen[nm].add(loc);
+                  if (!acc[nm]) acc[nm] = {};
+                  if (!acc[nm][loc]) acc[nm][loc] = { nights: 0, days: 0, weekendHit: false };
+                  if (isWeekendSlot) acc[nm][loc].weekendHit = true;
+                  else if (isNight) acc[nm][loc].nights++;
+                  else acc[nm][loc].days++;
                 });
               }),
             ),
           );
-          Object.keys(seen).forEach((name) => {
+          Object.keys(acc).forEach((name) => {
             if (!hist[name]) hist[name] = {};
-            seen[name].forEach((loc) => {
-              if (!hist[name][loc]) hist[name][loc] = { count: 0, lastOff: null, lastLabel: "" };
-              hist[name][loc].count++;
-              hist[name][loc].lastOff = off; // off עולה → נשאר האחרון
-              hist[name][loc].lastLabel = label;
+            Object.keys(acc[name]).forEach((loc) => {
+              if (!hist[name][loc])
+                hist[name][loc] = { weeks: 0, nights: 0, days: 0, weekends: 0, lastOff: null, lastLabel: "" };
+              const a = acc[name][loc];
+              const h = hist[name][loc];
+              h.weeks++;
+              h.nights += a.nights;
+              h.days += a.days;
+              if (a.weekendHit) h.weekends++;
+              h.lastOff = off; // off עולה → נשאר האחרון
+              h.lastLabel = label;
             });
           });
         }
@@ -7455,31 +7470,48 @@
         }
 
         const WARN = window.LOC_ABSENCE_WARN_WEEKS;
+        const chip = (icon, n, title) =>
+          `<span title="${title}" style="display:inline-block; background:var(--md-bg); border:1px solid var(--md-divider); border-radius:999px; padding:1px 8px; margin:1px; font-size:0.8rem; white-space:nowrap;">${icon} <b>${n}</b></span>`;
         const cell = (info) => {
           if (!info || info.lastOff === null)
             return {
               html: `<span style="color:var(--md-error); font-weight:bold;">מעולם לא</span>`,
               warn: true,
-              count: 0,
+              total: 0,
               weeksAgo: Infinity,
             };
           const weeksAgo = -info.lastOff; // 0 = השבוע המוצג
           const warn = weeksAgo > WARN;
           const txt =
             weeksAgo === 0 ? "השבוע" : weeksAgo === 1 ? "שבוע שעבר" : `לפני ${weeksAgo} שבועות`;
+          const nights = info.nights || 0;
+          const dys = info.days || 0;
+          const wknds = info.weekends || 0;
           return {
-            html: `<b>${info.count}</b> <small style="color:${warn ? "var(--md-error)" : "var(--md-text-secondary)"};">(${txt})</small>`,
+            html:
+              `<div style="display:flex; flex-wrap:wrap; gap:2px; justify-content:center;">${chip("🌙", nights, "לילות בימי חול")}${chip("☀️", dys, "ימים (בוקר/ערב) בימי חול")}${chip("🏖️", wknds, 'סופ"שים שנסגרו במיקום')}</div>` +
+              `<small style="display:block; text-align:center; margin-top:2px; color:${warn ? "var(--md-error)" : "var(--md-text-secondary)"};">${txt}</small>`,
             warn,
-            count: info.count,
+            total: nights + dys + wknds,
             weeksAgo,
           };
         };
 
-        let staleNote = stale
-          ? `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.82rem;">
+        // נתונים שנשמרו בפורמט ישן (לפני הפילוח ללילות/ימים/סופ"שים)
+        const oldFormat = Object.keys(hist).some((n) =>
+          Object.keys(hist[n] || {}).some((l) => hist[n][l] && hist[n][l].weeks === undefined),
+        );
+        let staleNote =
+          (stale
+            ? `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.82rem;">
                ⚠️ הנתונים חושבו ביחס לשבוע אחר. לחץ "🔄 רענן" כדי ליישר לשבוע שאתה נמצא עליו.
              </div>`
-          : "";
+            : "") +
+          (oldFormat
+            ? `<div style="background:rgba(245,158,11,0.12); border-right:4px solid var(--md-warning); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.82rem;">
+               ⚠️ הנתונים השמורים הם מהפורמט הקודם (בלי פילוח לילות/ימים/סופ"שים). לחץ "🔄 רענן וחשב מחדש מהענן".
+             </div>`
+            : "");
 
         const warnRows = [];
         let body = "";
@@ -7487,9 +7519,9 @@
           const h = hist[e.name] || {};
           const z = cell(h[LOC_ZIRA]);
           const m = cell(h[LOC_MATAL]);
-          const total = z.count + m.count;
-          // איזון: אחוז מהשבועות שבהם היה בזירה
-          const balance = total > 0 ? Math.round((z.count / total) * 100) : 0;
+          const total = z.total + m.total;
+          // איזון: אחוז מסך הפעילות (לילות+ימים+סופ"שים) שהתרחש בזירה
+          const balance = total > 0 ? Math.round((z.total / total) * 100) : 0;
           if (z.warn) warnRows.push(`${e.name} — זירה`);
           if (m.warn) warnRows.push(`${e.name} — מת"ל`);
           const rowWarn = z.warn || m.warn;
@@ -7517,13 +7549,19 @@
                ✅ כל העובדים היו בשני המיקומים בשבועיים האחרונים.
              </div>`;
 
+        const legend = `<div style="font-size:0.78rem; color:var(--md-text-secondary); margin-bottom:8px;">
+          🌙 לילות (חול) · ☀️ ימים — בוקר/ערב (חול) · 🏖️ סופ"שים שנסגרו במיקום.
+          בלוק הסופ"ש נספר כיחידה אחת ולא כלילות/ימים, כדי שהמדדים לא יחפפו.
+        </div>`;
+
         cont.innerHTML =
           staleNote +
           warnBanner +
+          legend +
           `<table class="mobile-card-table" style="width:100%; text-align:right; border-collapse:collapse;">
             <tr style="background:var(--md-bg);">
               <th style="padding:8px;">שם</th><th style="padding:8px;">דרג</th>
-              <th style="padding:8px;">זירה (שבועות)</th><th style="padding:8px;">מת"ל (שבועות)</th>
+              <th style="padding:8px;">זירה</th><th style="padding:8px;">מת"ל</th>
               <th style="padding:8px;">איזון</th>
             </tr>${body}</table>`;
       };
