@@ -1707,11 +1707,71 @@
         }
       };
 
+      // ===== נרמול "קבינט בכיר" =====
+      // היסטורית המתג "פעיל בשיבוץ" היה מוסתר לקבינט בכיר, ולכן נוצרו רשומות
+      // לא עקביות (חלק נספרו בשיבוץ וחלק לא). כאן מסמנים את כולם כלא-בשיבוץ
+      // בפעולה אחת; מכאן והלאה אפשר לכוונן כל אדם בנפרד דרך המתג.
+      window.normalizeSeniorCabinet = async function () {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לבצע נרמול.");
+          return;
+        }
+        const list = (window.staff || []).filter(
+          (e) => e.type === "קבינט בכיר" && e.isActive !== false,
+        );
+        if (list.length === 0) {
+          window.toast("כל אנשי קבינט בכיר כבר מסומנים כלא-פעילים בשיבוץ.");
+          return;
+        }
+        if (!(await window.confirmDialog({
+          title: "נרמול קבינט בכיר",
+          message: `${list.length} אנשי קבינט בכיר מסומנים כרגע כפעילים בשיבוץ:\n${list
+            .map((e) => "• " + e.name)
+            .join("\n")}\n\nלסמן את כולם כלא-פעילים בשיבוץ ולהסיר אותם משיבוצי השבוע?`,
+          confirmText: "נרמל",
+          danger: true,
+        }))) return;
+        let removed = 0;
+        list.forEach((e) => {
+          e.isActive = false;
+          const g = (window.globalStaff || []).find((x) => String(x.id) === String(e.id));
+          if (g) g.isActive = false;
+          removed += window._removeEmpFromScheduleSlots(e.id) || 0;
+        });
+        window.currentSchedule.staff = window.staff;
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("staffMaster", window.globalStaff);
+        window.triggerUnsavedChanges();
+        window.renderStaff();
+        window.toast(
+          `🧹 ${list.length} אנשי קבינט בכיר סומנו כלא-פעילים בשיבוץ${removed ? `, והוסרו ${removed} שיבוצים` : ""}.`,
+        );
+      };
+
+      // ===== החרגת דרגים מבדיקת השיבוץ (ברמת השבוע) =====
+      // נשמר בתוך currentSchedule כדי שההחרגה תהיה פר-שבוע ולא גלובלית.
+      window._staffingSkipTypes = function () {
+        const v = window.currentSchedule && window.currentSchedule.staffingSkipTypes;
+        return Array.isArray(v) ? v : [];
+      };
+      window.toggleStaffingSkipType = function (type) {
+        if (!window.currentSchedule) return;
+        const cur = window._staffingSkipTypes();
+        const next = cur.indexOf(type) !== -1 ? cur.filter((t) => t !== type) : [...cur, type];
+        window.currentSchedule.staffingSkipTypes = next;
+        window.triggerUnsavedChanges();
+        window.openStaffingCheckModal();
+      };
+
       // בדיקת שיבוץ — לכל עובד פעיל, לכל יום בשבוע: משמרת אמיתית / סטטוס מיוחד / מנוחה מחושבת / כלום.
       // בודקת כל יום בנפרד (לא עוצרת בהסבר הראשון שנמצא) — כך שכיסוי חלקי (למשל קורס שמסתיים באמצע השבוע) לא מסתיר חוסר בהמשך השבוע.
       window._buildStaffingCheckRows = function () {
         const sched = window.currentSchedule || {};
-        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false);
+        // דרגים שהמנהל החריג מהבדיקה בשבוע הזה (למשל קבע) לא נבדקים כלל
+        const _skip = window._staffingSkipTypes();
+        const activeStaff = (window.staff || []).filter(
+          (e) => e.isActive !== false && _skip.indexOf(e.type) === -1,
+        );
         const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
         return activeStaff.map((emp) => {
           const dayInfo = days.map((d) => {
@@ -2055,7 +2115,21 @@
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
         };
-        let html = _noticeHtml + `<div style="text-align:left; margin-bottom:10px;">
+        // החרגת דרגים מהבדיקה — פר שבוע
+        const _skipTypes = window._staffingSkipTypes();
+        const _skipUi = `<div style="background:var(--md-bg); border-radius:8px; padding:8px 10px; margin-bottom:10px; font-size:0.82rem; text-align:right;">
+          <b>אל תבדוק בשבוע זה:</b>
+          <span style="display:inline-flex; gap:10px; flex-wrap:wrap; margin-right:8px;">
+            ${(window.roleTypes || [])
+              .map(
+                (rt) =>
+                  `<label style="cursor:pointer; white-space:nowrap;"><input type="checkbox" ${_skipTypes.indexOf(rt) !== -1 ? "checked" : ""} onchange="window.toggleStaffingSkipType('${rt.replace(/'/g, "\\'")}')" style="vertical-align:middle;"> ${window.escapeHtml(rt)}</label>`,
+              )
+              .join("")}
+          </span>
+          ${_skipTypes.length ? `<div style="color:var(--md-text-secondary); margin-top:4px;">מוחרגים כרגע: ${_skipTypes.map((t) => window.escapeHtml(t)).join(", ")} — לא נספרים גם באזהרות ובמונה "בלי משמרת".</div>` : ""}
+        </div>`;
+        let html = _noticeHtml + _skipUi + `<div style="text-align:left; margin-bottom:10px;">
           <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.approveAllStaffingRows()">✅ אשר את כולם</button>
         </div>
         <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.85rem;">
@@ -10237,9 +10311,17 @@
         const commanderRoles = ["קבינט בכיר", "קבע", "מילואים"];
         document.getElementById("commanderSection").style.display =
           commanderRoles.includes(type) ? "block" : "none";
+        // המתג "פעיל בשיבוץ" זמין לכל הסוגים — כולל קבינט בכיר. בעבר הוא
+        // הוסתר לקבינט בכיר, ולכן נוצר מצב שחלקם נספרו בשיבוץ וחלקם לא ואי
+        // אפשר היה לשלוט בזה. עכשיו המנהל קובע במפורש לכל אדם.
         const isActiveRow = document.getElementById("isActiveRow");
-        if (isActiveRow)
-          isActiveRow.style.display = type === "קבינט בכיר" ? "none" : "inline-block";
+        if (isActiveRow) {
+          isActiveRow.style.display = "inline-block";
+          const hint = document.getElementById("isActiveHint");
+          if (hint)
+            hint.textContent =
+              type === "קבינט בכיר" ? " (מומלץ לכבות לקבינט בכיר)" : "";
+        }
       };
 
       // מסיר עובד מכל שיבוצי המשמרות בשבוע המוצג (currentSchedule) — משמש
@@ -10555,11 +10637,11 @@
           emp.workedLastWeekend = false;
         }
         emp.isActive = document.getElementById("editIsActive").checked;
-        // "קבינט בכיר" = לא בשיבוץ: תמיד isActive=false, ובמעבר לתפקיד זה גם
-        // מסירים אותו משיבוצי המשמרות הקיימים בשבוע (לא רק מהשיבוץ העתידי).
-        if (emp.type === "קבינט בכיר") {
+        // במעבר *לתוך* קבינט בכיר: ברירת מחדל "לא בשיבוץ" + הסרה משיבוצי
+        // השבוע. מכאן והלאה המנהל שולט דרך המתג ואנחנו לא דורסים את בחירתו.
+        if (emp.type === "קבינט בכיר" && _prevType !== "קבינט בכיר") {
           emp.isActive = false;
-          if (_prevType !== "קבינט בכיר") {
+          {
             const _rem = window._removeEmpFromScheduleSlots(emp.id);
             if (_rem > 0)
               window.toast(
