@@ -6702,32 +6702,64 @@
       // לילה/24ש ← הבוקר של מחרת (ואם ריק — 24ש של מחרת).
       // זירה: בוקר ← ערב (אם מאויש) אחרת לילה; ערב ← לילה; לילה ← בוקר מחרת.
       // מוחזר הראשון בשרשרת שיש בו אנשים בפועל.
-      window._whoRelieves = function (day, shift, loc, data) {
+      // משמרת בת 24 שעות מזוהה מהשעות שהוגדרו לה: שעת התחלה == שעת סיום
+      // (למשל 08:30 - 08:30). זה הסימן שממנו נגזר גם מי מחליף.
+      window._isShift24h = function (loc, shift) {
+        if (shift === "24 שעות") return true;
+        const t = window.getShiftTime ? window.getShiftTime(loc, shift) : "";
+        const m = String(t || "").match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+        return !!(m && m[1] === m[2]);
+      };
+      // משמרת שמסתיימת למחרת (לילה/24ש) — המחליף מוצג ביום שאחריה, לא ביום שלה
+      window._shiftEndsNextDay = function (loc, shift) {
+        return shift === "לילה" || window._isShift24h(loc, shift);
+      };
+
+      const _atSlot = (sched, d, s, loc) => {
+        if (!d) return [];
+        const slot = sched[`${d}-${s}`];
+        const arr = slot && slot[loc];
+        return Array.isArray(arr) ? arr : [];
+      };
+
+      // מי מקבל משמרת-יום בסופה, באותו יום (בוקר/ערב)
+      window._reliefForDayShift = function (day, shift, loc, data) {
         const sched = data || window.currentSchedule || {};
-        const dIdx = days.indexOf(day);
-        const nextDay = dIdx >= 0 && dIdx < days.length - 1 ? days[dIdx + 1] : null;
-        const at = (d, s) => {
-          if (!d) return [];
-          const slot = sched[`${d}-${s}`];
-          const arr = slot && slot[loc];
-          return Array.isArray(arr) ? arr : [];
-        };
         let chain;
-        if (loc === LOC_MATAL) {
-          if (shift === "בוקר") chain = [[day, "24 שעות"], [day, "לילה"]];
-          else if (shift === "לילה" || shift === "24 שעות")
-            chain = [[nextDay, "בוקר"], [nextDay, "24 שעות"]];
-          else chain = [[day, "לילה"]];
-        } else {
-          if (shift === "בוקר") chain = [[day, "ערב"], [day, "לילה"]];
-          else if (shift === "ערב") chain = [[day, "לילה"]];
-          else if (shift === "לילה") chain = [[nextDay, "בוקר"], [nextDay, "ערב"]];
-          else chain = [[nextDay, "בוקר"]];
-        }
+        if (loc === LOC_MATAL) chain = [[day, "24 שעות"], [day, "לילה"]];
+        else if (shift === "בוקר") chain = [[day, "ערב"], [day, "לילה"]];
+        else chain = [[day, "לילה"]];
         for (const [d, s] of chain) {
-          const arr = at(d, s);
+          const arr = _atSlot(sched, d, s, loc);
           if (arr.length)
             return { day: d, shift: s, names: arr.map((e) => e.name).filter(Boolean) };
+        }
+        return null;
+      };
+
+      // מי קיבל את המשמרת בבוקר שאחרי לילה/24ש — מוצג ביום שלמחרת הלילה
+      window._reliefAfterNight = function (day, loc, data) {
+        const sched = data || window.currentSchedule || {};
+        const chain =
+          loc === LOC_MATAL
+            ? [[day, "בוקר"], [day, "24 שעות"]]
+            : [[day, "בוקר"], [day, "ערב"]];
+        for (const [d, s] of chain) {
+          const arr = _atSlot(sched, d, s, loc);
+          if (arr.length)
+            return { day: d, shift: s, names: arr.map((e) => e.name).filter(Boolean) };
+        }
+        return null;
+      };
+
+      // באיזה מיקום העובד עשה לילה/24ש ביום נתון (לשימוש ביום שאחריו)
+      window._nightLocOnDay = function (empId, day, data) {
+        const sched = data || window.currentSchedule || {};
+        for (const s of ["לילה", "24 שעות"]) {
+          for (const loc of baseLocs) {
+            const arr = _atSlot(sched, day, s, loc);
+            if (arr.find((x) => String(x.id) === String(empId))) return { loc, shift: s };
+          }
         }
         return null;
       };
@@ -6766,14 +6798,19 @@
             });
           });
           let reliefHtml = "";
-          if (foundShift) {
-            val = `${foundShift} · ${window.getLocName(foundLoc)}`;
-            color = "#15803d";
-            // מי מחליף אותי בסוף המשמרת
-            const rel = window._whoRelieves(d, foundShift, foundLoc, data);
-            reliefHtml = rel
-              ? `<div style="font-size:0.8rem; font-weight:normal; color:var(--md-text-secondary); margin-top:3px;">🔁 מחליף/ה אותך: <b style="color:var(--md-primary);">${window.escapeHtml(rel.names.join(", "))}</b> <small>(${window.escapeHtml(rel.shift)}${rel.day !== d ? " · " + window.escapeHtml(rel.day) : ""})</small></div>`
+          // המחליף מוצג ביום שבו המשמרת *מסתיימת*:
+          // משמרת יום → באותו יום. לילה/24ש → ביום שאחריו (שורת "אחרי לילה").
+          const _relLine = (rel) =>
+            rel
+              ? `<div style="font-size:0.8rem; font-weight:normal; color:var(--md-text-secondary); margin-top:3px;">🔁 מחליף/ה אותך: <b style="color:var(--md-primary);">${window.escapeHtml(rel.names.join(", "))}</b> <small>(${window.escapeHtml(rel.shift)})</small></div>`
               : `<div style="font-size:0.8rem; font-weight:normal; color:var(--md-text-secondary); margin-top:3px;">🔁 מחליף/ה אותך: <i>טרם משובץ</i></div>`;
+          if (foundShift) {
+            const is24 = window._isShift24h(foundLoc, foundShift);
+            val = `${foundShift}${is24 ? " 🕐24ש" : ""} · ${window.getLocName(foundLoc)}`;
+            color = "#15803d";
+            // משמרת שמסתיימת למחרת — לא מציגים כאן מחליף
+            if (!window._shiftEndsNextDay(foundLoc, foundShift))
+              reliefHtml = _relLine(window._reliefForDayShift(d, foundShift, foundLoc, data));
           } else {
             const specs = window.getSpecialsForDay
               ? window.getSpecialsForDay(d, data)
@@ -6794,6 +6831,14 @@
               if (note) {
                 val = `${note.icon || ""} ${note.reason}`;
                 color = "#b45309";
+                // "אחרי לילה" — כאן מסתיימת המשמרת של אתמול, ולכן כאן מוצג
+                // מי קיבל ממנה את המשמרת בבוקר.
+                if (/אחרי לילה|אחרי 24/.test(note.reason || "")) {
+                  const _pi = days.indexOf(d);
+                  const _prev = _pi > 0 ? days[_pi - 1] : null;
+                  const _nl = _prev ? window._nightLocOnDay(me.id, _prev, data) : null;
+                  if (_nl) reliefHtml = _relLine(window._reliefAfterNight(d, _nl.loc, data));
+                }
               }
             }
           }
@@ -12222,7 +12267,7 @@
 
         scheduleRows.forEach((r) => {
           let safeLoc = r.loc.replace(/"/g, "&quot;");
-          html += `<tr><td style="background:var(--md-bg); font-weight:500;"><b style="color:var(--md-primary); font-size:1.1em;">${window.getLocName(r.loc)}</b><br><span style="font-size:0.9em;">${r.label || r.shift}</span><span class="time-label">${window.getShiftTime(r.loc, r.shift)}</span></td>`;
+          html += `<tr><td style="background:var(--md-bg); font-weight:500;"><b style="color:var(--md-primary); font-size:1.1em;">${window.getLocName(r.loc)}</b><br><span style="font-size:0.9em;">${r.label || r.shift}</span><span class="time-label">${window.getShiftTime(r.loc, r.shift)}</span>${window._isShift24h(r.loc, r.shift) ? `<span title="משמרת בת 24 שעות — המחליף מגיע למחרת" style="display:inline-block; background:rgba(99,102,241,0.16); color:#4338ca; border-radius:999px; padding:0 7px; font-size:0.7rem; font-weight:700; margin-top:3px;">🕐 24ש</span>` : ""}</td>`;
           days.forEach((d) => {
             const isTodayTd = d === _todayDay;
             html += `<td${isTodayTd ? ' class="today-col"' : ''}>`;

@@ -1107,11 +1107,35 @@
       .tb-icon:focus-visible::after {
         opacity: 1;
       }
+      .tb-label {
+        display: none;
+      }
+      /* בנייד: רק הפעולות הרלוונטיות לעבודה מהטלפון, עם תווית במקום טולטיפ
+         (ללחיצה ארוכה על אייקון זעיר אין ערך במגע), ובלי גלילה בסרגל. */
       @media (max-width: 1024px) {
+        #managerToolbar {
+          flex-wrap: wrap;
+          justify-content: center;
+          overflow: visible;
+        }
+        #managerToolbar .tb-icon:not(.tb-keep-mobile) {
+          display: none;
+        }
         .tb-icon::after {
-          white-space: normal;
-          min-width: 150px;
-          text-align: center;
+          display: none;
+        }
+        .tb-icon {
+          width: auto;
+          min-width: 0;
+          height: 40px;
+          padding: 0 14px;
+          gap: 6px;
+          font-size: 1rem;
+        }
+        .tb-label {
+          display: inline;
+          font-size: 0.85rem;
+          font-weight: 600;
         }
       }
       /* אקורדיון וידג'טים בנייד — במקום עמוד אינסופי, כל פאנל הוא כותרת לחיצה */
