@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828c";
+        var BUILD = "20260828d";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -817,7 +817,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828c" />
+    <link rel="stylesheet" href="style.css?v=20260828d" />
   </head>
   <body>
     <div
@@ -1295,38 +1295,31 @@
             <div
               id="managerToolbar"
               class="manager-only"
-              style="display: flex; gap: 10px; flex-wrap: wrap"
+              style="display: flex; gap: 6px; flex-wrap: wrap"
             >
-              <button
-                class="btn btn-outlined"
-                style="padding: 5px 10px; font-size: 0.8rem"
-                onclick="window.commitChangesToCloud()"
-                title="שמירת הלוח הנוכחי לענן (כשיש שינויים — יופיע גם סרגל שמירה צף)"
-              >
-                💾
-              </button>
-              <button
-                class="btn btn-outlined"
-                onclick="window.openSpecialStatusModal()"
-                style="border-color: #9333ea; color: #9333ea"
-              >
-                🚩 סטטוס מיוחד
-              </button>
-              <button
-                class="btn btn-error"
-                onclick="window.clearScheduleWithPrompt()"
-              >
-                מחק הכל
-              </button>
+              <button class="tb-icon" style="--tb-accent: #16a34a" onclick="window.commitChangesToCloud()" data-tip="שמור לענן">💾</button>
+              <button class="tb-icon" id="editModeBtn" style="--tb-accent: #dc2626" onclick="window.toggleEditMode()" data-tip="עריכה ידנית (כבוי)">✏️</button>
+              <button class="tb-icon" style="--tb-accent: var(--md-primary)" onclick="window.generate(true)" data-tip="השלם חוסרים בלוח">🧩</button>
+              <button class="tb-icon" style="--tb-accent: var(--md-secondary)" onclick="window.generate(false)" data-tip="צור לוח מחדש (דורס)">🔄</button>
+              <button class="tb-icon" style="--tb-accent: #9333ea" onclick="window.openSpecialStatusModal()" data-tip="סטטוס מיוחד (חופש/מחלה/לימודים)">🚩</button>
+              <button class="tb-icon" style="--tb-accent: #0d9488" onclick="window.suggestWeekendClosers()" data-tip="הצע סוגרי סופ&quot;ש (מי לא סגר הכי הרבה זמן)">🏖️</button>
+              <button class="tb-icon" style="--tb-accent: #0d9488" onclick="window.setWeekendClosers()" data-tip="קבע ונעל סוגרי סופ&quot;ש">🔒</button>
+              <button class="tb-icon" style="--tb-accent: #7c3aed" onclick="window.openAIScheduler()" data-tip="הצע לוח באמצעות AI">✨</button>
+              <button class="tb-icon" style="--tb-accent: #7c3aed" onclick="window.exportScheduleImage()" data-tip="ייצא את הלוח כתמונה">🖼️</button>
+              <button class="tb-icon" style="--tb-accent: #475569" onclick="window.toggleScreenshotMode()" data-tip="מסך נקי לצילום">📷</button>
+              <button class="tb-icon" style="--tb-accent: var(--md-text-secondary)" onclick="window.openDraftsModal()" data-tip="טיוטות לוח — שמירה וטעינה">🗂️</button>
+              <button class="tb-icon" style="--tb-accent: #b45309" onclick="window.openModeSettings('matal')" data-tip="הגדרות שעות משמרת 24 שעות">⚙️</button>
+              <button class="tb-icon" style="--tb-accent: var(--md-error)" onclick="window.clearScheduleWithPrompt()" data-tip="מחק את כל הלוח">🗑️</button>
               <label
                 id="autoFillToggleLbl"
                 style="
                   display: none;
                   cursor: pointer;
                   background: var(--md-bg);
-                  padding: 8px 12px;
+                  padding: 7px 12px;
                   border: 1px solid var(--md-divider);
-                  border-radius: 6px;
+                  border-radius: 10px;
+                  font-size: 0.8rem;
                   font-weight: 500;
                 "
               >
@@ -1334,104 +1327,9 @@
                   type="checkbox"
                   id="autoFillToggle"
                   checked
-                  style="margin: 0 0 0 8px; vertical-align: middle"
-                />השלמה אוטומטית בעריכה
+                  style="margin: 0 0 0 6px; vertical-align: middle"
+                />השלמה אוטומטית
               </label>
-              <button
-                class="btn btn-outlined"
-                id="editModeBtn"
-                onclick="window.toggleEditMode()"
-              >
-                עריכה ידנית: כבוי
-              </button>
-              <button class="btn btn-contained" onclick="window.generate(true)">
-                השלם חוסרים
-              </button>
-              <button
-                class="btn btn-contained"
-                style="background-color: var(--md-secondary)"
-                onclick="window.generate(false)"
-              >
-                🔄 צור מחדש (דרוס)
-              </button>
-              <button
-                class="btn btn-outlined"
-                style="border-color: #0d9488; color: #0d9488"
-                onclick="window.suggestWeekendClosers()"
-                title='מציע את הטכנאים שלא סגרו סופ"ש הכי הרבה זמן'
-              >
-                🏖️ הצע סוגרי סופ"ש
-              </button>
-              <button
-                class="btn btn-contained"
-                style="background: #0d9488"
-                onclick="window.setWeekendClosers()"
-                title='קובע ונועל מראש רק את משמרות הסופ"ש/חג, מתוך מי שסומן כמועמד בכרטיס העובד — בלי לגעת בשאר השבוע'
-              >
-                🔒 קבע סוגרי סופ"ש
-              </button>
-              <button
-                class="btn btn-outlined"
-                style="border-color: #475569; color: #475569"
-                onclick="window.toggleScreenshotMode()"
-                title="מסתיר את התפריט והצד לצילום מסך נקי של הלוח"
-              >
-                📷 מסך נקי
-              </button>
-              <button
-                class="btn btn-contained"
-                style="background: #7c3aed"
-                onclick="window.exportScheduleImage()"
-                title="מוריד את הלוח כתמונת PNG חדה לשיתוף בוואטסאפ"
-              >
-                🖼️ ייצא לתמונה
-              </button>
-              <button
-                id="matalUnderstaffBtn"
-                class="btn btn-outlined"
-                style="border-color: #b45309; color: #b45309"
-                onclick="window.toggleMatalUnderstaff()"
-                title='מעבר למשמרת 24 שעות במת"ל בגלל חוסר כוח אדם (ללא מצב חירום)'
-              >
-                ⚠️ מת"ל 24ש (חוסר)
-              </button>
-              <button
-                class="btn btn-outlined"
-                style="
-                  border-color: #b45309;
-                  color: #b45309;
-                  padding: 6px 8px;
-                  font-size: 0.85rem;
-                "
-                onclick="window.openModeSettings('matal')"
-                title='הגדרות תאריך מצב חוסר מת"ל'
-              >
-                ⚙️
-              </button>
-              <button
-                class="btn btn-outlined"
-                style="
-                  border-color: var(--md-text-secondary);
-                  color: var(--md-text-secondary);
-                  font-size: 0.82rem;
-                "
-                onclick="window.openDraftsModal()"
-                title="שמירה וטעינה של טיוטות לוח"
-              >
-                💾 טיוטות
-              </button>
-              <button
-                id="aiScheduleBtn"
-                class="btn btn-contained"
-                style="
-                  background: linear-gradient(135deg, #7c3aed, #4f46e5);
-                  color: #fff;
-                "
-                onclick="window.openAIScheduler()"
-                title="הצע לוח משמרות באמצעות בינה מלאכותית"
-              >
-                ✨ AI הצע לוח
-              </button>
             </div>
           </div>
 
@@ -5228,6 +5126,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828c"></script>
+    <script src="script.js?v=20260828d"></script>
   </body>
 </html>

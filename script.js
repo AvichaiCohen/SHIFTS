@@ -332,7 +332,11 @@
         window._saveWidgetPrefs(prefs);
         const pageEl = el.closest(".container");
         if (pageEl && pageEl.id.startsWith("page-")) {
-          window._updateHiddenWidgetsBtn(pageEl.id.slice(5));
+          const pid = pageEl.id.slice(5);
+          // דוחסים את הגריד: הסתרה מעלה את מה שמתחת, והחזרה נכנסת למשבצת
+          // פנויה אמיתית ולא מתלכדת על פאנל אחר.
+          window._packWidgetsInPage(pid);
+          window._updateHiddenWidgetsBtn(pid);
         }
       };
 
@@ -374,6 +378,78 @@
       // מיקום ראשוני (bin-packing) לכל ווידג'ט בעמוד נתון שעדיין אין לו
       // colStart/rowStart שמור — כדי שלא ייפלו כולם על אותה משבצת. רץ פעם
       // אחת ושומר את התוצאה, כדי שהמשתמש יוכל לגרור משם הלאה בחופשיות.
+      // ===== דחיסת הגריד =====
+      // נקראת כשמסתירים/מחזירים פאנל: אורזת מחדש את הפאנלים הגלויים כלפי
+      // מעלה לפי הסדר הנוכחי (שורה ואז עמודה), תוך שמירת הגודל של כל אחד.
+      // כך (א) הסתרת פאנלים עליונים מעלה את השאר במקום להשאיר חור, ו-(ב)
+      // החזרת פאנל לא מניחה אותו על פאנל אחר במשבצת מיושנת.
+      window._packWidgetsInPage = function (pageId) {
+        const grid = window._ensureWidgetGrid(pageId);
+        if (!grid) return;
+        const prefs = window._loadWidgetPrefs();
+        const visible = Array.from(grid.children).filter(
+          (c) =>
+            c.hasAttribute("data-widget-key") &&
+            !c.classList.contains("widget-collapsed"),
+        );
+        // סדר יציב: לפי המיקום הנוכחי — שורה, ואז עמודה (RTL: עמודה 1 ימינה)
+        visible.sort((a, b) => {
+          const pa = prefs[a.getAttribute("data-widget-key")] || {};
+          const pb = prefs[b.getAttribute("data-widget-key")] || {};
+          return (pa.rowStart || 1) - (pb.rowStart || 1) || (pa.colStart || 1) - (pb.colStart || 1);
+        });
+
+        const occupied = new Set();
+        const mark = (c0, r0, cs, rs) => {
+          for (let c = c0; c < c0 + cs; c++)
+            for (let r = r0; r < r0 + rs; r++) occupied.add(c + ":" + r);
+        };
+        const fits = (c0, r0, cs, rs) => {
+          if (c0 + cs - 1 > window.WIDGET_GRID_COLS) return false;
+          for (let c = c0; c < c0 + cs; c++)
+            for (let r = r0; r < r0 + rs; r++) if (occupied.has(c + ":" + r)) return false;
+          return true;
+        };
+
+        visible.forEach((el) => {
+          const key = el.getAttribute("data-widget-key");
+          const p = prefs[key] || {};
+          const colSpan = Math.min(
+            window.WIDGET_GRID_COLS,
+            p.colSpan ||
+              (window.WIDGET_REGISTRY[key] && window.WIDGET_REGISTRY[key].defaultColSpan) ||
+              window.WIDGET_DEFAULT_COL_SPAN,
+          );
+          const rowSpan = p.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
+          const preferredCol = Math.min(
+            Math.max(1, p.colStart || 1),
+            Math.max(1, window.WIDGET_GRID_COLS - colSpan + 1),
+          );
+          // מחפשים את השורה הגבוהה ביותר שפנויה; מעדיפים להישאר באותה עמודה
+          let placed = null;
+          for (let r = 1; r <= 600 && !placed; r++) {
+            if (fits(preferredCol, r, colSpan, rowSpan)) {
+              placed = { c: preferredCol, r };
+              break;
+            }
+            for (let c = 1; c <= window.WIDGET_GRID_COLS - colSpan + 1; c++) {
+              if (fits(c, r, colSpan, rowSpan)) { placed = { c, r }; break; }
+            }
+          }
+          if (!placed) placed = { c: 1, r: 1 };
+          mark(placed.c, placed.r, colSpan, rowSpan);
+          prefs[key] = prefs[key] || {};
+          prefs[key].colStart = placed.c;
+          prefs[key].rowStart = placed.r;
+          prefs[key].colSpan = colSpan;
+          prefs[key].rowSpan = rowSpan;
+          el.style.gridColumn = placed.c + " / span " + colSpan;
+          el.style.gridRow = placed.r + " / span " + rowSpan;
+        });
+        window._saveWidgetPrefs(prefs);
+        window._reorderDomByPosition(grid);
+      };
+
       window._autoPlaceMissingWidgets = function (pageId) {
         const prefs = window._loadWidgetPrefs();
         const keys = Object.keys(window.WIDGET_REGISTRY).filter((k) => {
@@ -4762,14 +4838,19 @@
         const btn = document.getElementById("editModeBtn");
         const toggleLbl = document.getElementById("autoFillToggleLbl");
         if (window.isEditMode) {
-          btn.innerText = "סיים עריכה";
-          btn.classList.replace("btn-outlined", "btn-error");
+          // אייקון אחיד — המצב מסומן בהדגשה (tb-on) ובטולטיפ, לא בטקסט
+          if (btn) {
+            btn.classList.add("tb-on");
+            btn.setAttribute("data-tip", "סיים עריכה ידנית");
+          }
           if (toggleLbl) toggleLbl.style.display = "inline-block";
           if (sidebar) sidebar.style.display = "block";
           window.renderStaffPool();
         } else {
-          btn.innerText = "עריכה ידנית: כבוי";
-          btn.classList.replace("btn-error", "btn-outlined");
+          if (btn) {
+            btn.classList.remove("tb-on");
+            btn.setAttribute("data-tip", "עריכה ידנית (כבוי)");
+          }
           if (toggleLbl) toggleLbl.style.display = "none";
           if (sidebar) sidebar.style.display = "none";
         }
