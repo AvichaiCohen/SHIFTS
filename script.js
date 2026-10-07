@@ -1754,6 +1754,27 @@
         const v = window.currentSchedule && window.currentSchedule.staffingSkipTypes;
         return Array.isArray(v) ? v : [];
       };
+      // החרגת אנשים ספציפיים מבדיקת השיבוץ בשבוע זה (בנוסף להחרגה לפי דרג)
+      window._staffingSkipEmpIds = function () {
+        const v = window.currentSchedule && window.currentSchedule.staffingSkipEmpIds;
+        return Array.isArray(v) ? v : [];
+      };
+      window.toggleStaffingSkipEmp = function (empId) {
+        if (!window.currentSchedule) return;
+        const cur = window._staffingSkipEmpIds().map(String);
+        const id = String(empId);
+        window.currentSchedule.staffingSkipEmpIds =
+          cur.indexOf(id) !== -1 ? cur.filter((x) => x !== id) : [...cur, id];
+        window.triggerUnsavedChanges();
+        window.openStaffingCheckModal();
+      };
+      window.clearStaffingSkipEmps = function () {
+        if (!window.currentSchedule) return;
+        window.currentSchedule.staffingSkipEmpIds = [];
+        window.triggerUnsavedChanges();
+        window.openStaffingCheckModal();
+      };
+
       window.toggleStaffingSkipType = function (type) {
         if (!window.currentSchedule) return;
         const cur = window._staffingSkipTypes();
@@ -1767,11 +1788,12 @@
       // בודקת כל יום בנפרד (לא עוצרת בהסבר הראשון שנמצא) — כך שכיסוי חלקי (למשל קורס שמסתיים באמצע השבוע) לא מסתיר חוסר בהמשך השבוע.
       window._buildStaffingCheckRows = function () {
         const sched = window.currentSchedule || {};
-        // דרגים שהמנהל החריג מהבדיקה בשבוע הזה (למשל קבע) לא נבדקים כלל
+        // החרגות השבוע: לפי דרג (למשל קבע) ולפי אנשים ספציפיים. השורות
+        // המוחרגות עדיין נבנות — אבל מסומנות skipped, כדי שהמנהל יראה אותן
+        // ויוכל להחזיר אותן, והן לא נספרות באזהרות ובמונים.
         const _skip = window._staffingSkipTypes();
-        const activeStaff = (window.staff || []).filter(
-          (e) => e.isActive !== false && _skip.indexOf(e.type) === -1,
-        );
+        const _skipIds = window._staffingSkipEmpIds().map(String);
+        const activeStaff = (window.staff || []).filter((e) => e.isActive !== false);
         const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
         return activeStaff.map((emp) => {
           const dayInfo = days.map((d) => {
@@ -1787,11 +1809,15 @@
             if (typeof window.getSpecialsForDay === "function") {
               const specs = window.getSpecialsForDay(d, sched);
               const sp = specs.find((x) => String(x.id) === String(emp.id));
-              if (sp)
-                return {
-                  type: "special",
-                  label: window.specStatusLabel ? window.specStatusLabel(sp) : sp.status || "סטטוס מיוחד",
-                };
+              if (sp) {
+                const lbl = window.specStatusLabel
+                  ? window.specStatusLabel(sp)
+                  : sp.status || "סטטוס מיוחד";
+                // משימה (אבט"ש וכו') היא העסקה לכל דבר — נספרת כמשמרת, יום
+                // לכל יום שהמשימה מכסה, ומסומנת באייקון משימה.
+                if (sp._taskId) return { type: "task", label: lbl };
+                return { type: "special", label: lbl };
+              }
             }
             if (window.currentNotesLog && window.currentNotesLog[d]) {
               const note = window.currentNotesLog[d].find((n) => n.emp && n.emp.id === emp.id);
@@ -1804,14 +1830,16 @@
             }
             return { type: "none", label: "—" };
           });
-          // "אחרי לילה"/"אחרי 24ש"/"אחרי שבת" נספרים כמשמרת
-          // (למשל: שני לילות = 4 משמרות)
+          // נספרים כמשמרת: שיבוץ בפועל, מנוחת פוסט-משמרת, ומשימה.
+          // (למשל: שני לילות = 4 משמרות; משימת אבט"ש של 3 ימים = 3)
           const shiftCount = dayInfo.filter(
-            (x) => x.type === "shift" || x.type === "postshift",
+            (x) => x.type === "shift" || x.type === "postshift" || x.type === "task",
           ).length;
           const explainedCount = dayInfo.filter((x) => x.type === "special" || x.type === "rest").length;
           const noneCount = dayInfo.filter((x) => x.type === "none").length;
-          return { emp, dayInfo, shiftCount, explainedCount, noneCount };
+          const skipped =
+            _skip.indexOf(emp.type) !== -1 || _skipIds.indexOf(String(emp.id)) !== -1;
+          return { emp, dayInfo, shiftCount, explainedCount, noneCount, skipped };
         });
       };
 
@@ -1819,7 +1847,7 @@
       window._getUnstaffedEmployees = function () {
         return window
           ._buildStaffingCheckRows()
-          .filter((r) => r.shiftCount === 0)
+          .filter((r) => !r.skipped && r.shiftCount === 0)
           .map((r) => ({ name: r.emp.name, hasPartialCoverage: r.explainedCount > 0 }));
       };
 
@@ -1859,7 +1887,7 @@
       // האם כל העובדים הפעילים אושרו, ואף אחד מהם לא השתנה מאז האישור
       window._isStaffingFullyChecked = function () {
         const approvals = (window.currentSchedule && window.currentSchedule.staffingApprovals) || {};
-        const rows = window._buildStaffingCheckRows();
+        const rows = window._buildStaffingCheckRows().filter((r) => !r.skipped);
         if (rows.length === 0) return false;
         return rows.every((r) => {
           const a = approvals[r.emp.id];
@@ -2021,7 +2049,7 @@
         // --- עובדים בלי משמרת ---
         if (!section || section === "noshift") {
           let rows = [];
-          try { rows = (window._buildStaffingCheckRows() || []).filter((r) => (r.shiftCount || 0) === 0); } catch (e) {}
+          try { rows = (window._buildStaffingCheckRows() || []).filter((r) => !r.skipped && (r.shiftCount || 0) === 0); } catch (e) {}
           html += head("⬜", "בלי משמרת השבוע", rows.length,
             "עובדים פעילים שאין להם אף משמרת אמיתית בשבוע המוצג.");
           if (rows.length === 0) {
@@ -2062,7 +2090,7 @@
         } catch (e) {}
         try {
           noShift = (window._buildStaffingCheckRows() || []).filter(
-            (r) => (r.shiftCount || 0) === 0,
+            (r) => !r.skipped && (r.shiftCount || 0) === 0,
           ).length;
         } catch (e) {}
         try { checked = window._isStaffingFullyChecked(); } catch (e) {}
@@ -2092,7 +2120,12 @@
       window.openStaffingCheckModal = function () {
         const rows = window
           ._buildStaffingCheckRows()
-          .sort((a, b) => a.shiftCount - b.shiftCount || b.noneCount - a.noneCount);
+          .sort(
+            (a, b) =>
+              (a.skipped ? 1 : 0) - (b.skipped ? 1 : 0) ||
+              a.shiftCount - b.shiftCount ||
+              b.noneCount - a.noneCount,
+          );
         // הערה: בקשות/אילוצים ממתינים שטרם טופלו לשבוע זה
         const _pending = window._pendingRequestsThisWeek();
         let _noticeHtml = "";
@@ -2111,6 +2144,7 @@
         const typeStyle = {
           shift: { icon: "✅", bg: "rgba(22,163,74,0.12)" },
           postshift: { icon: "🌙", bg: "rgba(99,102,241,0.14)" },
+          task: { icon: "🎯", bg: "rgba(13,148,136,0.14)" },
           special: { icon: "🟡", bg: "rgba(245,158,11,0.14)" },
           rest: { icon: "🟡", bg: "rgba(245,158,11,0.08)" },
           none: { icon: "⬜", bg: "rgba(148,163,184,0.12)" },
@@ -2127,7 +2161,9 @@
               )
               .join("")}
           </span>
-          ${_skipTypes.length ? `<div style="color:var(--md-text-secondary); margin-top:4px;">מוחרגים כרגע: ${_skipTypes.map((t) => window.escapeHtml(t)).join(", ")} — לא נספרים גם באזהרות ובמונה "בלי משמרת".</div>` : ""}
+          ${_skipTypes.length ? `<div style="color:var(--md-text-secondary); margin-top:4px;">דרגים מוחרגים: ${_skipTypes.map((t) => window.escapeHtml(t)).join(", ")}</div>` : ""}
+          ${window._staffingSkipEmpIds().length ? `<div style="color:var(--md-text-secondary); margin-top:4px;">${window._staffingSkipEmpIds().length} אנשים מוחרגים ידנית (🚫 בשורה) — <a href="#" onclick="event.preventDefault(); window.clearStaffingSkipEmps();" style="color:var(--md-primary);">החזר את כולם</a></div>` : ""}
+          <div style="color:var(--md-text-secondary); margin-top:4px;">מוחרגים לא נספרים באזהרות, במונה "בלי משמרת" ובאישור המלא.</div>
         </div>`;
         let html = _noticeHtml + _skipUi + `<div style="text-align:left; margin-bottom:10px;">
           <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.approveAllStaffingRows()">✅ אשר את כולם</button>
@@ -2141,9 +2177,10 @@
             <th style="padding:8px;">אישור מנהל</th>
           </tr>`;
         rows.forEach((r) => {
-          const isLow = r.shiftCount < window.STAFFING_MIN_SHIFTS;
-          const rowBg =
-            r.shiftCount === 0
+          const isLow = !r.skipped && r.shiftCount < window.STAFFING_MIN_SHIFTS;
+          const rowBg = r.skipped
+            ? ""
+            : r.shiftCount === 0
               ? "rgba(239,68,68,0.08)"
               : isLow
                 ? "rgba(245,158,11,0.08)"
@@ -2151,11 +2188,17 @@
           const sig = window._staffingRowSignature(r);
           const approval = approvals[r.emp.id];
           const isApproved = approval && approval.signature === sig;
-          const approvalCell = isApproved
-            ? `<span style="color:#16a34a; font-weight:bold;" title="אושר">✔️</span>`
-            : `<button class="btn btn-outlined" style="padding:2px 10px; font-size:0.75rem;" onclick="window.approveStaffingRow(${r.emp.id})">אשר</button>`;
-          html += `<tr style="${rowBg ? "background:" + rowBg + ";" : ""}">
-            <td style="padding:6px 10px; text-align:right; font-weight:600; border-top:1px solid var(--md-divider);">${r.emp.name}</td>
+          // שורה מוחרגת: לא דורשת אישור, לא צובעת אזהרות, ויש כפתור להחזרה
+          const approvalCell = r.skipped
+            ? `<button class="btn btn-outlined" style="padding:2px 10px; font-size:0.72rem;" onclick="window.toggleStaffingSkipEmp(${r.emp.id})" title="החזר לבדיקה">↩️ החזר</button>`
+            : isApproved
+              ? `<span style="color:#16a34a; font-weight:bold;" title="אושר">✔️</span>`
+              : `<button class="btn btn-outlined" style="padding:2px 10px; font-size:0.75rem;" onclick="window.approveStaffingRow(${r.emp.id})">אשר</button>`;
+          const skipBtn = r.skipped
+            ? ""
+            : `<button title="אל תספור את ${String(r.emp.name).replace(/"/g, "&quot;")} בשבוע זה" style="background:none; border:none; cursor:pointer; opacity:0.45; font-size:0.85rem; padding:0 4px;" onclick="window.toggleStaffingSkipEmp(${r.emp.id})">🚫</button>`;
+          html += `<tr style="${rowBg ? "background:" + rowBg + ";" : ""}${r.skipped ? "opacity:0.45;" : ""}">
+            <td style="padding:6px 10px; text-align:right; font-weight:600; border-top:1px solid var(--md-divider);">${r.emp.name}${skipBtn}${r.skipped ? ' <small style="font-weight:normal; color:var(--md-text-secondary);">(לא נספר)</small>' : ""}</td>
             <td style="padding:6px 10px; border-top:1px solid var(--md-divider); color:var(--md-text-secondary); font-size:0.8rem;">${r.emp.type || ""}</td>
             ${r.dayInfo
               .map((di) => {
