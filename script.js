@@ -6697,6 +6697,41 @@
         }
       };
 
+      // ===== מי מחליף אותי במשמרת =====
+      // סבב ההחלפה הוא פנימי למיקום. מת"ל: בוקר ← 24ש (אם מאויש) אחרת לילה;
+      // לילה/24ש ← הבוקר של מחרת (ואם ריק — 24ש של מחרת).
+      // זירה: בוקר ← ערב (אם מאויש) אחרת לילה; ערב ← לילה; לילה ← בוקר מחרת.
+      // מוחזר הראשון בשרשרת שיש בו אנשים בפועל.
+      window._whoRelieves = function (day, shift, loc, data) {
+        const sched = data || window.currentSchedule || {};
+        const dIdx = days.indexOf(day);
+        const nextDay = dIdx >= 0 && dIdx < days.length - 1 ? days[dIdx + 1] : null;
+        const at = (d, s) => {
+          if (!d) return [];
+          const slot = sched[`${d}-${s}`];
+          const arr = slot && slot[loc];
+          return Array.isArray(arr) ? arr : [];
+        };
+        let chain;
+        if (loc === LOC_MATAL) {
+          if (shift === "בוקר") chain = [[day, "24 שעות"], [day, "לילה"]];
+          else if (shift === "לילה" || shift === "24 שעות")
+            chain = [[nextDay, "בוקר"], [nextDay, "24 שעות"]];
+          else chain = [[day, "לילה"]];
+        } else {
+          if (shift === "בוקר") chain = [[day, "ערב"], [day, "לילה"]];
+          else if (shift === "ערב") chain = [[day, "לילה"]];
+          else if (shift === "לילה") chain = [[nextDay, "בוקר"], [nextDay, "ערב"]];
+          else chain = [[nextDay, "בוקר"]];
+        }
+        for (const [d, s] of chain) {
+          const arr = at(d, s);
+          if (arr.length)
+            return { day: d, shift: s, names: arr.map((e) => e.name).filter(Boolean) };
+        }
+        return null;
+      };
+
       // סיכום שבועי אישי לעובד המחובר — תצוגת "מי אני השבוע" יום-יום
       window.showMyWeekSummary = function () {
         const me = window.loggedInWorker || window.loggedInUser;
@@ -6730,9 +6765,15 @@
               }
             });
           });
+          let reliefHtml = "";
           if (foundShift) {
             val = `${foundShift} · ${window.getLocName(foundLoc)}`;
             color = "#15803d";
+            // מי מחליף אותי בסוף המשמרת
+            const rel = window._whoRelieves(d, foundShift, foundLoc, data);
+            reliefHtml = rel
+              ? `<div style="font-size:0.8rem; font-weight:normal; color:var(--md-text-secondary); margin-top:3px;">🔁 מחליף/ה אותך: <b style="color:var(--md-primary);">${window.escapeHtml(rel.names.join(", "))}</b> <small>(${window.escapeHtml(rel.shift)}${rel.day !== d ? " · " + window.escapeHtml(rel.day) : ""})</small></div>`
+              : `<div style="font-size:0.8rem; font-weight:normal; color:var(--md-text-secondary); margin-top:3px;">🔁 מחליף/ה אותך: <i>טרם משובץ</i></div>`;
           } else {
             const specs = window.getSpecialsForDay
               ? window.getSpecialsForDay(d, data)
@@ -6765,7 +6806,7 @@
             : "";
           rows += `<tr style="border-bottom:1px solid var(--md-divider); ${isTodayRow}">
             <td style="padding:10px;"><b style="font-size:1.05rem;">${d}</b> <small style="color:var(--md-text-secondary);">${dateStr}</small></td>
-            <td style="padding:10px; color:${color}; font-weight:bold;">${val}${_swapBtn}</td>
+            <td style="padding:10px; color:${color}; font-weight:bold;">${val}${_swapBtn}${reliefHtml}</td>
           </tr>`;
         });
         const weekLabel = window.formatWeekString(weekSun);
