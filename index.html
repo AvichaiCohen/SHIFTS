@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828h";
+        var BUILD = "20260828i";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -762,6 +762,16 @@
               window.renderSwapRequestsManager();
           });
 
+          // חופשים שהמנהל העניק ישירות (בלי בקשה ובלי סטטוס מיוחד).
+          // כתיבה למנהל הראשי בלבד — מכוסה ע"י חוק ה-root.
+          window.grantedVacations = {};
+          onValue(ref(db, "grantedVacations"), (snapshot) => {
+            window.grantedVacations = snapshot.exists() ? snapshot.val() || {} : {};
+            if (typeof window.renderVacationManagementTable === "function")
+              window.renderVacationManagementTable();
+            if (typeof window.renderStaff === "function") window.renderStaff();
+          });
+
           window.shiftSwapRequests = {};
           onValue(ref(db, "shiftSwapRequests"), (snapshot) => {
             window.shiftSwapRequests = snapshot.exists()
@@ -817,7 +827,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828h" />
+    <link rel="stylesheet" href="style.css?v=20260828i" />
   </head>
   <body>
     <div
@@ -2416,6 +2426,14 @@
                       onclick="window.refreshVacationFutureRequests()"
                     >
                       🔄 טען בקשות עתידיות מאושרות
+                    </button>
+                    <button
+                      class="btn btn-contained manager-only"
+                      style="padding: 4px 12px; font-size: 0.85rem; background: #0d9488"
+                      onclick="window.grantVacationDay()"
+                      title="הענקת יום חופש ישירות — חוסם שיבוץ ונספר במכסה, בלי בקשה ובלי סטטוס מיוחד"
+                    >
+                      🌴 הענק יום חופש
                     </button>
                     <button
                       class="btn btn-outlined manager-only"
@@ -5126,6 +5144,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828h"></script>
+    <script src="script.js?v=20260828i"></script>
   </body>
 </html>

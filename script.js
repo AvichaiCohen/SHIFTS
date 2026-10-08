@@ -4365,6 +4365,134 @@
         return Number.isInteger(r) ? String(r) : r.toFixed(1);
       };
 
+      // ===== הענקת יום חופש ע"י המנהל (בלי בקשה ובלי סטטוס מיוחד) =====
+      // מתנהג בדיוק כמו בקשת חופש שאושרה: מוסיף אילוצי יום-מלא לשבוע הרלוונטי
+      // (ולכן חוסם שיבוץ), ובנוסף נרשם ב-grantedVacations כדי שייספר במכסת
+      // החופשים גם בשבועות אחרים — בלי להופיע כסטטוס מיוחד על הלוח.
+      window._applyVacConstraintsToWeek = async function (empId, dateStr, add) {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return;
+        const dayName = days[d.getDay()];
+        const sun = new Date(d);
+        sun.setDate(sun.getDate() - sun.getDay());
+        const weekKey = window.getWeekDbKey(sun);
+        const keys = [`${dayName}-בוקר`, `${dayName}-ערב`, `${dayName}-לילה`];
+        const applyTo = (sched) => {
+          if (!sched.staff) sched.staff = [];
+          let emp = sched.staff.find((x) => String(x.id) === String(empId));
+          if (!emp) {
+            const g = (window.globalStaff || []).find((x) => String(x.id) === String(empId));
+            if (!g) return;
+            emp = JSON.parse(JSON.stringify(g));
+            emp.constraints = emp.constraints || [];
+            emp.prefs = emp.prefs || [];
+            sched.staff.push(emp);
+          }
+          emp.constraints = emp.constraints || [];
+          if (add) {
+            keys.forEach((k) => { if (!emp.constraints.includes(k)) emp.constraints.push(k); });
+          } else {
+            emp.constraints = emp.constraints.filter((k) => keys.indexOf(k) === -1);
+          }
+        };
+        if (weekKey === window.currentSelectedWeek) {
+          applyTo(window.currentSchedule);
+          const live = (window.staff || []).find((x) => String(x.id) === String(empId));
+          if (live) {
+            live.constraints = live.constraints || [];
+            if (add) keys.forEach((k) => { if (!live.constraints.includes(k)) live.constraints.push(k); });
+            else live.constraints = live.constraints.filter((k) => keys.indexOf(k) === -1);
+          }
+          window.currentSchedule.staff = window.staff;
+          window.triggerUnsavedChanges();
+        } else {
+          const fb = window._fbImports;
+          if (!fb || !window._firebaseDb) return;
+          try {
+            const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + weekKey));
+            const sched = snap.exists()
+              ? snap.val()
+              : { isPublished: false, special: {}, dailyNotes: {} };
+            applyTo(sched);
+            window.saveToCloud("schedules/" + weekKey, sched);
+          } catch (err) {}
+        }
+      };
+
+      window.grantVacationDay = async function () {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול להעניק ימי חופש.");
+          return;
+        }
+        const staffList = (window.staff || [])
+          .filter((e) => e.isActive !== false)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (!staffList.length) { window.toast("אין עובדים."); return; }
+        const empId = await window.choiceDialog({
+          title: "🌴 הענקת יום חופש",
+          message: "למי להעניק? (ייחסם לשיבוץ וייספר במכסת החופשים)",
+          options: staffList.map((e) => ({ label: e.name, value: String(e.id) })),
+        });
+        if (!empId) return;
+        const emp = staffList.find((e) => String(e.id) === String(empId));
+        const from = await window.promptDialog({
+          title: `יום חופש — ${emp.name}`,
+          message: "תאריך התחלה (YYYY-MM-DD):",
+          defaultValue: new Date().toISOString().slice(0, 10),
+          confirmText: "המשך",
+        });
+        if (!from) return;
+        const to = await window.promptDialog({
+          title: `יום חופש — ${emp.name}`,
+          message: "תאריך סיום (אותו תאריך = יום בודד):",
+          defaultValue: from,
+          confirmText: "הענק חופש",
+        });
+        if (!to) return;
+        const start = new Date(from), end = new Date(to);
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+          window.toast("⛔ תאריכים לא תקינים.");
+          return;
+        }
+        const dates = [];
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          if (window._isVacFreeDay && window._isVacFreeDay(d)) continue; // שישי/שבת/חג
+          dates.push(
+            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+          );
+        }
+        if (!dates.length) { window.toast("הטווח כולל רק ימים שאינם מנצלים חופש."); return; }
+        for (const dt of dates) {
+          const id = Date.now() + "_" + Math.floor(Math.random() * 100000);
+          window.saveToCloud("grantedVacations/" + id, {
+            id, empId: emp.id, empName: emp.name, date: dt, ts: Date.now(),
+          });
+          await window._applyVacConstraintsToWeek(emp.id, dt, true);
+        }
+        window.toast(`🌴 הוענקו ${dates.length} ימי חופש ל${emp.name}.`);
+        if (typeof window.renderVacationManagementTable === "function")
+          window.renderVacationManagementTable();
+      };
+
+      window.removeGrantedVacation = async function (id) {
+        const g = (window.grantedVacations || {})[id];
+        if (!g) return;
+        if (!(await window.confirmDialog({
+          title: "ביטול יום חופש",
+          message: `לבטל את יום החופש של ${g.empName} בתאריך ${String(g.date).split("-").reverse().join(".")}?`,
+          confirmText: "בטל חופש",
+          danger: true,
+        }))) return;
+        const fb = window._fbImports;
+        if (fb && window._firebaseDb)
+          fb.remove(fb.ref(window._firebaseDb, "grantedVacations/" + id));
+        if (window.grantedVacations) delete window.grantedVacations[id];
+        await window._applyVacConstraintsToWeek(g.empId, g.date, false);
+        window.toast("✅ יום החופש בוטל.");
+        if (typeof window.renderVacationManagementTable === "function")
+          window.renderVacationManagementTable();
+      };
+
       window._computeVacUsage = function (e) {
         const empConst = e.constraints || [];
         const specEntries = (window.specialStatuses || [])
@@ -4386,6 +4514,12 @@
               `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
             );
         });
+        // ימי חופש שהמנהל העניק ישירות (בלי בקשה ובלי סטטוס מיוחד) —
+        // חוצי-שבועות ומצטברים, באותה קבוצת תאריכים כדי למנוע ספירה כפולה.
+        const grantedEntries = Object.values(window.grantedVacations || {})
+          .filter((g) => g && String(g.empId) === String(e.id) && g.date)
+          .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+        grantedEntries.forEach((g) => specDates.add(g.date));
         const specVacDays = specDates.size;
         // ימי חופש-מלא (constraints) בשבוע המוצג שאינם כבר בסטטוס מיוחד — כדי
         // לא לספור פעמיים ימים ידניים (שכעת נרשמים גם כסטטוס מיוחד).
@@ -4413,7 +4547,7 @@
         });
         const quota = e.vacationQuota !== undefined ? e.vacationQuota : 14;
         const used = uniqueDaysOff + specVacDays;
-        return { quota, used, remaining: quota - used, uniqueDaysOff, specEntries };
+        return { quota, used, remaining: quota - used, uniqueDaysOff, specEntries, grantedEntries };
       };
 
       window.exportStaffToCSV = function () {
@@ -4578,11 +4712,19 @@
               return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">📥 בקשה מאושרת: ${label}${countStr}</span>`;
             })
             .join(" ");
+          // חופשים שהוענקו ידנית ע"י המנהל (לא סטטוס מיוחד, לא בקשה)
+          const grantedDetail = (vac.grantedEntries || [])
+            .filter((g) => !monthFilter || String(g.date).slice(0, 7) === monthFilter)
+            .map(
+              (g) =>
+                `<span style="display:inline-block; background:#fef3c7; color:#92400e; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">🌴 הוענק: ${String(g.date).split("-").reverse().join(".")} <a href="#" onclick="event.preventDefault(); window.removeGrantedVacation('${g.id}')" title="בטל" style="color:#b91c1c; text-decoration:none; font-weight:bold;">✕</a></span>`,
+            )
+            .join(" ");
           const monthChip = monthFilter
             ? `<span style="display:inline-block; background:#0d9488; color:#fff; border-radius:6px; padding:2px 8px; margin:2px 2px 6px; font-size:0.8rem; font-weight:bold;">📅 ${monthLabel(monthFilter)}: ${window._fmtVac(monthDays)} ימים</span> `
             : "";
           const combinedDetail =
-            (monthChip + detail + futureDetail) ||
+            (monthChip + detail + grantedDetail + futureDetail) ||
             `<span style="color:var(--text-muted); font-style:italic;">אין רישומים</span>`;
           // סך ימי הבקשות העתידיות המאושרות → "נותר לאחר בקשות" = נותר פחות אלה
           const futureDaysCount = futureItems.reduce(
