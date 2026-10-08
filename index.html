@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828i";
+        var BUILD = "20260828j";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -827,7 +827,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828i" />
+    <link rel="stylesheet" href="style.css?v=20260828j" />
   </head>
   <body>
     <div
@@ -1309,6 +1309,7 @@
             >
               <button class="tb-icon tb-keep-mobile" style="--tb-accent: #16a34a" onclick="window.commitChangesToCloud()" data-tip="שמור לענן">💾<span class="tb-label">שמור</span></button>
               <button class="tb-icon tb-keep-mobile" id="editModeBtn" style="--tb-accent: #dc2626" onclick="window.toggleEditMode()" data-tip="עריכה ידנית (כבוי)">✏️<span class="tb-label">עריכה</span></button>
+              <button class="tb-icon" style="--tb-accent: #0d9488" onclick="window.grantVacationDay()" data-tip="הענק יום חופש (חוסם שיבוץ ונספר במכסה)">🌴</button>
               <button class="tb-icon" style="--tb-accent: var(--md-primary)" onclick="window.generate(true)" data-tip="השלם חוסרים בלוח">🧩</button>
               <button class="tb-icon" style="--tb-accent: var(--md-secondary)" onclick="window.generate(false)" data-tip="צור לוח מחדש (דורס)">🔄</button>
               <button class="tb-icon tb-keep-mobile" style="--tb-accent: #9333ea" onclick="window.openSpecialStatusModal()" data-tip="סטטוס מיוחד (חופש/מחלה/לימודים)">🚩<span class="tb-label">סטטוס</span></button>
@@ -2426,14 +2427,6 @@
                       onclick="window.refreshVacationFutureRequests()"
                     >
                       🔄 טען בקשות עתידיות מאושרות
-                    </button>
-                    <button
-                      class="btn btn-contained manager-only"
-                      style="padding: 4px 12px; font-size: 0.85rem; background: #0d9488"
-                      onclick="window.grantVacationDay()"
-                      title="הענקת יום חופש ישירות — חוסם שיבוץ ונספר במכסה, בלי בקשה ובלי סטטוס מיוחד"
-                    >
-                      🌴 הענק יום חופש
                     </button>
                     <button
                       class="btn btn-outlined manager-only"
@@ -5144,6 +5137,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828i"></script>
+    <script src="script.js?v=20260828j"></script>
   </body>
 </html>
