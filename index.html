@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828k";
+        var BUILD = "20260828l";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -764,6 +764,19 @@
 
           // חופשים שהמנהל העניק ישירות (בלי בקשה ובלי סטטוס מיוחד).
           // כתיבה למנהל הראשי בלבד — מכוסה ע"י חוק ה-root.
+          // רשימת המפקדים לשליחת וואטסאפ — מקור האמת הוא הענן, כדי שמחיקה
+          // תחול בכל המכשירים. אם הענן עוד לא אותחל — נשארת הרשימה המקומית.
+          onValue(ref(db, "commandersList"), (snapshot) => {
+            if (!snapshot.exists()) return;
+            const val = snapshot.val() || {};
+            const raw = val.list || [];
+            window.commanders = (Array.isArray(raw) ? raw : Object.values(raw)).filter(Boolean);
+            try {
+              localStorage.setItem("shift_commanders_v1", JSON.stringify(window.commanders));
+            } catch (e) {}
+            if (typeof window.renderCommandersUI === "function") window.renderCommandersUI();
+          });
+
           window.grantedVacations = {};
           onValue(ref(db, "grantedVacations"), (snapshot) => {
             window.grantedVacations = snapshot.exists() ? snapshot.val() || {} : {};
@@ -827,7 +840,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828k" />
+    <link rel="stylesheet" href="style.css?v=20260828l" />
   </head>
   <body>
     <div
@@ -3418,8 +3431,8 @@
     </nav>
 
     <div id="editModal" class="modal">
-      <div class="modal-content">
-        <div
+      <div class="modal-content em-content">
+        <div class="em-head"
           style="
             display: flex;
             justify-content: space-between;
@@ -3448,7 +3461,7 @@
             />פעיל בשיבוץ<small id="isActiveHint" style="color: var(--md-text-secondary); font-weight: normal"></small></label
           >
         </div>
-        <div
+        <div class="em-grid"
           style="
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -3564,7 +3577,7 @@
             </select>
           </div>
         </div>
-        <div
+        <div class="em-grid"
           style="
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -5137,6 +5150,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828k"></script>
+    <script src="script.js?v=20260828l"></script>
   </body>
 </html>

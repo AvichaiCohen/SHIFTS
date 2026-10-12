@@ -1289,10 +1289,19 @@
 
       window.commanders = JSON.parse(
         localStorage.getItem("shift_commanders_v1"),
-      ) || [
-        { id: 1, name: "אביחי כהן", phone: "0522911379" },
-        { id: 2, name: "פפו", phone: "0542042421" },
-      ];
+      ) || [{ id: 1, name: "אביחי כהן", phone: "0522911379" }];
+
+      // רשימת המפקדים נשמרת גם בענן (commandersList) — עד עכשיו היא הייתה רק
+      // ב-localStorage של כל מכשיר, ולכן מחיקה במכשיר אחד "חזרה" במכשיר אחר.
+      // נשמרת כאובייקט {list, ts} כי Firebase מוחק מערך ריק — כך גם רשימה
+      // ריקה נשארת "מאותחלת" ולא נופלת חזרה לברירת המחדל.
+      window._saveCommanders = function () {
+        const list = (window.commanders || []).filter(Boolean);
+        window.commanders = list;
+        try { localStorage.setItem("shift_commanders_v1", JSON.stringify(list)); } catch (e) {}
+        if (typeof window.saveToCloud === "function" && window.currentUserRole === "superAdmin")
+          window.saveToCloud("commandersList", { list, ts: Date.now() }, { silent: true });
+      };
 
       // הגדרת האם להציע שליחת וואטסאפ (localStorage כברירת מחדל, Firebase יכסה)
       const _rawWa = localStorage.getItem("shift_wa_enabled_v1");
@@ -7759,7 +7768,7 @@
             c.name = newName;
         });
         try {
-          localStorage.setItem("shift_commanders_v1", JSON.stringify(window.commanders || []));
+          window._saveCommanders();
         } catch (e) {}
 
         window.toast(
@@ -8133,10 +8142,7 @@
           return;
         }
         window.commanders.push({ id: Date.now(), name, phone });
-        localStorage.setItem(
-          "shift_commanders_v1",
-          JSON.stringify(window.commanders),
-        );
+        window._saveCommanders();
         document.getElementById("newCmdName").value = "";
         document.getElementById("newCmdPhone").value = "";
         window.renderCommandersUI();
@@ -8149,12 +8155,28 @@
           confirmText: "מחק",
           danger: true,
         }))) return;
+        const removed = (window.commanders || []).find((c) => c.id === id);
         window.commanders = window.commanders.filter((c) => c.id !== id);
-        localStorage.setItem(
-          "shift_commanders_v1",
-          JSON.stringify(window.commanders),
-        );
+        // מנקים גם את הסימון "מפקד" בכרטיס העובד המקושר — אחרת שמירת הכרטיס
+        // שלו הייתה מחזירה אותו לרשימה (זה מה שגרם לו "לחזור" שוב ושוב).
+        if (removed) {
+          const match = (e) =>
+            e &&
+            ((removed.empId != null && String(e.id) === String(removed.empId)) ||
+              e.name === removed.name);
+          let touchedMaster = false;
+          (window.staff || []).forEach((e) => {
+            if (match(e)) { e.isCommander = false; e.commanderPhone = ""; }
+          });
+          (window.globalStaff || []).forEach((e) => {
+            if (match(e)) { e.isCommander = false; e.commanderPhone = ""; touchedMaster = true; }
+          });
+          if (touchedMaster && typeof window.saveToCloud === "function")
+            window.saveToCloud("staffMaster", window.globalStaff);
+        }
+        window._saveCommanders();
         window.renderCommandersUI();
+        window.toast("🗑 המפקד נמחק — המחיקה נשמרה בענן ותחול בכל המכשירים.");
       };
 
       // משימות פתוחות (ללא עובד, לא הושלמו) שתאריכן מגיע בתוך 30 יום — נועדו
@@ -10776,10 +10798,7 @@
         // עדכון empId אם חסר
         if (linkedCmd && !linkedCmd.empId) {
           linkedCmd.empId = emp.id;
-          localStorage.setItem(
-            "shift_commanders_v1",
-            JSON.stringify(window.commanders),
-          );
+          window._saveCommanders();
         }
         document.getElementById("editIsCommander").checked = isCmd;
         document.getElementById("editCommanderPhone").value = cmdPhone;
@@ -10955,10 +10974,7 @@
               (c) => c.empId !== emp.id,
             );
           }
-          localStorage.setItem(
-            "shift_commanders_v1",
-            JSON.stringify(window.commanders),
-          );
+          window._saveCommanders();
         } else {
           // תפקיד שאינו מפקד — ודא שהשדות לא undefined
           emp.isCommander = false;

@@ -1072,9 +1072,21 @@
           border-color 0.15s ease,
           background 0.15s ease;
       }
-      .tb-icon:hover {
+      /* hover רק למכשירים עם עכבר — במגע ה-:hover "נדבק" אחרי הלחיצה ונראה
+         כאילו הכפתור נשאר דלוק. במגע יש רק הבזק קצר בזמן הלחיצה (:active). */
+      @media (hover: hover) {
+        .tb-icon:hover {
+          border-color: var(--tb-accent, var(--md-primary));
+          background: color-mix(in srgb, var(--tb-accent, var(--md-primary)) 12%, transparent);
+        }
+      }
+      .tb-icon:active {
         border-color: var(--tb-accent, var(--md-primary));
-        background: color-mix(in srgb, var(--tb-accent, var(--md-primary)) 12%, transparent);
+        background: color-mix(in srgb, var(--tb-accent, var(--md-primary)) 22%, transparent);
+        transform: scale(0.96);
+      }
+      .tb-icon:focus:not(:focus-visible) {
+        outline: none;
       }
       .tb-icon.tb-on {
         border-color: var(--tb-accent, var(--md-primary));
@@ -1204,8 +1216,14 @@
         text-align: right;
         font-family: inherit;
       }
-      .ops-kpi:hover {
+      @media (hover: hover) {
+        .ops-kpi:hover {
+          border-color: var(--md-primary);
+        }
+      }
+      .ops-kpi:active {
         border-color: var(--md-primary);
+        transform: scale(0.98);
       }
       .ops-kpi.warn {
         background: rgba(245, 158, 11, 0.1);
@@ -1842,4 +1860,43 @@
         border-color: var(--md-primary);
         background: color-mix(in srgb, var(--md-primary) 10%, var(--md-surface));
         outline: none;
+      }
+
+      /* ===== תיק עובד בנייד — עמודה אחת, ריווח נוח ושדות קריאים ===== */
+      @media (max-width: 1024px) {
+        #editModal .em-content {
+          width: 100%;
+          max-width: 100vw;
+          box-sizing: border-box;
+          padding: 18px 16px 24px;
+        }
+        #editModal .em-head {
+          flex-wrap: wrap;
+          gap: 10px;
+          align-items: flex-start !important;
+        }
+        #editModal .em-head h3 {
+          font-size: 1.15rem;
+          flex: 1 1 100%;
+        }
+        /* שלוש/שתי עמודות → עמודה אחת */
+        #editModal .em-grid {
+          grid-template-columns: 1fr !important;
+          gap: 14px !important;
+          margin-bottom: 18px !important;
+        }
+        /* שדות ברוחב מלא וגופן 16px (גם מונע זום אוטומטי ב-iOS) */
+        #editModal input[type="text"],
+        #editModal input[type="number"],
+        #editModal input[type="date"],
+        #editModal input[type="password"],
+        #editModal select {
+          width: 100% !important;
+          box-sizing: border-box;
+          font-size: 16px;
+          min-height: 44px;
+        }
+        #editModal label {
+          line-height: 1.4;
+        }
       }
