@@ -1121,6 +1121,10 @@
         #managerToolbar .tb-icon:not(.tb-keep-mobile) {
           display: none;
         }
+        /* סדר בנייד: הענקת חופש ראשונה */
+        #managerToolbar .tb-first-mobile {
+          order: -1;
+        }
         .tb-icon::after {
           display: none;
         }
