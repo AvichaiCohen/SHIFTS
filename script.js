@@ -2080,18 +2080,21 @@
 
         let html = "";
 
-        // --- בקשות ממתינות ---
+        // --- בקשות ממתינות — של השבוע המוצג בלבד (תואם למונה שבאריח) ---
         const pending = window._collectAllPending();
-        const pIds = Object.keys(pending).sort((a, b) =>
-          (pending[a].date || "").localeCompare(pending[b].date || ""),
-        );
+        const _wk = window.currentSelectedWeek;
+        const allIds = Object.keys(pending);
+        const pIds = allIds
+          .filter((id) => (pending[id].weekKey || _wk) === _wk)
+          .sort((a, b) => (pending[a].date || "").localeCompare(pending[b].date || ""));
+        const otherWeeks = allIds.length - pIds.length;
         if (!section || section === "requests") {
           html += head("⏳", "בקשות ממתינות", pIds.length,
             "בקשות חופש/אילוץ/העדפה שהעובדים הגישו וטרם טופלו.");
           if (pIds.length === 0) {
-            html += emptyBox("🎉", "אין בקשות ממתינות — הכל טופל.");
+            html += emptyBox("🎉", "אין בקשות ממתינות לשבוע הזה.");
           } else {
-            html += `<div style="margin-bottom:8px;"><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; font-size:0.82rem;" onclick="window.approveAllPendingRequests()">✅ אשר הכל (${pIds.length})</button></div>`;
+            html += `<div style="margin-bottom:8px;"><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; font-size:0.82rem;" onclick="window.approveAllPendingRequests(true).then(()=>window.renderActionCenter())">✅ אשר הכל לשבוע הזה (${pIds.length})</button></div>`;
             html += `<div style="max-height:260px; overflow-y:auto;">`;
             pIds.forEach((id) => {
               const r = pending[id];
@@ -2107,6 +2110,9 @@
             html += `</div>`;
           }
         }
+
+        if ((!section || section === "requests") && otherWeeks > 0)
+          html += `<p style="margin:6px 0 0; font-size:0.78rem; color:var(--md-text-secondary);">+ עוד ${otherWeeks} בקשות בשבועות אחרים — מופיעות בעמוד "ריכוז בקשות".</p>`;
 
         // --- החלפות לאישור ---
         if (!section || section === "swaps") {
@@ -10530,14 +10536,17 @@ ${assigned.join("\n")}
 
       // אישור מרוכז (Batch) של כל הבקשות הממתינות — חוסך לחיצה נפרדת לכל בקשה.
       // מריץ ברצף (await) כי כל אישור כותב את הלוח של השבוע הרלוונטי.
-      window.approveAllPendingRequests = async function () {
+      window.approveAllPendingRequests = async function (onlyThisWeek) {
         const pending = {};
         const idx = window._allPending || {};
         Object.keys(idx).forEach((id) => { if (idx[id]) pending[id] = idx[id]; });
         const cur =
           (window.currentSchedule && window.currentSchedule.pendingRequests) || {};
         Object.keys(cur).forEach((id) => { if (cur[id] && !pending[id]) pending[id] = cur[id]; });
-        const ids = Object.keys(pending);
+        const _wk = window.currentSelectedWeek;
+        const ids = Object.keys(pending).filter(
+          (id) => !onlyThisWeek || (pending[id].weekKey || _wk) === _wk,
+        );
         if (ids.length === 0) { window.toast("אין בקשות ממתינות."); return; }
         const ok = await window.confirmDialog({
           title: "אישור כל הבקשות",
