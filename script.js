@@ -3701,6 +3701,60 @@
           window.renderMobileCards(window.currentSchedule, window.currentNotesLog);
       };
 
+      // ===== מיזעור משמרת ערב (פר-שבוע) =====
+      // משמרת הערב בזירה כמעט לא מנוצלת; כשהיא ממוזערת השורה נעלמת מהלוח
+      // (דסקטופ+נייד) והגנרטור לא מאייש אותה בשבוע הזה.
+      window._isEveningHidden = function () {
+        return !!(window.currentSchedule && window.currentSchedule.hideEvening);
+      };
+      window.toggleEveningShift = async function () {
+        if (!window.currentSchedule) return;
+        const hiding = !window._isEveningHidden();
+        if (hiding) {
+          // אם יש אנשים משובצים בערב — לא להשאיר אותם "בלתי נראים"
+          const assigned = [];
+          days.forEach((d) => {
+            const arr =
+              (window.currentSchedule[`${d}-ערב`] &&
+                window.currentSchedule[`${d}-ערב`][LOC_ZIRA]) ||
+              [];
+            arr.forEach((e) => assigned.push(`${e.name} (${d})`));
+          });
+          if (assigned.length) {
+            const ok = await window.confirmDialog({
+              title: "מיזעור משמרת ערב",
+              message: `משובצים כרגע בערב:
+${assigned.join("\n")}
+
+השיבוצים האלה יוסרו כדי שלא יישארו מוסתרים. להמשיך?`,
+              confirmText: "מזער והסר",
+              danger: true,
+            });
+            if (!ok) return;
+            days.forEach((d) => {
+              if (window.currentSchedule[`${d}-ערב`])
+                window.currentSchedule[`${d}-ערב`][LOC_ZIRA] = [];
+            });
+          }
+        }
+        window.currentSchedule.hideEvening = hiding;
+        window._syncEveningBtn();
+        if (typeof window.recomputeNotesFromSchedule === "function")
+          window.recomputeNotesFromSchedule();
+        window.triggerUnsavedChanges();
+        window.toast(hiding ? "🌆 משמרת ערב מוזערה לשבוע הזה." : "🌆 משמרת ערב הוחזרה.");
+      };
+      window._syncEveningBtn = function () {
+        const btn = document.getElementById("eveningToggleBtn");
+        if (!btn) return;
+        const hidden = window._isEveningHidden();
+        btn.classList.toggle("tb-on", hidden);
+        btn.setAttribute(
+          "data-tip",
+          hidden ? "הצג שוב את משמרת ערב (ממוזערת השבוע)" : "מזער את משמרת ערב לשבוע הזה",
+        );
+      };
+
       window.isShiftLocked = function (day, shift, loc) {
         return !!(window.currentSchedule.shiftLocks && window.currentSchedule.shiftLocks[`${day}-${shift}-${loc}`]);
       };
@@ -11845,7 +11899,8 @@
             }
 
             const eveningSk = `${day}-ערב`;
-            if (!window.isOffDay(day)) {
+            // משמרת ערב ממוזערת לשבוע הזה — לא מאיישים אותה בכלל
+            if (!window.isOffDay(day) && !window._isEveningHidden()) {
               baseLocs.forEach((loc) => {
                 if (loc === LOC_MATAL) return;
                 if (window.isShiftLocked(day, "ערב", loc)) return;
@@ -12302,6 +12357,7 @@
         if (typeof window._updateUnsavedIndicator === "function")
           window._updateUnsavedIndicator();
         if (typeof window.renderOpsKpiBar === "function") window.renderOpsKpiBar();
+        if (typeof window._syncEveningBtn === "function") window._syncEveningBtn();
         // אם המנהל אישר את כל השיבוץ ("בדוק שיבוץ מלא" — כולם אושרו והלוח לא
         // השתנה מאז) — לא מציגים יותר את סימוני האזהרה (⚠️) על הלוח.
         const _suppressWarns =
@@ -12368,7 +12424,9 @@
         if (_weekHasNormal || _weekHasMatal) {
           // זירה מוצגת הן במצב רגיל והן במצב מת"ל חוסר
           scheduleRows.push({ loc: LOC_ZIRA, shift: "בוקר", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
+          // משמרת ערב ניתנת למיזעור פר-שבוע (currentSchedule.hideEvening)
+          if (!window._isEveningHidden())
+            scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
           scheduleRows.push({ loc: LOC_ZIRA, shift: "לילה", showForModes: ["normal", "matal"] });
           // מת"ל רגיל — רק אם אין ימי חוסר בשבוע זה
           if (_weekHasNormal && !_weekHasMatal) {
@@ -12673,7 +12731,9 @@
         if (_weekHasNormal || _weekHasMatal) {
           // זירה מוצגת הן במצב רגיל והן במצב מת"ל חוסר
           scheduleRows.push({ loc: LOC_ZIRA, shift: "בוקר", showForModes: ["normal", "matal"] });
-          scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
+          // משמרת ערב ניתנת למיזעור פר-שבוע (currentSchedule.hideEvening)
+          if (!window._isEveningHidden())
+            scheduleRows.push({ loc: LOC_ZIRA, shift: "ערב", showForModes: ["normal", "matal"] });
           scheduleRows.push({ loc: LOC_ZIRA, shift: "לילה", showForModes: ["normal", "matal"] });
           // מת"ל רגיל — רק אם אין ימי חוסר בשבוע זה
           if (_weekHasNormal && !_weekHasMatal) {
