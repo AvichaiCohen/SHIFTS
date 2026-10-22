@@ -1900,3 +1900,61 @@
           line-height: 1.4;
         }
       }
+
+      /* ===== דיאלוג תאריכים / הענקת חופש ===== */
+      .app-dialog-lbl {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--md-text-secondary);
+        margin: 0 0 4px;
+      }
+      .gv-list {
+        max-height: 230px;
+        overflow-y: auto;
+        border: 1px solid var(--md-divider);
+        border-radius: 10px;
+        padding: 4px;
+        margin-bottom: 6px;
+      }
+      .gv-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.92rem;
+      }
+      .gv-row input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        flex: 0 0 auto;
+      }
+      .gv-row small {
+        margin-inline-start: auto;
+        color: var(--md-text-secondary);
+      }
+      .gv-row:has(input:checked) {
+        background: rgba(13, 148, 136, 0.12);
+      }
+      .gv-count {
+        font-size: 0.8rem;
+        color: var(--md-text-secondary);
+        margin-bottom: 12px;
+      }
+      .gv-dates {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .gv-dates .app-dialog-input {
+        margin-bottom: 14px;
+      }
+      @media (max-width: 480px) {
+        .gv-dates {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+      }

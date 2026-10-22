@@ -145,6 +145,116 @@
         });
       };
 
+      // בורר טווח תאריכים עם <input type="date"> (בורר מערכת בנייד) →
+      // Promise<{from,to}|null>. opts: { title, message, from, to, confirmText }
+      window.dateRangeDialog = function (opts) {
+        opts = opts || {};
+        return new Promise((resolve) => {
+          const today = new Date().toISOString().slice(0, 10);
+          const overlay = document.createElement("div");
+          overlay.className = "app-dialog-overlay";
+          overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+            ${opts.title ? `<h3>${window.escapeHtml(opts.title)}</h3>` : ""}
+            ${opts.message ? `<p class="app-dialog-msg">${window.escapeHtml(opts.message)}</p>` : ""}
+            <label class="app-dialog-lbl">מתאריך</label>
+            <input class="app-dialog-input" type="date" data-f="from" value="${opts.from || today}" />
+            <label class="app-dialog-lbl">עד תאריך</label>
+            <input class="app-dialog-input" type="date" data-f="to" value="${opts.to || opts.from || today}" />
+            <div class="app-dialog-actions">
+              <button class="btn btn-outlined" data-act="cancel">ביטול</button>
+              <button class="btn btn-contained" data-act="ok">${window.escapeHtml(opts.confirmText || "אישור")}</button>
+            </div>
+          </div>`;
+          const fromEl = overlay.querySelector('[data-f="from"]');
+          const toEl = overlay.querySelector('[data-f="to"]');
+          // "עד" לא יכול להיות לפני "מ" — מיישרים אוטומטית
+          fromEl.addEventListener("change", () => {
+            if (!toEl.value || toEl.value < fromEl.value) toEl.value = fromEl.value;
+          });
+          const done = (v) => window._closeAppDialog(overlay, resolve, v);
+          overlay.addEventListener("click", (e) => { if (e.target === overlay) done(null); });
+          overlay.querySelector('[data-act="cancel"]').onclick = () => done(null);
+          overlay.querySelector('[data-act="ok"]').onclick = () => {
+            if (!fromEl.value || !toEl.value || toEl.value < fromEl.value) {
+              window.toast("⛔ טווח תאריכים לא תקין.");
+              return;
+            }
+            done({ from: fromEl.value, to: toEl.value });
+          };
+          overlay._onKey = (e) => { if (e.key === "Escape") done(null); };
+          document.addEventListener("keydown", overlay._onKey);
+          document.body.appendChild(overlay);
+        });
+      };
+
+      // הענקת חופש: בחירת כמה עובדים (צ'קבוקסים + חיפוש) וטווח תאריכים →
+      // Promise<{empIds, from, to}|null>
+      window.grantVacationDialog = function () {
+        return new Promise((resolve) => {
+          const today = new Date().toISOString().slice(0, 10);
+          const staffList = (window.staff || [])
+            .filter((e) => e.isActive !== false)
+            .sort((a, b) => a.name.localeCompare(b.name));
+          const overlay = document.createElement("div");
+          overlay.className = "app-dialog-overlay";
+          overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+            <h3>🌴 הענקת חופש</h3>
+            <p class="app-dialog-msg">חוסם שיבוץ ונספר במכסת החופשים. שישי/שבת/חג לא נספרים.</p>
+            <input class="app-dialog-input" type="text" data-f="q" placeholder="🔍 חיפוש עובד..." />
+            <div class="gv-list">${staffList
+              .map(
+                (e) =>
+                  `<label class="gv-row" data-name="${window.escapeHtml(e.name)}"><input type="checkbox" value="${e.id}"> <span>${window.escapeHtml(e.name)}</span> <small>${window.escapeHtml(e.type || "")}</small></label>`,
+              )
+              .join("")}</div>
+            <div class="gv-count">לא נבחרו עובדים</div>
+            <div class="gv-dates">
+              <div><label class="app-dialog-lbl">מתאריך</label><input class="app-dialog-input" type="date" data-f="from" value="${today}" /></div>
+              <div><label class="app-dialog-lbl">עד תאריך</label><input class="app-dialog-input" type="date" data-f="to" value="${today}" /></div>
+            </div>
+            <div class="app-dialog-actions">
+              <button class="btn btn-outlined" data-act="cancel">ביטול</button>
+              <button class="btn btn-contained" data-act="ok" style="background:#0d9488;">הענק חופש</button>
+            </div>
+          </div>`;
+          const q = overlay.querySelector('[data-f="q"]');
+          const fromEl = overlay.querySelector('[data-f="from"]');
+          const toEl = overlay.querySelector('[data-f="to"]');
+          const countEl = overlay.querySelector(".gv-count");
+          const checked = () =>
+            Array.from(overlay.querySelectorAll('.gv-list input:checked')).map((c) => c.value);
+          const refreshCount = () => {
+            const n = checked().length;
+            countEl.textContent = n ? `נבחרו ${n} עובדים` : "לא נבחרו עובדים";
+          };
+          overlay.querySelectorAll(".gv-list input").forEach((c) => c.addEventListener("change", refreshCount));
+          q.addEventListener("input", () => {
+            const v = q.value.trim().toLowerCase();
+            overlay.querySelectorAll(".gv-row").forEach((r) => {
+              r.style.display = !v || r.getAttribute("data-name").toLowerCase().includes(v) ? "" : "none";
+            });
+          });
+          fromEl.addEventListener("change", () => {
+            if (!toEl.value || toEl.value < fromEl.value) toEl.value = fromEl.value;
+          });
+          const done = (v) => window._closeAppDialog(overlay, resolve, v);
+          overlay.addEventListener("click", (e) => { if (e.target === overlay) done(null); });
+          overlay.querySelector('[data-act="cancel"]').onclick = () => done(null);
+          overlay.querySelector('[data-act="ok"]').onclick = () => {
+            const ids = checked();
+            if (!ids.length) { window.toast("בחר לפחות עובד אחד."); return; }
+            if (!fromEl.value || !toEl.value || toEl.value < fromEl.value) {
+              window.toast("⛔ טווח תאריכים לא תקין.");
+              return;
+            }
+            done({ empIds: ids, from: fromEl.value, to: toEl.value });
+          };
+          overlay._onKey = (e) => { if (e.key === "Escape") done(null); };
+          document.addEventListener("keydown", overlay._onKey);
+          document.body.appendChild(overlay);
+        });
+      };
+
       // שדה קלט מעוצב (מחליף prompt) → Promise<string|null>. null = ביטול.
       // opts: { title, message, placeholder, defaultValue, password, confirmText }
       window.promptDialog = function (opts) {
@@ -4130,13 +4240,14 @@ ${assigned.join("\n")}
           .map((s) => ({ id: s.empId, name: s.empName, status: s.status, text: s.text || "", _specialId: s.id, returnsToShift: s.returnsToShift === true }));
         const taskSpecs = [];
         (window.systemTasks || [])
-          .filter((t) => !t.completed && t.date <= cellKey && (t.endDate || t.date) >= cellKey)
+          // גם משימה שסומנה "בוצעה" ממשיכה להופיע בלוח (היא קרתה בפועל) — מסומנת ✔
+          .filter((t) => t.date <= cellKey && (t.endDate || t.date) >= cellKey)
           .forEach((t) => {
             const assignees = t.assignees || (t.assignee ? [{ name: t.assignee }] : []);
             assignees.forEach((a) => {
               const emp = (window.staff || []).find((e) => e.name === a.name || e.id === a.id);
               if (emp && !taskSpecs.find((x) => x.id === emp.id))
-                taskSpecs.push({ id: emp.id, name: emp.name, status: t.category || "משימה", text: t.desc || "", _taskId: t.id });
+                taskSpecs.push({ id: emp.id, name: emp.name, status: (t.category || "משימה") + (t.completed ? " ✔" : ""), text: t.desc || "", _taskId: t.id, completed: !!t.completed });
             });
           });
         const merged = [...legacy];
@@ -4493,52 +4604,40 @@ ${assigned.join("\n")}
           window.toast("רק המנהל הראשי יכול להעניק ימי חופש.");
           return;
         }
-        const staffList = (window.staff || [])
-          .filter((e) => e.isActive !== false)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        if (!staffList.length) { window.toast("אין עובדים."); return; }
-        const empId = await window.choiceDialog({
-          title: "🌴 הענקת יום חופש",
-          message: "למי להעניק? (ייחסם לשיבוץ וייספר במכסת החופשים)",
-          options: staffList.map((e) => ({ label: e.name, value: String(e.id) })),
-        });
-        if (!empId) return;
-        const emp = staffList.find((e) => String(e.id) === String(empId));
-        const from = await window.promptDialog({
-          title: `יום חופש — ${emp.name}`,
-          message: "תאריך התחלה (YYYY-MM-DD):",
-          defaultValue: new Date().toISOString().slice(0, 10),
-          confirmText: "המשך",
-        });
-        if (!from) return;
-        const to = await window.promptDialog({
-          title: `יום חופש — ${emp.name}`,
-          message: "תאריך סיום (אותו תאריך = יום בודד):",
-          defaultValue: from,
-          confirmText: "הענק חופש",
-        });
-        if (!to) return;
-        const start = new Date(from), end = new Date(to);
-        if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
-          window.toast("⛔ תאריכים לא תקינים.");
-          return;
-        }
+        // בורר אחד: כמה עובדים + טווח תאריכים בבוררי תאריך (לא הקלדה)
+        const r = await window.grantVacationDialog();
+        if (!r) return;
         const dates = [];
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        for (let d = new Date(r.from); d <= new Date(r.to); d.setDate(d.getDate() + 1)) {
           if (window._isVacFreeDay && window._isVacFreeDay(d)) continue; // שישי/שבת/חג
           dates.push(
             `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
           );
         }
         if (!dates.length) { window.toast("הטווח כולל רק ימים שאינם מנצלים חופש."); return; }
-        for (const dt of dates) {
-          const id = Date.now() + "_" + Math.floor(Math.random() * 100000);
-          window.saveToCloud("grantedVacations/" + id, {
-            id, empId: emp.id, empName: emp.name, date: dt, ts: Date.now(),
-          });
-          await window._applyVacConstraintsToWeek(emp.id, dt, true);
+        const emps = r.empIds
+          .map((id) => (window.staff || []).find((e) => String(e.id) === String(id)))
+          .filter(Boolean);
+        // ימים שכבר הוענקו לאותו עובד לא נרשמים פעמיים
+        const already = new Set(
+          Object.values(window.grantedVacations || {})
+            .filter(Boolean)
+            .map((g) => String(g.empId) + "|" + g.date),
+        );
+        let added = 0;
+        for (const emp of emps) {
+          for (const dt of dates) {
+            if (already.has(String(emp.id) + "|" + dt)) continue;
+            const id = Date.now() + "_" + Math.floor(Math.random() * 100000);
+            window.saveToCloud("grantedVacations/" + id, {
+              id, empId: emp.id, empName: emp.name, date: dt, ts: Date.now(),
+            });
+            await window._applyVacConstraintsToWeek(emp.id, dt, true);
+            added++;
+          }
         }
-        window.toast(`🌴 הוענקו ${dates.length} ימי חופש ל${emp.name}.`);
+        const who = emps.length === 1 ? emps[0].name : `${emps.length} עובדים`;
+        window.toast(`🌴 הוענקו ${added} ימי חופש ל${who} (${dates.length} ימים לכל אחד).`);
         if (typeof window.renderVacationManagementTable === "function")
           window.renderVacationManagementTable();
       };
@@ -5001,16 +5100,89 @@ ${assigned.join("\n")}
         window.triggerUnsavedChanges();
       };
 
-      window.removeSpecialStatus = async function (specialId) {
-        if (!(await window.confirmDialog({
+      // הסרה/עריכה של סטטוס מיוחד. כשנלחץ ✕ ביום מסוים (dayName) — לא מוחקים
+      // אוטומטית את כל הטווח: נותנים לבחור "רק היום הזה" (פיצול הטווח),
+      // "עריכת תאריכים", או "כל הסטטוס".
+      window.removeSpecialStatus = async function (specialId, dayName) {
+        const list = window.specialStatuses || [];
+        const sp = list.find((s) => s.id === specialId);
+        if (!sp) return;
+        const fmt = (k) => String(k || "").split("-").reverse().join(".");
+        const isRange = sp.startDate && sp.endDate && sp.startDate !== sp.endDate;
+        const dayKey = dayName ? window._dateKeyForDay(dayName) : null;
+        const inRange = dayKey && dayKey >= sp.startDate && dayKey <= sp.endDate;
+
+        let action = "all";
+        if (isRange && inRange) {
+          action = await window.choiceDialog({
+            title: `🚩 ${sp.empName || ""} — ${window.specStatusLabel(sp)}`,
+            message: `הסטטוס בתוקף ${fmt(sp.startDate)}–${fmt(sp.endDate)}. מה לעשות?`,
+            options: [
+              { label: `הסר רק את ${dayName} (${fmt(dayKey)})`, value: "day" },
+              { label: "✏️ ערוך תאריכים", value: "edit" },
+              { label: `🗑 הסר את כל הסטטוס (${fmt(sp.startDate)}–${fmt(sp.endDate)})`, value: "all" },
+            ],
+          });
+          if (!action) return;
+        } else if (!(await window.confirmDialog({
           title: "הסרת סטטוס מיוחד",
-          message: "להסיר את הסטטוס המיוחד?",
+          message: `להסיר את הסטטוס של ${sp.empName || ""} (${window.specStatusLabel(sp)})?`,
           confirmText: "הסר",
           danger: true,
         }))) return;
-        window.specialStatuses = (window.specialStatuses || []).filter((s) => s.id !== specialId);
+
+        const shiftKey = (k, n) => {
+          const d = new Date(k);
+          d.setDate(d.getDate() + n);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        };
+
+        if (action === "all") {
+          window.specialStatuses = list.filter((s) => s.id !== specialId);
+        } else if (action === "day") {
+          // פיצול הטווח סביב היום שהוסר
+          const rest = list.filter((s) => s.id !== specialId);
+          if (dayKey > sp.startDate)
+            rest.push({ ...sp, endDate: shiftKey(dayKey, -1) });
+          if (dayKey < sp.endDate)
+            rest.push({
+              ...sp,
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              startDate: shiftKey(dayKey, 1),
+            });
+          window.specialStatuses = rest;
+        } else if (action === "edit") {
+          const r = await window.dateRangeDialog({
+            title: `✏️ עריכת תאריכים — ${sp.empName || ""}`,
+            message: window.specStatusLabel(sp),
+            from: sp.startDate,
+            to: sp.endDate,
+            confirmText: "שמור",
+          });
+          if (!r) return;
+          sp.startDate = r.from;
+          sp.endDate = r.to;
+        }
         window.saveToCloud("specialStatuses", window.specialStatuses);
         if (typeof window.renderRequestsPage === "function") window.renderRequestsPage();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast(
+          action === "day"
+            ? `✅ הוסר רק ${dayName}; שאר הסטטוס נשמר.`
+            : action === "edit"
+              ? "✅ התאריכים עודכנו."
+              : "✅ הסטטוס הוסר.",
+        );
+      };
+
+      // תאריך (YYYY-MM-DD) של יום בשבוע המוצג
+      window._dateKeyForDay = function (dayName) {
+        const idx = days.indexOf(dayName);
+        if (idx < 0) return null;
+        const d = new Date(window.getSunday(window.currentWeekOffset || 0));
+        d.setDate(d.getDate() + idx);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       };
 
       window.removeLegacySpecial = async function (day, empId) {
@@ -9783,7 +9955,7 @@ ${assigned.join("\n")}
               count3++;
               const removeAction =
                 sp._specialId != null
-                  ? `window.removeSpecialStatus(${sp._specialId})`
+                  ? `window.removeSpecialStatus(${sp._specialId}, '${d}')`
                   : sp._taskId
                     ? null
                     : `window.removeLegacySpecial('${d}',${sp.id})`;
@@ -12608,7 +12780,7 @@ ${assigned.join("\n")}
               daySpecials.forEach((sp) => {
                 const removeAction =
                   sp._specialId != null
-                    ? `window.removeSpecialStatus(${sp._specialId})`
+                    ? `window.removeSpecialStatus(${sp._specialId}, '${d}')`
                     : `window.removeLegacySpecial('${d}',${sp.id})`;
                 const removeBtn = !window.isWorkerMode
                   ? `<span class="mobile-remove-btn" style="margin-right:4px; cursor:pointer;" onclick="${removeAction}">✕</span>`
@@ -12856,7 +13028,7 @@ ${assigned.join("\n")}
           specs.forEach((sp) => {
             let removeBtn = !window.isWorkerMode
               ? (sp._specialId != null
-                  ? `<span class="mobile-remove-btn" style="margin-right:6px; color:#ef4444;" onclick="window.removeSpecialStatus(${sp._specialId})">✕</span>`
+                  ? `<span class="mobile-remove-btn" style="margin-right:6px; color:#ef4444;" onclick="window.removeSpecialStatus(${sp._specialId}, '${d}')">✕</span>`
                   : sp._taskId ? ""
                   : `<span class="mobile-remove-btn" style="margin-right:6px; color:#ef4444;" onclick="window.removeLegacySpecial('${d}',${sp.id})">✕</span>`)
               : "";
