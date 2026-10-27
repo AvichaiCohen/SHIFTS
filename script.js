@@ -4789,7 +4789,7 @@ ${assigned.join("\n")}
         const monthFilter = window._vacMonthFilter || "";
         // כולל נחפפים בנוסף לטכנאי/קבע
         const baseList = (window.staff || [])
-          .filter((e) => ["טכנאי", "קבע", "נחפף"].includes(e.type))
+          .filter((e) => ["טכנאי", "קבע", "נחפף"].includes(e.type) && e.archived !== true)
           .sort((a, b) => a.name.localeCompare(b.name));
         if (baseList.length === 0) {
           cont.innerHTML = `<p style="color:var(--text-muted); font-style:italic;">אין טכנאים/קבע/נחפפים במאגר.</p>`;
@@ -4917,7 +4917,7 @@ ${assigned.join("\n")}
             <td data-label="נוצל" style="text-align:center;">${window._fmtVac(vac.used)}</td>
             <td data-label="נותר" style="text-align:center; font-weight:bold; color:${remainingColor};">${window._fmtVac(vac.remaining)}</td>
             <td data-label="נותר לאחר בקשות" style="text-align:center; font-weight:bold; color:${afterReqColor};">${afterReqCell}</td>
-            <td data-label="פירוט חופשות">${combinedDetail}</td>
+            <td data-label="פירוט חופשות" class="td-block">${combinedDetail}</td>
           </tr>`;
         });
         if (list.length === 0)
@@ -5261,16 +5261,45 @@ ${assigned.join("\n")}
           window.populateEmpFilterDropdown();
 
         let grid = document.getElementById("staffGrid");
+        // כפתור הארכיון — מונה עובדים בארכיון
+        const _archived = (window.globalStaff || []).filter((e) => e.archived === true);
+        const _archBtn = document.getElementById("archiveToggleBtn");
+        if (_archBtn)
+          _archBtn.textContent = window._showArchive
+            ? "↩️ חזרה לצוות הפעיל"
+            : `📦 ארכיון (${_archived.length})`;
+        if (grid && window._showArchive) {
+          // תצוגת ארכיון — עובדים שהוסרו אך נשמרים במאגר עם ההיסטוריה
+          grid.innerHTML = _archived.length
+            ? _archived
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(
+                  (e) => `<div class="emp-card" style="opacity:0.85; cursor:default;">
+                    <div style="width:100%;">
+                      <div style="font-weight:bold; color:var(--md-primary); margin-bottom:4px;">📦 ${window.escapeHtml(e.name)}</div>
+                      <div style="font-size:0.82em; color:var(--text-muted); margin-bottom:8px;">${window.escapeHtml(e.type || "")}${e.archivedAt ? " · בארכיון מ-" + e.archivedAt.split("-").reverse().join(".") : ""}</div>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-outlined" style="padding:4px 10px; font-size:0.8rem;" onclick="window.restoreArchivedEmployee(${e.id})">↩️ שחזר</button>
+                        <button class="btn btn-outlined" style="padding:4px 10px; font-size:0.8rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.purgeArchivedEmployee(${e.id})">🗑 מחק לצמיתות</button>
+                      </div>
+                    </div>
+                  </div>`,
+                )
+                .join("")
+            : `<p style="color:var(--text-muted); font-style:italic; padding:12px;">הארכיון ריק.</p>`;
+          return;
+        }
         if (grid && window.staff) {
-          // חיפוש חי — לפי שם או מספר אישי (ריק = הכל)
+          // חיפוש חי — לפי שם או מספר אישי (ריק = הכל). עובדים בארכיון מוסתרים.
           const _q = window._staffSearch || "";
+          const _base = window.staff.filter((e) => e.archived !== true);
           const _list = _q
-            ? window.staff.filter(
+            ? _base.filter(
                 (e) =>
                   (e.name || "").toLowerCase().includes(_q) ||
                   String(e.personalId || "").toLowerCase().includes(_q),
               )
-            : window.staff;
+            : _base;
           grid.innerHTML = _list
             .map((e) => {
               const isInactive = e.isActive === false ? "emp-inactive" : "";
@@ -7156,6 +7185,15 @@ ${assigned.join("\n")}
         }
         const data = window.currentSchedule || {};
         const weekSun = window.getSunday(window.currentWeekOffset || 0);
+        // שבוע שטרם פורסם — לעובד לא מציגים שיבוצים (כמו בלוח עצמו)
+        if ((window.isWorkerMode || window.isViewOnly) && !data.isPublished) {
+          document.getElementById("myWeekSummaryTitle").innerHTML =
+            `📋 הסיכום השבועי שלי — ${window.escapeHtml(me.name)}<br><small style="font-weight:normal; color:var(--md-text-secondary); font-size:0.85rem;">${window.formatWeekString(weekSun)}</small>`;
+          document.getElementById("myWeekSummaryContent").innerHTML =
+            `<div style="text-align:center; padding:30px 16px; color:var(--md-text-secondary);"><div style="font-size:2rem;">🔒</div><h3 style="margin:8px 0 4px;">המשמרות לשבוע זה טרם פורסמו</h3><p style="margin:0;">הסיכום יופיע כאן ברגע שהמנהל יפרסם את הלוח.</p></div>`;
+          document.getElementById("myWeekModal").style.display = "flex";
+          return;
+        }
         const shiftsToCheck = [...(window.currentShifts || ["בוקר", "ערב", "לילה"])];
         if (
           (data.matalUnderstaff || window.isEmergencyMode) &&
@@ -11349,24 +11387,89 @@ ${assigned.join("\n")}
         }
       };
 
+      // מחיקת עובד: ברירת המחדל היא ארכיון — העובד יוצא מהשיבוץ ומהרשימות
+      // אבל נשאר במאגר עם כל ההיסטוריה (משמרות עבר, סגירות, חופשים), וניתן
+      // לשחזר אותו או למחוק לצמיתות מאוחר יותר מתוך "📦 ארכיון".
       window.deleteEmployee = async function () {
-        if (await window.confirmDialog({
-          title: "מחיקת עובד",
-          message: "בטוח למחוק? המחיקה תתבצע גם משבועות עתידיים.",
-          confirmText: "מחק עובד",
-          danger: true,
-        })) {
-          window.staff = window.staff.filter((e) => e.id !== window.currentId);
-          window.globalStaff = window.globalStaff.filter(
-            (e) => e.id !== window.currentId,
-          );
-          window.currentSchedule.staff = window.staff;
+        const emp = (window.staff || []).find((e) => e.id === window.currentId);
+        if (!emp) return;
+        const choice = await window.choiceDialog({
+          title: `הסרת ${emp.name}`,
+          message: "מה לעשות עם העובד?",
+          options: [
+            { label: "📦 העבר לארכיון — יוצא מהשיבוץ, ההיסטוריה נשמרת", value: "archive" },
+            { label: "🗑 מחק לצמיתות — כולל מהמאגר", value: "delete" },
+          ],
+        });
+        if (!choice) return;
+        if (choice === "archive") {
+          window._setEmployeeArchived(emp.id, true);
           document.getElementById("editModal").style.display = "none";
-          window.triggerUnsavedChanges();
-          window.renderStaff();
-          if (typeof window.saveToCloud === "function")
-            window.saveToCloud("staffMaster", window.globalStaff);
+          window.toast(`📦 ${emp.name} הועבר/ה לארכיון. אפשר לשחזר מתוך "📦 ארכיון" בעמוד הצוות.`);
+          return;
         }
+        if (!(await window.confirmDialog({
+          title: "מחיקה לצמיתות",
+          message: `למחוק את ${emp.name} מהמאגר לצמיתות?
+משמרות שכבר נשמרו בלוחות עבר יישארו שם, אבל העובד לא יופיע יותר ברשימות ובהיסטוריה.`,
+          confirmText: "מחק לצמיתות",
+          danger: true,
+        }))) return;
+        window._deleteEmployeePermanently(emp.id);
+        document.getElementById("editModal").style.display = "none";
+      };
+
+      window._setEmployeeArchived = function (empId, archived) {
+        const stamp = archived ? new Date().toISOString().slice(0, 10) : "";
+        [window.staff || [], window.globalStaff || []].forEach((arr) =>
+          arr.forEach((e) => {
+            if (String(e.id) !== String(empId)) return;
+            e.archived = archived;
+            e.archivedAt = stamp;
+            e.isActive = !archived;
+          }),
+        );
+        window.currentSchedule.staff = window.staff;
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("staffMaster", window.globalStaff);
+        window.triggerUnsavedChanges();
+        window.renderStaff();
+      };
+
+      window._deleteEmployeePermanently = function (empId) {
+        window.staff = (window.staff || []).filter((e) => String(e.id) !== String(empId));
+        window.globalStaff = (window.globalStaff || []).filter(
+          (e) => String(e.id) !== String(empId),
+        );
+        window.currentSchedule.staff = window.staff;
+        window.triggerUnsavedChanges();
+        window.renderStaff();
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("staffMaster", window.globalStaff);
+      };
+
+      window.restoreArchivedEmployee = function (empId) {
+        window._setEmployeeArchived(empId, false);
+        const e = (window.globalStaff || []).find((x) => String(x.id) === String(empId));
+        window.toast(`↩️ ${e ? e.name : "העובד"} שוחזר/ה מהארכיון וחזר/ה לשיבוץ.`);
+      };
+
+      window.purgeArchivedEmployee = async function (empId) {
+        const e = (window.globalStaff || []).find((x) => String(x.id) === String(empId));
+        if (!(await window.confirmDialog({
+          title: "מחיקה לצמיתות",
+          message: `למחוק את ${e ? e.name : "העובד"} מהארכיון לצמיתות?`,
+          confirmText: "מחק לצמיתות",
+          danger: true,
+        }))) return;
+        window._deleteEmployeePermanently(empId);
+        window.toast("🗑 העובד נמחק לצמיתות.");
+      };
+
+      window._showArchive = false;
+      window.toggleArchiveView = function () {
+        window._showArchive = !window._showArchive;
+        window.renderStaff();
       };
 
       window.generate = function (keepExisting = false) {

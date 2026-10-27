@@ -1958,3 +1958,21 @@
           gap: 0;
         }
       }
+
+      /* תא "בלוק" בטבלאות-כרטיס בנייד: הכותרת מעל והתוכן ברוחב מלא מתחתיה —
+         לצ'יפים מרובים (פירוט חופשות) שאחרת נדחסים לטור צר ונשברים אות-אות */
+      @media (max-width: 1024px) {
+        table.mobile-card-table td.td-block {
+          display: block;
+          text-align: right;
+          word-break: normal;
+        }
+        table.mobile-card-table td.td-block::before {
+          display: block;
+          margin-bottom: 6px;
+        }
+        table.mobile-card-table td.td-block > span {
+          display: inline-block;
+          max-width: 100%;
+        }
+      }

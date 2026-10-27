@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828o";
+        var BUILD = "20260828p";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -270,6 +270,8 @@
               "canZiraEvening",
               "isWeekendCloserCandidate",
               "techLevel",
+              "archived",
+              "archivedAt",
             ];
             // הוספת עובדים חדשים שנוספו ל-staffMaster לאחר שמירת השבוע
             (window.globalStaff || []).forEach((gEmp) => {
@@ -291,6 +293,8 @@
                 _masterFields.forEach((f) => {
                   if (gEmp[f] !== undefined) emp[f] = gEmp[f];
                 });
+                // עובד בארכיון אינו פעיל בשיבוץ בשום שבוע
+                if (gEmp.archived === true) emp.isActive = false;
             });
 
             // --- טעינת הגדרות משמרות לפי שבוע / גלובלי ---
@@ -840,7 +844,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828o" />
+    <link rel="stylesheet" href="style.css?v=20260828p" />
   </head>
   <body>
     <div
@@ -2532,6 +2536,14 @@
               font-size: 0.9rem;
             "
           />
+          <button
+            id="archiveToggleBtn"
+            class="btn btn-outlined manager-only"
+            style="padding: 6px 12px; font-size: 0.85rem; margin: 0 8px 12px 0"
+            onclick="window.toggleArchiveView()"
+          >
+            📦 ארכיון
+          </button>
           <div id="staffGrid" class="staff-grid"></div>
         </div>
 
@@ -5151,6 +5163,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828o"></script>
+    <script src="script.js?v=20260828p"></script>
   </body>
 </html>
