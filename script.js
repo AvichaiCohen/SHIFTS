@@ -2629,10 +2629,11 @@
             </div>`;
           });
 
-        // 2. החלטות על בקשות (אושרו / נדחו) — עם פירוט מלא
+        // 2. החלטות על בקשות (אושרו / נדחו) — חופשה בטווח (אותו rangeId)
+        // מוצגת ככרטיס אחד ולא כרטיס לכל יום.
         const reqs = window._myRequests || {};
         const dReq = window._getDismissed("req");
-        Object.keys(reqs)
+        const decided = Object.keys(reqs)
           .map((k) => Object.assign({ key: k }, reqs[k]))
           .filter(
             (r) =>
@@ -2643,20 +2644,40 @@
               r.statusTs &&
               dReq[r.key] !== r.statusTs &&
               now - r.statusTs < window.NOTIF_EXPIRY_MS,
+          );
+        const reqGroups = {};
+        decided.forEach((r) => {
+          const g = r.rangeId != null ? `r${r.rangeId}|${r.status}` : `s${r.key}`;
+          (reqGroups[g] = reqGroups[g] || []).push(r);
+        });
+        Object.values(reqGroups)
+          .map((items) => items.sort((a, b) => (a.date || "").localeCompare(b.date || "")))
+          .sort(
+            (a, b) =>
+              Math.max(...b.map((x) => x.statusTs || 0)) - Math.max(...a.map((x) => x.statusTs || 0)),
           )
-          .sort((a, b) => (b.statusTs || 0) - (a.statusTs || 0))
-          .forEach((r) => {
+          .forEach((items) => {
             count++;
+            const r = items[0];
             const ok = r.status === "approved";
             const color = ok ? "#15803d" : "#b91c1c";
-            const title = ok ? "✅ הבקשה שלך אושרה" : "❌ הבקשה שלך נדחתה";
+            let title, desc;
+            if (items.length > 1) {
+              const f = (d) => String(d).split("-").reverse().join(".");
+              title = ok ? "✅ החופשה שלך אושרה" : "❌ החופשה שלך נדחתה";
+              desc = `🌴 ${f(items[0].date)}–${f(items[items.length - 1].date)} · ${items.length} ימים`;
+            } else {
+              title = ok ? "✅ הבקשה שלך אושרה" : "❌ הבקשה שלך נדחתה";
+              desc = window._reqDesc(r);
+            }
             const noteLine = r.note
-              ? `<div style="font-size:0.82rem; margin-top:3px; color:var(--md-text-secondary);">📝 ${r.note}</div>`
+              ? `<div style="font-size:0.82rem; margin-top:3px; color:var(--md-text-secondary);">📝 ${window.escapeHtml(r.note)}</div>`
               : "";
+            const keys = items.map((x) => x.key).join(",");
             cards += `<div style="background:#fff; border-right:4px solid ${color}; border-radius:8px; padding:10px 14px; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${window._reqDesc(r)}</div>${noteLine}</div>
-                <button onclick="window.dismissRequestNotif('${r.key}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
+                <div><b style="color:${color};">${title}</b><div style="font-size:0.88rem; margin-top:3px; color:#334155;">${desc}</div>${noteLine}</div>
+                <button onclick="window.dismissRequestNotif('${keys}')" title="הבנתי" style="background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--md-text-secondary); line-height:1;">✕</button>
               </div>
             </div>`;
           });
@@ -2723,10 +2744,15 @@
         window.renderShiftChangeBanner();
       };
 
-      window.dismissRequestNotif = function (reqId) {
-        const r = (window._myRequests || {})[reqId];
-        if (!r) return;
-        window._setDismissedItem("req", reqId, r.statusTs);
+      // מקבל מזהה אחד או רשימה מופרדת בפסיקים (כרטיס של טווח חופשה)
+      window.dismissRequestNotif = function (reqIds) {
+        String(reqIds)
+          .split(",")
+          .filter(Boolean)
+          .forEach((id) => {
+            const r = (window._myRequests || {})[id];
+            if (r) window._setDismissedItem("req", id, r.statusTs);
+          });
         window.renderShiftChangeBanner();
       };
 
@@ -2821,9 +2847,9 @@
       window._saveHiddenReqs = function (set) {
         try { localStorage.setItem("my_req_hidden_v1", JSON.stringify([...set])); } catch (e) {}
       };
-      window.hideMyRequest = function (reqId) {
+      window.hideMyRequest = function (reqIds) {
         const s = window._loadHiddenReqs();
-        s.add(String(reqId));
+        String(reqIds).split(",").filter(Boolean).forEach((id) => s.add(String(id)));
         window._saveHiddenReqs(s);
         window.renderMyRequestsList();
       };
@@ -2902,24 +2928,40 @@
           cont.innerHTML = html;
           return;
         }
-        const arr = list;
-        arr.forEach((r) => {
-          const badge =
-            r.status === "approved"
-              ? `<span style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">✅ אושרה</span>`
-              : r.status === "rejected"
-                ? `<span style="background:#fee2e2; color:#b91c1c; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">❌ נדחתה</span>`
-                : r.status === "cancelled"
-                  ? `<span style="background:var(--md-bg); color:var(--md-text-secondary); padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">🚫 בוטלה</span>`
-                  : `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">⏳ ממתינה</span>`;
+        // חופשה בטווח (אותו rangeId + אותו סטטוס) → שורה אחת
+        const STATUS_BADGE = {
+          approved: `<span style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">✅ אושרה</span>`,
+          rejected: `<span style="background:#fee2e2; color:#b91c1c; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">❌ נדחתה</span>`,
+          cancelled: `<span style="background:var(--md-bg); color:var(--md-text-secondary); padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">🚫 בוטלה</span>`,
+          pending: `<span style="background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">⏳ ממתינה</span>`,
+        };
+        const rowGroups = [];
+        const byKey = {};
+        list.forEach((r) => {
+          const st = statusOf(r);
+          if (r.rangeId != null) {
+            const k = r.rangeId + "|" + st;
+            if (!byKey[k]) { byKey[k] = { items: [], st }; rowGroups.push(byKey[k]); }
+            byKey[k].items.push(r);
+          } else rowGroups.push({ items: [r], st });
+        });
+        rowGroups.forEach(({ items, st }) => {
+          items.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+          const r = items[0];
+          const ids = items.map((x) => x.id).join(",");
+          const f = (d) => String(d).split("-").reverse().join(".");
+          const desc =
+            items.length > 1
+              ? `🌴 חופשה · 📅 ${f(items[0].date)}–${f(items[items.length - 1].date)} · ${items.length} ימים`
+              : window._reqDesc(r);
           // ניתן לבטל רק בקשה שעדיין ממתינה (טרם אושרה/נדחתה)
-          const isPending = !r.status || r.status === "pending";
-          const cancelBtn = isPending
-            ? `<button class="btn btn-outlined" style="padding:3px 10px; font-size:0.78rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.cancelMyRequest('${r.id}')">בטל</button>`
-            : `<button title="הסתר מהרשימה שלי" style="background:none; border:none; cursor:pointer; color:var(--md-text-secondary); font-size:0.95rem; line-height:1;" onclick="window.hideMyRequest('${r.id}')">🗑</button>`;
+          const cancelBtn =
+            st === "pending"
+              ? `<button class="btn btn-outlined" style="padding:3px 10px; font-size:0.78rem; border-color:var(--md-error); color:var(--md-error);" onclick="window.cancelMyRequest('${ids}')">בטל</button>`
+              : `<button title="הסתר מהרשימה שלי" style="background:none; border:none; cursor:pointer; color:var(--md-text-secondary); font-size:0.95rem; line-height:1;" onclick="window.hideMyRequest('${ids}')">🗑</button>`;
           html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--md-divider);">
-            <div><div style="font-weight:500;">${window._reqDesc(r)}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${window.escapeHtml(r.note)}</div>` : ""}</div>
-            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">${badge}${cancelBtn}</div>
+            <div><div style="font-weight:500;">${desc}</div>${r.note ? `<div style="font-size:0.8rem; color:var(--md-text-secondary); margin-top:2px;">📝 ${window.escapeHtml(r.note)}</div>` : ""}</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">${STATUS_BADGE[st] || STATUS_BADGE.pending}${cancelBtn}</div>
           </div>`;
         });
         cont.innerHTML = html;
@@ -2928,33 +2970,38 @@
       // ביטול בקשה ע"י העובד עצמו — נכתבת בקשת-ביטול (create-only), והמנהל
       // הראשי מסיר בפועל מהתור (listener ב-index.html), בדומה לשאר הפעולות
       // של עובד אנונימי. עדכון אופטימי מקומי כדי שהתצוגה תגיב מיד.
-      window.cancelMyRequest = async function (reqId) {
-        const r = (window._myRequests || {})[reqId];
-        if (!r) return;
+      // מקבל מזהה אחד או כמה מופרדים בפסיקים (טווח חופשה) — אישור אחד לכולם
+      window.cancelMyRequest = async function (reqIds) {
+        const ids = String(reqIds).split(",").filter((id) => (window._myRequests || {})[id]);
+        if (!ids.length) return;
         const ok = await window.confirmDialog({
-          title: "ביטול בקשה",
-          message: "לבטל את הבקשה? היא תוסר מרשימת הבקשות שממתינות לאישור המנהל.",
-          confirmText: "בטל בקשה",
+          title: ids.length > 1 ? "ביטול חופשה" : "ביטול בקשה",
+          message:
+            ids.length > 1
+              ? `לבטל את כל ${ids.length} ימי החופשה בטווח? הם יוסרו מהבקשות שממתינות לאישור המנהל.`
+              : "לבטל את הבקשה? היא תוסר מרשימת הבקשות שממתינות לאישור המנהל.",
+          confirmText: "בטל",
           danger: true,
         });
         if (!ok) return;
         const me = window.loggedInWorker || window.loggedInUser;
-        const empId = r.empId != null ? r.empId : me ? me.id : null;
-        // מזהה ייחודי לצומת (לא reqId) כדי שביטול חוזר לא ייכשל על create-only
-        const cid = Date.now() + "_" + Math.floor(Math.random() * 100000);
-        if (typeof window.saveToCloud === "function") {
-          window.saveToCloud("requestCancellations/" + cid, {
-            reqId,
-            empId,
-            weekKey: r.weekKey || null,
-            ts: Date.now(),
-          });
-        }
-        // עדכון אופטימי מקומי בלבד (הסטטוס הקבוע בענן יעודכן ע"י המנהל שמיישם)
-        if (window._myRequests && window._myRequests[reqId])
-          window._myRequests[reqId].status = "cancelled";
+        ids.forEach((reqId) => {
+          const r = window._myRequests[reqId];
+          const empId = r.empId != null ? r.empId : me ? me.id : null;
+          // מזהה ייחודי לצומת (לא reqId) כדי שביטול חוזר לא ייכשל על create-only
+          const cid = Date.now() + "_" + Math.floor(Math.random() * 100000);
+          if (typeof window.saveToCloud === "function")
+            window.saveToCloud("requestCancellations/" + cid, {
+              reqId,
+              empId,
+              weekKey: r.weekKey || null,
+              ts: Date.now(),
+            });
+          // עדכון אופטימי מקומי (הסטטוס הקבוע בענן יעודכן ע"י המנהל שמיישם)
+          r.status = "cancelled";
+        });
         window.renderMyRequestsList();
-        window.toast("✅ הבקשה בוטלה.");
+        window.toast(ids.length > 1 ? `✅ בוטלו ${ids.length} ימי החופשה.` : "✅ הבקשה בוטלה.");
       };
 
       // ===== גיבוי אוטומטי ושחזור =====
