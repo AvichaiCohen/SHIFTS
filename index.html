@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828p";
+        var BUILD = "20260828q";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -272,6 +272,7 @@
               "techLevel",
               "archived",
               "archivedAt",
+              "noAutoSchedule",
             ];
             // הוספת עובדים חדשים שנוספו ל-staffMaster לאחר שמירת השבוע
             (window.globalStaff || []).forEach((gEmp) => {
@@ -844,7 +845,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828p" />
+    <link rel="stylesheet" href="style.css?v=20260828q" />
   </head>
   <body>
     <div
@@ -1330,6 +1331,7 @@
               <button class="tb-icon" style="--tb-accent: var(--md-primary)" onclick="window.generate(true)" data-tip="השלם חוסרים בלוח">🧩</button>
               <button class="tb-icon" style="--tb-accent: var(--md-secondary)" onclick="window.generate(false)" data-tip="צור לוח מחדש (דורס)">🔄</button>
               <button class="tb-icon tb-keep-mobile" id="eveningToggleBtn" style="--tb-accent: #b45309" onclick="window.toggleEveningShift()" data-tip="מזער את משמרת ערב לשבוע הזה">🌆<span class="tb-label">ערב</span></button>
+              <button class="tb-icon tb-keep-mobile" style="--tb-accent: #475569" onclick="window.openNoScheduleDialog()" data-tip="מי לא נכנס לשיבוץ האוטומטי (למשל נחפפים)">🚫<span class="tb-label">לא לשבץ</span></button>
               <button class="tb-icon tb-keep-mobile" style="--tb-accent: #9333ea" onclick="window.openSpecialStatusModal()" data-tip="סטטוס מיוחד (חופש/מחלה/לימודים)">🚩<span class="tb-label">סטטוס</span></button>
               <button class="tb-icon" style="--tb-accent: #0d9488" onclick="window.suggestWeekendClosers()" data-tip="הצע סוגרי סופ&quot;ש (מי לא סגר הכי הרבה זמן)">🏖️</button>
               <button class="tb-icon" style="--tb-accent: #0d9488" onclick="window.setWeekendClosers()" data-tip="קבע ונעל סוגרי סופ&quot;ש">🔒</button>
@@ -5163,6 +5165,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828p"></script>
+    <script src="script.js?v=20260828q"></script>
   </body>
 </html>

@@ -2033,7 +2033,9 @@
           const explainedCount = dayInfo.filter((x) => x.type === "special" || x.type === "rest").length;
           const noneCount = dayInfo.filter((x) => x.type === "none").length;
           const skipped =
-            _skip.indexOf(emp.type) !== -1 || _skipIds.indexOf(String(emp.id)) !== -1;
+            _skip.indexOf(emp.type) !== -1 ||
+            _skipIds.indexOf(String(emp.id)) !== -1 ||
+            emp.noAutoSchedule === true;
           return { emp, dayInfo, shiftCount, explainedCount, noneCount, skipped };
         });
       };
@@ -3871,6 +3873,97 @@ ${assigned.join("\n")}
         );
       };
 
+      // ===== "🚫 לא לשבץ" — רשימת עובדים שהשיבוץ האוטומטי מדלג עליהם =====
+      window.openNoScheduleDialog = function () {
+        if (window.currentUserRole !== "superAdmin" && window.currentUserRole !== "subManager") {
+          window.toast("רק מנהל יכול לערוך את הרשימה.");
+          return;
+        }
+        const list = (window.staff || [])
+          .filter((e) => e.isActive !== false && e.archived !== true)
+          .sort((a, b) => (a.type || "").localeCompare(b.type || "") || a.name.localeCompare(b.name));
+        const overlay = document.createElement("div");
+        overlay.className = "app-dialog-overlay";
+        overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true">
+          <h3>🚫 לא לשבץ אוטומטית</h3>
+          <p class="app-dialog-msg">המסומנים לא ישובצו ע"י "צור מחדש" / "השלם חוסרים" ולא ייספרו בבדיקת השיבוץ. עדיין אפשר לתת להם חופש, משימות וסטטוס, ולשבץ ידנית.</p>
+          <input class="app-dialog-input" type="text" data-f="q" placeholder="🔍 חיפוש עובד..." />
+          <div class="gv-list">${list
+            .map(
+              (e) =>
+                `<label class="gv-row" data-name="${window.escapeHtml(e.name)}"><input type="checkbox" value="${e.id}" ${e.noAutoSchedule === true ? "checked" : ""}> <span>${window.escapeHtml(e.name)}</span> <small>${window.escapeHtml(e.type || "")}</small></label>`,
+            )
+            .join("")}</div>
+          <div class="gv-count"></div>
+          <div class="app-dialog-actions">
+            <button class="btn btn-outlined" data-act="cancel">ביטול</button>
+            <button class="btn btn-contained" data-act="ok">שמור</button>
+          </div>
+        </div>`;
+        const countEl = overlay.querySelector(".gv-count");
+        const refresh = () => {
+          const n = overlay.querySelectorAll(".gv-list input:checked").length;
+          countEl.textContent = n ? `${n} עובדים לא ישובצו אוטומטית` : "כולם נכנסים לשיבוץ האוטומטי";
+        };
+        overlay.querySelectorAll(".gv-list input").forEach((c) => c.addEventListener("change", refresh));
+        refresh();
+        const q = overlay.querySelector('[data-f="q"]');
+        q.addEventListener("input", () => {
+          const v = q.value.trim().toLowerCase();
+          overlay.querySelectorAll(".gv-row").forEach((r) => {
+            r.style.display = !v || r.getAttribute("data-name").toLowerCase().includes(v) ? "" : "none";
+          });
+        });
+        const close = () => {
+          document.removeEventListener("keydown", overlay._onKey);
+          overlay.remove();
+        };
+        overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+        overlay.querySelector('[data-act="cancel"]').onclick = close;
+        overlay.querySelector('[data-act="ok"]').onclick = () => {
+          const ids = new Set(
+            Array.from(overlay.querySelectorAll(".gv-list input:checked")).map((c) => String(c.value)),
+          );
+          list.forEach((e) => {
+            const flag = ids.has(String(e.id));
+            [window.staff || [], window.globalStaff || []].forEach((arr) =>
+              arr.forEach((x) => { if (String(x.id) === String(e.id)) x.noAutoSchedule = flag; }),
+            );
+          });
+          window.currentSchedule.staff = window.staff;
+          if (typeof window.saveToCloud === "function")
+            window.saveToCloud("staffMaster", window.globalStaff);
+          close();
+          window.triggerUnsavedChanges();
+          window.renderStaff();
+          window.toast(`🚫 עודכן — ${ids.size} עובדים לא ישובצו אוטומטית.`);
+        };
+        overlay._onKey = (e) => { if (e.key === "Escape") close(); };
+        document.addEventListener("keydown", overlay._onKey);
+        document.body.appendChild(overlay);
+      };
+
+      // ===== מי נכנס לשיבוץ אוטומטי =====
+      // פעיל, לא בארכיון, ולא ברשימת "🚫 לא לשבץ" (למשל נחפפים). עובדים
+      // ברשימה עדיין יכולים לקבל חופש/משימות/סטטוס, ואפשר לשבץ אותם ידנית.
+      window._isSchedulable = function (e) {
+        return !!e && e.isActive !== false && e.archived !== true && e.noAutoSchedule !== true;
+      };
+      // האם העובד "לא זמין" ביום נתון בשבוע המוצג בגלל חופש/סטטוס: סטטוס
+      // חוסם, או סטטוס מסוג חופש/מחלה — גם אם סומן "חוזר למשמרת".
+      window._isOffForDay = function (empId, dayName) {
+        if (window.isBlockedBySpecialDay && window.isBlockedBySpecialDay(empId, dayName)) return true;
+        const key = window._dateKeyForDay ? window._dateKeyForDay(dayName) : null;
+        if (!key) return false;
+        return (window.specialStatuses || []).some(
+          (s) =>
+            String(s.empId) === String(empId) &&
+            s.startDate <= key &&
+            key <= (s.endDate || s.startDate) &&
+            /חופש|מחלה/.test(s.status || ""),
+        );
+      };
+
       window.isShiftLocked = function (day, shift, loc) {
         return !!(window.currentSchedule.shiftLocks && window.currentSchedule.shiftLocks[`${day}-${shift}-${loc}`]);
       };
@@ -5199,7 +5292,7 @@ ${assigned.join("\n")}
       };
 
       window.renderStaffPool = function () {
-        let activeStaff = [...window.staff].filter((e) => e.isActive !== false);
+        let activeStaff = [...window.staff].filter((e) => e.isActive !== false && e.archived !== true);
         activeStaff.sort(
           (a, b) =>
             window.roleTypes.indexOf(a.type) - window.roleTypes.indexOf(b.type),
@@ -5339,7 +5432,7 @@ ${assigned.join("\n")}
               return `<div class="emp-card chip-${(e.type || "").replace(/\s+/g, "-")} ${isInactive}" onclick="window.openModal(${e.id})">
                         <div style="width:100%;">
                             <div style="font-size:1.1em; font-weight:bold; color:var(--md-primary); margin-bottom:8px; border-bottom:1px solid var(--md-divider); padding-bottom:5px;">
-                                ${e.name} ${window._isBirthdayToday(e) ? '<span title="יום הולדת היום!">🎂</span>' : ""} ${(() => { const off = []; if (e.canMorning === false) off.push("בוקר"); if (e.canEvening === false) off.push("ערב"); if (e.canNight === false || e.noNights) off.push("לילה"); return off.length ? `<span style="font-size:0.65em; color:var(--md-error); font-weight:normal;">⛔${off.join("/")}</span>` : ""; })()} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
+                                ${e.name} ${e.noAutoSchedule === true ? '<span title="לא נכנס לשיבוץ האוטומטי" style="font-size:0.65em; background:rgba(71,85,105,0.14); color:#475569; border-radius:999px; padding:1px 7px; font-weight:normal;">🚫 לא לשבץ</span>' : ""} ${window._isBirthdayToday(e) ? '<span title="יום הולדת היום!">🎂</span>' : ""} ${(() => { const off = []; if (e.canMorning === false) off.push("בוקר"); if (e.canEvening === false) off.push("ערב"); if (e.canNight === false || e.noNights) off.push("לילה"); return off.length ? `<span style="font-size:0.65em; color:var(--md-error); font-weight:normal;">⛔${off.join("/")}</span>` : ""; })()} ${e.workedLastWeekend ? "💤" : ""} ${e.isNextWeekend ? "🗓️" : ""}
                             </div>
                             <div style="font-size:0.85em; color:var(--text-muted); display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
                                 <span>דרג: <b>${e.type}</b></span>
@@ -5648,7 +5741,7 @@ ${assigned.join("\n")}
 
       window.autoFillShortage = function (day, shift, loc, rule, excludeId = null) {
         if (window.isShiftLocked(day, shift, loc)) return;
-        let activeStaff = window.staff.filter((e) => e.isActive !== false && (excludeId === null || e.id != excludeId));
+        let activeStaff = window.staff.filter((e) => window._isSchedulable(e) && (excludeId === null || e.id != excludeId));
         let dayIdx = days.indexOf(day);
         let prevDay = dayIdx > 0 ? days[dayIdx - 1] : null;
         let nextDay = dayIdx < 6 ? days[dayIdx + 1] : null;
@@ -5764,7 +5857,7 @@ ${assigned.join("\n")}
 
       window.autoFillEmergency = function (day, shift, loc, excludeId = null) {
         if (window.isShiftLocked(day, shift, loc)) return;
-        let activeStaff = window.staff.filter((e) => e.isActive !== false && (excludeId === null || e.id != excludeId));
+        let activeStaff = window.staff.filter((e) => window._isSchedulable(e) && (excludeId === null || e.id != excludeId));
         let dayIdx = days.indexOf(day);
         let prevDay = dayIdx > 0 ? days[dayIdx - 1] : null;
         let available = activeStaff.filter((e) => {
@@ -7455,7 +7548,7 @@ ${assigned.join("\n")}
         // נחפפים אינם הצעה לגיטימית כאן — הם משובצים לסופ"ש רק במפורש (isNextWeekend/העדפה), לא כחלק ממאגר ההוגנות
         const techs = (window.staff || []).filter(
           (e) =>
-            e.isActive !== false &&
+            window._isSchedulable(e) &&
             e.type === "טכנאי" &&
             !e.workedLastWeekend,
         );
@@ -7513,7 +7606,7 @@ ${assigned.join("\n")}
 
         const pool = (window.staff || []).filter(
           (e) =>
-            e.isActive !== false &&
+            window._isSchedulable(e) &&
             e.isWeekendCloserCandidate === true &&
             (e.type === "טכנאי" || e.type === "נחפף") &&
             !e.workedLastWeekend,
@@ -11553,7 +11646,7 @@ ${assigned.join("\n")}
           }
         });
 
-        let activeStaff = window.staff.filter((e) => e.isActive !== false);
+        let activeStaff = window.staff.filter((e) => window._isSchedulable(e));
         activeStaff.forEach((e) => (e.shiftCount = 0));
 
         days.forEach((d) => {
@@ -11743,8 +11836,14 @@ ${assigned.join("\n")}
             .slice()
             .sort(() => Math.random() - 0.5);
 
+          // בחופש/סטטוס באחד מימי בלוק הסופ"ש של המיקום → לא זמין לסופ"ש
+          const offOnWeekend = (e, loc) =>
+            (loc === LOC_MATAL ? weekendShiftsMATAL : weekendShiftsZira).some((sk) =>
+              window._isOffForDay(e.id, sk.split("-")[0]),
+            );
           const isAvailableForWeekend = (e, loc) => {
             if (e.type === "קבינט בכיר") return false;
+            if (offOnWeekend(e, loc)) return false;
             const wShifts =
               loc === LOC_MATAL ? weekendShiftsMATAL : weekendShiftsZira;
             let empConst = e.constraints || [];
@@ -11867,7 +11966,8 @@ ${assigned.join("\n")}
                   !weekendStaff[LOC_MATAL].find(x => x.id === e.id) &&
                   !weekendStaff[LOC_ZIRA].find(x => x.id === e.id) &&
                   (e.fixedLoc === "" || e.fixedLoc === loc || !e.fixedLoc || e.fixedLoc === undefined) &&
-                  !wShiftsForLoc.some(sk => (e.constraints || []).includes(sk))
+                  !wShiftsForLoc.some(sk => (e.constraints || []).includes(sk)) &&
+                  !offOnWeekend(e, loc)
                 ).sort((a, b) => {
                   const aT = window._lastWeekendInfo(a.name).time;
                   const bT = window._lastWeekendInfo(b.name).time;
@@ -11921,7 +12021,7 @@ ${assigned.join("\n")}
             activeStaff.forEach((emp) => {
               let empConst = emp.constraints || [];
               // סטטוס מיוחד חוסם (ללא "חוזר למשמרת") — חוסם את כל היום, כמו יום חופש מלא
-              if (window.isBlockedBySpecialDay && window.isBlockedBySpecialDay(emp.id, day)) {
+              if (window._isOffForDay(emp.id, day)) {
                 restingToday.push({ emp, reason: "סטטוס מיוחד", icon: "🚩" });
                 return;
               }
