@@ -5188,6 +5188,7 @@ ${assigned.join("\n")}
       };
 
       window.openSpecialStatusModal = function () {
+        if (typeof window._renderSpecTypeOptions === "function") window._renderSpecTypeOptions();
         // כולל קבינט בכיר — הם מסומנים כ"לא בשיבוץ" (isActive=false) אך עדיין ניתן להחיל עליהם סטטוס מיוחד
         let options = window.staff
           .filter((e) => e.isActive !== false || e.type === "קבינט בכיר")
@@ -9126,6 +9127,75 @@ ${assigned.join("\n")}
         content.innerHTML = html;
       };
 
+      // ===== רשימות מותאמות בענן: קטגוריות משימה וסוגי סטטוס מיוחד =====
+      // עד עכשיו קטגוריות נשמרו רק במכשיר (localStorage) וסוגי הסטטוס היו
+      // קבועים בקוד — אז תוספת במחשב לא הופיעה בטלפון, והיה צריך "אחר".
+      window.customSpecTypes = window.customSpecTypes || [];
+      window._saveCustomList = function (kind) {
+        const path = kind === "task" ? "taskCategoriesList" : "specialStatusTypes";
+        const list = (kind === "task" ? window.taskCategories : window.customSpecTypes) || [];
+        if (kind === "task") {
+          try { localStorage.setItem("shift_task_categories_v47", JSON.stringify(list)); } catch (e) {}
+        }
+        if (typeof window.saveToCloud === "function" && window.currentUserRole === "superAdmin")
+          window.saveToCloud(path, { list: list.filter(Boolean), ts: Date.now() }, { silent: true });
+      };
+
+      // בניית רשימת סוגי הסטטוס: הקבועים + המותאמים, ואז "אחר..." בסוף
+      window._renderSpecTypeOptions = function () {
+        const sel = document.getElementById("specType");
+        if (!sel) return;
+        if (!sel._builtin)
+          sel._builtin = Array.from(sel.options)
+            .map((o) => o.value)
+            .filter((v) => v !== "אחר");
+        const cur = sel.value;
+        const all = [...sel._builtin, ...(window.customSpecTypes || []).filter((t) => sel._builtin.indexOf(t) === -1)];
+        sel.innerHTML =
+          all.map((v) => `<option value="${window.escapeHtml(v)}">${window.escapeHtml(v)}</option>`).join("") +
+          `<option value="אחר">אחר...</option>`;
+        if (cur && Array.from(sel.options).some((o) => o.value === cur)) sel.value = cur;
+      };
+
+      window.addSpecialStatusType = async function () {
+        const v = await window.promptDialog({
+          title: "סוג סטטוס חדש",
+          message: "יתווסף לרשימה הקבועה — בכל המכשירים:",
+          placeholder: "למשל: קורס",
+          confirmText: "הוסף",
+        });
+        const t = (v || "").trim();
+        if (!t) return;
+        window.customSpecTypes = window.customSpecTypes || [];
+        if (window.customSpecTypes.indexOf(t) === -1) window.customSpecTypes.push(t);
+        window._saveCustomList("spec");
+        window._renderSpecTypeOptions();
+        const sel = document.getElementById("specType");
+        if (sel) sel.value = t;
+        window.toast(`✅ "${t}" נוסף לרשימת הסטטוסים.`);
+      };
+
+      // הסרת פריט מרשימה מותאמת (לסטטוס — רק מה שנוסף ידנית)
+      window.manageCustomList = async function (kind) {
+        const list = kind === "task" ? window.taskCategories || [] : window.customSpecTypes || [];
+        if (!list.length) {
+          window.toast(kind === "task" ? "אין קטגוריות." : 'אין סוגים שהוספת — השתמש ב-"+" כדי להוסיף.');
+          return;
+        }
+        const item = await window.choiceDialog({
+          title: kind === "task" ? "ניהול קטגוריות משימה" : "ניהול סוגי סטטוס",
+          message: "בחר פריט להסרה מהרשימה (משימות/סטטוסים קיימים לא נפגעים):",
+          options: list.map((x) => ({ label: "🗑 " + x, value: x })),
+        });
+        if (!item) return;
+        if (kind === "task") window.taskCategories = list.filter((x) => x !== item);
+        else window.customSpecTypes = list.filter((x) => x !== item);
+        window._saveCustomList(kind);
+        if (kind === "task") window.renderTasks();
+        else window._renderSpecTypeOptions();
+        window.toast(`🗑 "${item}" הוסר מהרשימה.`);
+      };
+
       window.addNewTaskCategory = async function () {
         let newCat = await window.promptDialog({
           title: "קטגוריית משימה חדשה",
@@ -9136,10 +9206,7 @@ ${assigned.join("\n")}
         if (newCat && newCat.trim() !== "") {
           if (!window.taskCategories.includes(newCat.trim())) {
             window.taskCategories.push(newCat.trim());
-            localStorage.setItem(
-              "shift_task_categories_v47",
-              JSON.stringify(window.taskCategories),
-            );
+            window._saveCustomList("task");
             window.renderTasks();
           }
         }
