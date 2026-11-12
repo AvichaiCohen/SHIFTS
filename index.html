@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828r";
+        var BUILD = "20260828s";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -273,6 +273,7 @@
               "archived",
               "archivedAt",
               "noAutoSchedule",
+              "birthday",
             ];
             // הוספת עובדים חדשים שנוספו ל-staffMaster לאחר שמירת השבוע
             (window.globalStaff || []).forEach((gEmp) => {
@@ -845,7 +846,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828r" />
+    <link rel="stylesheet" href="style.css?v=20260828s" />
   </head>
   <body>
     <div
@@ -918,6 +919,21 @@
               >👁️</span
             >
           </div>
+          <div
+            id="loginError"
+            role="alert"
+            style="
+              display: none;
+              background: rgba(239, 68, 68, 0.1);
+              color: #b91c1c;
+              border: 1px solid rgba(239, 68, 68, 0.35);
+              border-radius: 8px;
+              padding: 9px 12px;
+              font-size: 0.92rem;
+              font-weight: 600;
+              text-align: center;
+            "
+          ></div>
           <label
             style="
               cursor: pointer;
@@ -5165,6 +5181,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828r"></script>
+    <script src="script.js?v=20260828s"></script>
   </body>
 </html>

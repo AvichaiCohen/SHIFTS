@@ -3385,11 +3385,43 @@
         );
       };
 
+      // שגיאת התחברות מוצגת בתוך הטופס (ה-toast יכול להיות מוסתר מאחורי חלון
+      // ההתחברות), עם מסגרת אדומה על השדות; נעלמת ברגע שמתחילים להקליד.
+      window._loginError = function (msg) {
+        const box = document.getElementById("loginError");
+        const u = document.getElementById("loginUsername");
+        const pw = document.getElementById("loginPassword");
+        if (box) {
+          box.textContent = msg || "";
+          box.style.display = msg ? "block" : "none";
+        }
+        [u, pw].forEach((el) => {
+          if (el) el.style.borderColor = msg ? "#ef4444" : "";
+        });
+        if (msg && pw) { pw.focus(); pw.select(); }
+      };
+      // Enter בשדות ההתחברות = לחיצה על "היכנס" (גם במחשב)
+      (function () {
+        const bind = () => {
+          ["loginUsername", "loginPassword"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el || el._loginBound) return;
+            el._loginBound = true;
+            el.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") { e.preventDefault(); window.processLogin(); }
+            });
+            el.addEventListener("input", () => window._loginError(""));
+          });
+        };
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
+        else bind();
+      })();
+
       window.processLogin = async function () {
         let uid = document.getElementById("loginUsername").value.trim();
         let pass = document.getElementById("loginPassword").value.trim();
         if (!uid || !pass) {
-          window.toast("נא להזין שם משתמש וסיסמה.");
+          window._loginError("נא להזין שם משתמש וסיסמה.");
           return;
         }
 
@@ -3465,9 +3497,7 @@
           window.saveSession({ kind: "manager", uid });
           finishLogin();
         } else {
-          window.toast(
-            "שם משתמש או סיסמה שגויים.\nשים לב: שם המשתמש הוא המספר האישי שלך.",
-          );
+          window._loginError("❌ שם משתמש או סיסמה שגויים. שם המשתמש הוא המספר האישי שלך.");
         }
       };
 
@@ -3549,6 +3579,17 @@
           "-" +
           String(now.getDate()).padStart(2, "0");
         return emp.birthday.slice(5) === md;
+      };
+      // מי חוגג יום הולדת בתאריך נתון (לפי חודש-יום) — לתצוגה בלוח
+      window._birthdaysOn = function (dateObj) {
+        const md =
+          String(dateObj.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(dateObj.getDate()).padStart(2, "0");
+        const pool = (window.globalStaff && window.globalStaff.length ? window.globalStaff : window.staff) || [];
+        return pool.filter(
+          (e) => e && e.archived !== true && e.birthday && e.birthday.length >= 10 && e.birthday.slice(5) === md,
+        );
       };
       window._checkBirthdaysToday = function () {
         const staff = window.globalStaff || window.staff || [];
@@ -6404,9 +6445,12 @@ ${assigned.join("\n")}
             <option value="">כל העובדים</option>
             ${holNames.map((n) => `<option value="${window.escapeHtml(n)}" ${window._holLogFilterName === n ? "selected" : ""}>${window.escapeHtml(n)}</option>`).join("")}
           </select>
+          <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.82rem; white-space:nowrap;" onclick="window._showDoneHolidays=!window._showDoneHolidays; window.renderHolidaysLog();">${window._showDoneHolidays ? "🙈 הסתר שבוצעו" : `✔ הצג שבוצעו (${window.holidaysLog.filter((l) => l.completed).length})`}</button>
         </div>`;
         const displayLog = window.holidaysLog.filter(
           (l) =>
+            // חגים שנסגרו מוסתרים כברירת מחדל (כפתור "הצג שבוצעו")
+            (window._showDoneHolidays || !l.completed) &&
             (!window._holLogFilterYear || String(l.year) === String(window._holLogFilterYear)) &&
             (!window._holLogFilterName || l.name === window._holLogFilterName),
         );
@@ -8364,6 +8408,13 @@ ${assigned.join("\n")}
           const h = hist[e.name] || {};
           const z = cell(h[LOC_ZIRA]);
           const m = cell(h[LOC_MATAL]);
+          // לנחפפים אין סבב זירה/מת"ל — מציגים את הנתונים אבל בלי אזהרות
+          if (e.type === "נחפף") {
+            z.warn = false;
+            m.warn = false;
+            z.html = z.html.replace(/var\(--md-error\)/g, "var(--md-text-secondary)");
+            m.html = m.html.replace(/var\(--md-error\)/g, "var(--md-text-secondary)");
+          }
           const total = z.total + m.total;
           // איזון: אחוז מסך הפעילות (לילות+ימים+סופ"שים) שהתרחש בזירה
           const balance = total > 0 ? Math.round((z.total / total) * 100) : 0;
@@ -8747,6 +8798,7 @@ ${assigned.join("\n")}
               <option value="">כל העובדים</option>
               ${taskNames.map((n) => `<option value="${window.escapeHtml(n)}" ${window._taskListFilterName === n ? "selected" : ""}>${window.escapeHtml(n)}</option>`).join("")}
             </select>
+            <button class="btn btn-outlined" style="padding:4px 12px; font-size:0.82rem; white-space:nowrap;" onclick="window._showDoneTasks=!window._showDoneTasks; window.renderTasks();">${window._showDoneTasks ? "🙈 הסתר שבוצעו" : `✔ הצג שבוצעו (${window.systemTasks.filter((t) => t.completed).length})`}</button>
           </div>`;
           // מיון לפי תאריך (מוקדם למאוחר); משימות ללא תאריך בסוף
           let sortedTasks = [...window.systemTasks]
@@ -8759,6 +8811,8 @@ ${assigned.join("\n")}
                     ? [t.assignee]
                     : [];
               return (
+                // משימות שבוצעו מוסתרות כברירת מחדל (כפתור "הצג שבוצעו")
+                (window._showDoneTasks || !t.completed) &&
                 (!window._taskListFilterYear || tYear === window._taskListFilterYear) &&
                 (!window._taskListFilterCat || t.category === window._taskListFilterCat) &&
                 (!window._taskListFilterName || tNames.includes(window._taskListFilterName))
@@ -12903,7 +12957,8 @@ ${assigned.join("\n")}
           const _cellDate = new Date(_weekSun);
           _cellDate.setDate(_cellDate.getDate() + dIdx);
           const _dateStr = `${_cellDate.getDate()}/${_cellDate.getMonth() + 1}`;
-          const dateHtml = `<br><span class="day-date-display" style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>`;
+          const _bdays = window._birthdaysOn(_cellDate);
+          const dateHtml = `<br><span class="day-date-display" style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>${_bdays.length ? `<br><span title="יום הולדת" style="font-size:0.75rem; font-weight:600; color:#db2777;">🎂 ${_bdays.map((e) => window.escapeHtml(e.name)).join(", ")}</span>` : ""}`;
           const isTodayCol = d === _todayDay;
           const _dayHL = data.dayHighlights && data.dayHighlights[d];
           const _hlStyle = _dayHL ? `background:${_dayHL}28; border-bottom:3px solid ${_dayHL};` : '';
@@ -13135,7 +13190,8 @@ ${assigned.join("\n")}
         const _mCellDate = new Date(_mWeekSun);
         _mCellDate.setDate(_mCellDate.getDate() + (mobileDayIdx - 1));
         const _mDateStr = `${_mCellDate.getDate()}/${_mCellDate.getMonth() + 1}/${_mCellDate.getFullYear()}`;
-        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${noteHtml}`;
+        const _mBdays = window._birthdaysOn(_mCellDate);
+        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${_mBdays.length ? `<div style="background:rgba(219,39,119,0.1); color:#db2777; font-weight:700; border-radius:8px; padding:6px 10px; margin-bottom:8px;">🎂 יום הולדת: ${_mBdays.map((e) => window.escapeHtml(e.name)).join(", ")}</div>` : ""}${noteHtml}`;
 
         // באנר החלפה ממתינה — מוצג כשנבחר עובד ראשון להחלפה, עד שנבחר שני
         // (או עד ביטול). מוצג רק למנהלים, זהה בין ימים כל עוד לא הוחלף היום.
