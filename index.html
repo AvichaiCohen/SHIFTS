@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828t";
+        var BUILD = "20260828u";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -400,7 +400,19 @@
 
           // אינדקס בקשות ממתינות גלובלי — עדכון חי של תור הבקשות אצל המנהל (כל השבועות)
           onValue(ref(db, "pendingRequestsIndex"), (snapshot) => {
-            window._allPending = snapshot.exists() ? snapshot.val() : {};
+            const _raw = snapshot.exists() ? snapshot.val() || {} : {};
+            // סמני ביטול מעובדים (__cancel) אינם בקשות — מופרדים, ואצל המנהל
+            // הראשי מיושמים ונמחקים.
+            const _pend = {};
+            const _cancels = [];
+            Object.keys(_raw).forEach((k) => {
+              const v = _raw[k];
+              if (v && v.__cancel) _cancels.push(Object.assign({ cid: k }, v));
+              else if (v) _pend[k] = v;
+            });
+            window._allPending = _pend;
+            if (window.currentUserRole === "superAdmin" && _cancels.length && typeof window._applyWorkerCancel === "function")
+              _cancels.forEach((c) => window._applyWorkerCancel(c));
             if (typeof window.renderPendingRequestsManager === "function")
               window.renderPendingRequestsManager();
             if (typeof window.renderRequestsPage === "function")
@@ -860,7 +872,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828t" />
+    <link rel="stylesheet" href="style.css?v=20260828u" />
   </head>
   <body>
     <div
@@ -2598,12 +2610,20 @@
             "
           >
             <h1 style="margin: 0">ריכוז בקשות וחופשים לשבוע הנוכחי</h1>
-            <button
-              class="btn btn-outlined"
-              onclick="window.exportRequestsPageToCSV()"
-            >
-              ⬇️ ייצוא לאקסל
-            </button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <button
+                class="btn btn-outlined manager-only"
+                onclick="window.openApprovedRequestsManager()"
+              >
+                📋 בקשות שאושרו
+              </button>
+              <button
+                class="btn btn-outlined"
+                onclick="window.exportRequestsPageToCSV()"
+              >
+                ⬇️ ייצוא לאקסל
+              </button>
+            </div>
           </div>
           <div
             class="card-paper manager-only"
@@ -5207,6 +5227,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828t"></script>
+    <script src="script.js?v=20260828u"></script>
   </body>
 </html>

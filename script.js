@@ -2223,6 +2223,8 @@
           }
         }
 
+        if (!section || section === "requests")
+          html += `<div style="margin-top:8px;"><button class="btn btn-outlined" style="padding:4px 12px; font-size:0.8rem;" onclick="window.closeActionCenter(); window.openApprovedRequestsManager();">📋 בקשות שאושרו — צפייה וביטול</button></div>`;
         if ((!section || section === "requests") && otherWeeks > 0)
           html += `<p style="margin:6px 0 0; font-size:0.78rem; color:var(--md-text-secondary);">+ עוד ${otherWeeks} בקשות בשבועות אחרים — מופיעות בעמוד "ריכוז בקשות".</p>`;
 
@@ -2640,7 +2642,9 @@
               r &&
               r.date &&
               r.type &&
-              (r.status === "approved" || r.status === "rejected") &&
+              (r.status === "approved" ||
+                r.status === "rejected" ||
+                (r.status === "cancelled" && r.cancelledBy === "manager")) &&
               r.statusTs &&
               dReq[r.key] !== r.statusTs &&
               now - r.statusTs < window.NOTIF_EXPIRY_MS,
@@ -2660,14 +2664,15 @@
             count++;
             const r = items[0];
             const ok = r.status === "approved";
-            const color = ok ? "#15803d" : "#b91c1c";
+            const cancelled = r.status === "cancelled";
+            const color = ok ? "#15803d" : cancelled ? "#b45309" : "#b91c1c";
             let title, desc;
             if (items.length > 1) {
               const f = (d) => String(d).split("-").reverse().join(".");
-              title = ok ? "✅ החופשה שלך אושרה" : "❌ החופשה שלך נדחתה";
+              title = ok ? "✅ החופשה שלך אושרה" : cancelled ? "🚫 המנהל ביטל את החופשה" : "❌ החופשה שלך נדחתה";
               desc = `🌴 ${f(items[0].date)}–${f(items[items.length - 1].date)} · ${items.length} ימים`;
             } else {
-              title = ok ? "✅ הבקשה שלך אושרה" : "❌ הבקשה שלך נדחתה";
+              title = ok ? "✅ הבקשה שלך אושרה" : cancelled ? "🚫 המנהל ביטל את אישור הבקשה" : "❌ הבקשה שלך נדחתה";
               desc = window._reqDesc(r);
             }
             const noteLine = r.note
@@ -2988,10 +2993,13 @@
         ids.forEach((reqId) => {
           const r = window._myRequests[reqId];
           const empId = r.empId != null ? r.empId : me ? me.id : null;
-          // מזהה ייחודי לצומת (לא reqId) כדי שביטול חוזר לא ייכשל על create-only
-          const cid = Date.now() + "_" + Math.floor(Math.random() * 100000);
+          // סמן ביטול נכתב ל-pendingRequestsIndex (נתיב create-only שעובד —
+          // כך מגיעות הבקשות עצמן למנהל). המנהל מיישם ומוחק את הסמן.
+          // (הנתיב requestCancellations דרש פרסום חוק ידני ולכן נכשל בשקט.)
+          const cid = "cx_" + reqId + "_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
           if (typeof window.saveToCloud === "function")
-            window.saveToCloud("requestCancellations/" + cid, {
+            window.saveToCloud("pendingRequestsIndex/" + cid, {
+              __cancel: true,
               reqId,
               empId,
               weekKey: r.weekKey || null,
@@ -4823,6 +4831,227 @@ ${assigned.join("\n")}
           window.renderVacationManagementTable();
       };
 
+      // ===== ביטול בקשות =====
+      // עובד מבטל בקשה ממתינה → סמן __cancel ב-pendingRequestsIndex → כאן
+      // (אצל המנהל הראשי) מוסרים את הבקשה מהתור ומסמנים "בוטלה".
+      window._applyWorkerCancel = function (c) {
+        const fb = window._fbImports;
+        const rm = (path) => {
+          if (fb && window._firebaseDb) fb.remove(fb.ref(window._firebaseDb, path));
+        };
+        const stillPending =
+          (window._allPending && window._allPending[c.reqId]) ||
+          (window.currentSchedule &&
+            window.currentSchedule.pendingRequests &&
+            window.currentSchedule.pendingRequests[c.reqId]);
+        if (stillPending) {
+          const wk = c.weekKey || (stillPending && stillPending.weekKey) || window.currentSelectedWeek;
+          if (wk) rm("schedules/" + wk + "/pendingRequests/" + c.reqId);
+          rm("pendingRequestsIndex/" + c.reqId);
+          if (c.empId != null)
+            window.saveToCloud("myRequests/" + c.empId + "/" + c.reqId + "/status", "cancelled", { silent: true });
+          if (window.currentSchedule && window.currentSchedule.pendingRequests)
+            delete window.currentSchedule.pendingRequests[c.reqId];
+          if (window._allPending) delete window._allPending[c.reqId];
+        }
+        // הבקשה כבר טופלה (אושרה/נדחתה) — עובד לא יכול לבטל אחרי החלטה; רק מוחקים את הסמן
+        rm("pendingRequestsIndex/" + c.cid);
+        if (typeof window.renderPendingRequestsManager === "function")
+          window.renderPendingRequestsManager();
+      };
+
+      // הסרת מה ש-_applyRequestToSchedule הוסיף ללוח של שבוע מסוים
+      window._revertRequestFromSchedule = function (sched, r) {
+        const strip = (emp) => {
+          if (!emp) return;
+          emp.constraints = emp.constraints || [];
+          emp.prefs = emp.prefs || [];
+          if (r.type === "vacation")
+            emp.constraints = emp.constraints.filter(
+              (k) => k !== `${r.day}-בוקר` && k !== `${r.day}-ערב` && k !== `${r.day}-לילה`,
+            );
+          else if (r.type === "constraint")
+            emp.constraints = emp.constraints.filter((k) => k !== `${r.day}-${r.shift}`);
+          else if (r.type === "shift")
+            emp.prefs = emp.prefs.filter(
+              (p) => !(p.day === r.day && p.shift === r.shift && (p.loc || "") === (r.loc || "")),
+            );
+        };
+        strip((sched.staff || []).find((e) => String(e.id) === String(r.empId)));
+        if (r.type === "study" && sched.special && sched.special[r.day])
+          sched.special[r.day] = sched.special[r.day].filter((x) => String(x.id) !== String(r.empId));
+        return strip;
+      };
+
+      // ביטול בקשה שכבר אושרה (מנהל): מחזיר את הלוח לקדמותו ומעדכן את העובד
+      window.revokeApprovedRequests = async function (empId, idsStr) {
+        const ids = String(idsStr).split(",").filter(Boolean);
+        const recs = ids
+          .map((id) => (window._approvedCache || {})[empId + "|" + id])
+          .filter(Boolean);
+        if (!recs.length) return;
+        const f = (d) => String(d || "").split("-").reverse().join(".");
+        const label =
+          recs.length > 1
+            ? `${f(recs[0].date)}–${f(recs[recs.length - 1].date)} (${recs.length} ימים)`
+            : `${f(recs[0].date)}${recs[0].day ? " · " + recs[0].day : ""}`;
+        if (!(await window.confirmDialog({
+          title: "ביטול בקשה שאושרה",
+          message: `לבטל את האישור ל${recs[0].empName || "עובד"} — ${window._reqTypeLabel(recs[0].type)} ${label}?\nהשינוי יוסר מהלוח והעובד יקבל עדכון.`,
+          confirmText: "בטל אישור",
+          danger: true,
+        }))) return;
+        const fb = window._fbImports;
+        const byWeek = {};
+        recs.forEach((r) => {
+          const wk = r.weekKey || window.currentSelectedWeek;
+          (byWeek[wk] = byWeek[wk] || []).push(r);
+        });
+        for (const wk of Object.keys(byWeek)) {
+          if (wk === window.currentSelectedWeek) {
+            byWeek[wk].forEach((r) => {
+              const strip = window._revertRequestFromSchedule(window.currentSchedule, r);
+              strip((window.staff || []).find((e) => String(e.id) === String(r.empId)));
+            });
+            window.currentSchedule.staff = window.staff;
+            window.saveToCloud("schedules/" + wk, window.currentSchedule);
+          } else if (fb && window._firebaseDb) {
+            try {
+              const snap = await fb.get(fb.ref(window._firebaseDb, "schedules/" + wk));
+              if (snap.exists()) {
+                const sched = snap.val();
+                byWeek[wk].forEach((r) => window._revertRequestFromSchedule(sched, r));
+                window.saveToCloud("schedules/" + wk, sched);
+              }
+            } catch (e) {}
+          }
+        }
+        const now = Date.now();
+        recs.forEach((r) => {
+          const base = "myRequests/" + r.empId + "/" + r.id;
+          window.saveToCloud(base + "/status", "cancelled", { silent: true });
+          window.saveToCloud(base + "/cancelledBy", "manager", { silent: true });
+          window.saveToCloud(base + "/statusTs", now, { silent: true });
+          r.status = "cancelled";
+        });
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast("✅ האישור בוטל והלוח עודכן.");
+        window.openApprovedRequestsManager(true);
+      };
+
+      // ===== "📋 בקשות שאושרו" — מקום אחד לראות ולבטל אישורים =====
+      // כולל גם חופשים שהמנהל העניק ישירות (מוצגים כמו חופש מאושר רגיל).
+      window.openApprovedRequestsManager = async function (keepOpen) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לבטל אישורים.");
+          return;
+        }
+        const fb = window._fbImports;
+        let all = {};
+        try {
+          const snap = await fb.get(fb.ref(window._firebaseDb, "myRequests"));
+          all = snap.exists() ? snap.val() || {} : {};
+        } catch (e) {
+          window.toast("שגיאה בטעינת הבקשות.");
+          return;
+        }
+        const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const nameOf = (id) => {
+          const e = (window.globalStaff || []).find((x) => String(x.id) === String(id));
+          return e ? e.name : "";
+        };
+        window._approvedCache = {};
+        const groups = {};
+        Object.keys(all).forEach((empId) =>
+          Object.keys(all[empId] || {}).forEach((rid) => {
+            const r = all[empId][rid];
+            if (!r || r.status !== "approved" || !r.date || r.date < since) return;
+            const rec = Object.assign({ id: rid, empId, empName: nameOf(empId) }, r);
+            window._approvedCache[empId + "|" + rid] = rec;
+            const gk = r.rangeId != null ? `${empId}|r${r.rangeId}` : `${empId}|s${rid}`;
+            (groups[gk] = groups[gk] || { empId, items: [], kind: "req" }).items.push(rec);
+          }),
+        );
+        // חופשים שהוענקו — מקובצים לרצפים לכל עובד
+        const granted = Object.values(window.grantedVacations || {})
+          .filter((g) => g && g.date && g.date >= since)
+          .sort((a, b) => String(a.empId).localeCompare(String(b.empId)) || a.date.localeCompare(b.date));
+        let cur = null;
+        granted.forEach((g) => {
+          const gap = cur ? (new Date(g.date) - new Date(cur.items[cur.items.length - 1].date)) / 86400000 : 99;
+          if (!cur || String(cur.empId) !== String(g.empId) || gap > 3) {
+            cur = { empId: g.empId, items: [], kind: "grant" };
+            groups["g" + g.id] = cur;
+          }
+          cur.items.push(Object.assign({ empName: g.empName, type: "vacation" }, g));
+        });
+        const f = (d) => String(d || "").split("-").reverse().join(".");
+        const rows = Object.values(groups)
+          .map((g) => { g.items.sort((a, b) => a.date.localeCompare(b.date)); return g; })
+          .sort((a, b) => a.items[0].date.localeCompare(b.items[0].date));
+        const html = rows.length
+          ? rows
+              .map((g) => {
+                const a = g.items[0], z = g.items[g.items.length - 1];
+                const when = g.items.length > 1 ? `${f(a.date)}–${f(z.date)} · ${g.items.length} ימים` : `${f(a.date)}${a.day ? " · " + a.day : ""}`;
+                const what = g.kind === "grant" ? "🌴 חופש" : window._reqTypeLabel(a.type);
+                const act =
+                  g.kind === "grant"
+                    ? `window.revokeGrantedGroup('${g.items.map((x) => x.id).join(",")}')`
+                    : `window.revokeApprovedRequests('${g.empId}','${g.items.map((x) => x.id).join(",")}')`;
+                return `<div class="gv-row" style="cursor:default; justify-content:space-between; flex-wrap:wrap;">
+                  <span><b>${window.escapeHtml(a.empName || "")}</b> — ${what} · ${when}</span>
+                  <button class="btn btn-outlined" style="padding:3px 10px; font-size:0.78rem; border-color:var(--md-error); color:var(--md-error);" onclick="${act}">בטל אישור</button>
+                </div>`;
+              })
+              .join("")
+          : `<p style="text-align:center; color:var(--md-text-secondary); padding:14px;">אין בקשות מאושרות מ-30 הימים האחרונים ואילך.</p>`;
+        let overlay = document.getElementById("approvedReqOverlay");
+        if (!overlay) {
+          overlay = document.createElement("div");
+          overlay.id = "approvedReqOverlay";
+          overlay.className = "app-dialog-overlay";
+          overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+          document.body.appendChild(overlay);
+        } else if (!keepOpen) {
+          // נפתח מחדש — רק מרעננים תוכן
+        }
+        overlay.innerHTML = `<div class="app-dialog" role="dialog" aria-modal="true" style="max-width:640px;">
+          <h3>📋 בקשות שאושרו</h3>
+          <p class="app-dialog-msg">מ-30 הימים האחרונים ואילך, כולל חופשים שהענקת. "בטל אישור" מסיר את השינוי מהלוח ומעדכן את העובד.</p>
+          <div class="gv-list" style="max-height:55vh;">${html}</div>
+          <div class="app-dialog-actions"><button class="btn btn-outlined" onclick="document.getElementById('approvedReqOverlay').remove()">סגור</button></div>
+        </div>`;
+      };
+
+      window.revokeGrantedGroup = async function (idsStr) {
+        const ids = String(idsStr).split(",").filter((id) => (window.grantedVacations || {})[id]);
+        if (!ids.length) return;
+        const g = window.grantedVacations[ids[0]];
+        if (!(await window.confirmDialog({
+          title: "ביטול חופש",
+          message: `לבטל ${ids.length > 1 ? ids.length + " ימי חופש" : "את יום החופש"} של ${g.empName}?`,
+          confirmText: "בטל חופש",
+          danger: true,
+        }))) return;
+        for (const id of ids) await window._removeGrantedNoConfirm(id);
+        window.toast("✅ החופש בוטל.");
+        window.openApprovedRequestsManager(true);
+      };
+
+      window._removeGrantedNoConfirm = async function (id) {
+        const g = (window.grantedVacations || {})[id];
+        if (!g) return;
+        const fb = window._fbImports;
+        if (fb && window._firebaseDb)
+          fb.remove(fb.ref(window._firebaseDb, "grantedVacations/" + id));
+        if (window.grantedVacations) delete window.grantedVacations[id];
+        await window._applyVacConstraintsToWeek(g.empId, g.date, false);
+        if (typeof window.renderVacationManagementTable === "function")
+          window.renderVacationManagementTable();
+      };
+
       window.removeGrantedVacation = async function (id) {
         const g = (window.grantedVacations || {})[id];
         if (!g) return;
@@ -5062,13 +5291,28 @@ ${assigned.join("\n")}
             })
             .join(" ");
           // חופשים שהוענקו ידנית ע"י המנהל (לא סטטוס מיוחד, לא בקשה)
-          const grantedDetail = (vac.grantedEntries || [])
-            .filter((g) => !monthFilter || String(g.date).slice(0, 7) === monthFilter)
-            .map(
-              (g) =>
-                `<span style="display:inline-block; background:#fef3c7; color:#92400e; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">🌴 הוענק: ${String(g.date).split("-").reverse().join(".")} <a href="#" onclick="event.preventDefault(); window.removeGrantedVacation('${g.id}')" title="בטל" style="color:#b91c1c; text-decoration:none; font-weight:bold;">✕</a></span>`,
-            )
-            .join(" ");
+          const grantedDetail = (() => {
+            // חופש שהוענק נראה כמו חופש מאושר רגיל: אותו צ'יפ, מקובץ לרצפים.
+            // ביטול — דרך "📋 בקשות שאושרו" (כמו כל בקשה מאושרת).
+            const ds = (vac.grantedEntries || [])
+              .map((g) => g.date)
+              .filter((d) => !monthFilter || String(d).slice(0, 7) === monthFilter)
+              .sort();
+            const runs = [];
+            ds.forEach((d) => {
+              const last = runs[runs.length - 1];
+              if (last && (new Date(d) - new Date(last[last.length - 1])) / 86400000 <= 3) last.push(d);
+              else runs.push([d]);
+            });
+            const f = (d) => String(d).split("-").reverse().join(".");
+            return runs
+              .map((r) => {
+                const label = r.length > 1 ? `${f(r[0])}–${f(r[r.length - 1])}` : f(r[0]);
+                const cnt = r.length > 1 ? ` (${r.length} ימים)` : "";
+                return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">🌴 חופש מאושר: ${label}${cnt}</span>`;
+              })
+              .join(" ");
+          })();
           const monthChip = monthFilter
             ? `<span style="display:inline-block; background:#0d9488; color:#fff; border-radius:6px; padding:2px 8px; margin:2px 2px 6px; font-size:0.8rem; font-weight:bold;">📅 ${monthLabel(monthFilter)}: ${window._fmtVac(monthDays)} ימים</span> `
             : "";
