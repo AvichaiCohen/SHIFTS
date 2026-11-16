@@ -1976,3 +1976,8 @@
           max-width: 100%;
         }
       }
+
+      /* פאנל שהמנהל הסתיר מהעובדים */
+      body.worker-view [data-widget-key].worker-hidden {
+        display: none !important;
+      }

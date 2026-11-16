@@ -336,16 +336,29 @@
 
       // v3: מפתח חדש כי גם השורות הפכו לעדינות (יחידת שורה 40px במקום 340px) —
       // ערכי rowSpan/rowStart ישנים אינם תקפים ביחידה החדשה, ולכן סידור נקי.
+      // סידור נפרד לעובד ולמנהל — כך שמנהל ועובד באותו מחשב לא "יורשים" זה
+      // מזה מיקומים של פאנלים שהשני לא רואה בכלל.
+      window._widgetPrefsKey = function () {
+        return document.body && document.body.classList.contains("worker-view")
+          ? "widget_layout_v3_w"
+          : "widget_layout_v3";
+      };
+      // פאנל שלא מוצג למשתמש הנוכחי (manager-only אצל עובד / הוסתר לעובדים
+      // ע"י המנהל) — לא תופס משבצת: לא חוסם גרירה ולא נכנס לסידור.
+      window._wHidden = function (el) {
+        if (!el || el.classList.contains("widget-collapsed")) return false;
+        return getComputedStyle(el).display === "none";
+      };
       window._loadWidgetPrefs = function () {
         try {
-          return JSON.parse(localStorage.getItem("widget_layout_v3")) || {};
+          return JSON.parse(localStorage.getItem(window._widgetPrefsKey())) || {};
         } catch (e) {
           return {};
         }
       };
       window._saveWidgetPrefs = function (prefs) {
         try {
-          localStorage.setItem("widget_layout_v3", JSON.stringify(prefs));
+          localStorage.setItem(window._widgetPrefsKey(), JSON.stringify(prefs));
         } catch (e) {}
       };
 
@@ -467,7 +480,8 @@
           (c) =>
             c.hasAttribute("data-widget-key") &&
             c.getAttribute("data-widget-key") !== selfKey &&
-            !c.classList.contains("widget-collapsed"),
+            !c.classList.contains("widget-collapsed") &&
+            !window._wHidden(c),
         );
         for (const el of others) {
           const p = prefs[el.getAttribute("data-widget-key")] || {};
@@ -500,7 +514,8 @@
         const visible = Array.from(grid.children).filter(
           (c) =>
             c.hasAttribute("data-widget-key") &&
-            !c.classList.contains("widget-collapsed"),
+            !c.classList.contains("widget-collapsed") &&
+            !window._wHidden(c),
         );
         // סדר יציב: לפי המיקום הנוכחי — שורה, ואז עמודה (RTL: עמודה 1 ימינה)
         visible.sort((a, b) => {
@@ -564,6 +579,7 @@
         const prefs = window._loadWidgetPrefs();
         const keys = Object.keys(window.WIDGET_REGISTRY).filter((k) => {
           const p = prefs[k] || {};
+          if (window._wHidden(document.getElementById("widget-" + k))) return false;
           return (p.page || window.WIDGET_REGISTRY[k].nativePage) === pageId;
         });
         const occupied = new Set();
@@ -834,7 +850,7 @@
         });
         if (!ok) return;
         try {
-          localStorage.removeItem("widget_layout_v3");
+          localStorage.removeItem(window._widgetPrefsKey());
         } catch (e) {}
         window.toastAfterReload("✅ הפאנלים הוחזרו לברירת המחדל.");
         location.reload();
@@ -882,6 +898,7 @@
       };
 
       window._applyWidgetPrefs = function () {
+        window._applyWorkerPanelVis();
         const prefs0 = window._loadWidgetPrefs();
         const pagesNeeded = new Set();
         Object.keys(window.WIDGET_REGISTRY).forEach((key) => {
@@ -898,7 +915,7 @@
           const targetPage = p.page || window.WIDGET_REGISTRY[key].nativePage;
           const grid = window._ensureWidgetGrid(targetPage);
           if (grid) grid.appendChild(el);
-          if (p.collapsed) el.classList.add("widget-collapsed");
+          el.classList.toggle("widget-collapsed", !!p.collapsed);
           const colSpan = p.colSpan || window.WIDGET_DEFAULT_COL_SPAN;
           const rowSpan = p.rowSpan || window.WIDGET_DEFAULT_ROW_SPAN;
           const colStart = p.colStart || 1;
@@ -920,6 +937,66 @@
         pageIds.forEach((pageId) => window._updateHiddenWidgetsBtn(pageId));
         window._initMobileWidgetAccordion();
       };
+      // ===== אילו פאנלים העובדים רואים (נקבע ע"י המנהל, נשמר בענן) =====
+      window.workerHiddenPanels = window.workerHiddenPanels || {};
+      window._applyWorkerPanelVis = function () {
+        const hid = window.workerHiddenPanels || {};
+        Object.keys(window.WIDGET_REGISTRY).forEach((k) => {
+          const el = document.getElementById("widget-" + k);
+          if (el) el.classList.toggle("worker-hidden", !!hid[k]);
+        });
+      };
+      // פאנלים שעובד יכול לראות בכלל (לא manager-only)
+      window._workerEligiblePanels = function () {
+        return Object.keys(window.WIDGET_REGISTRY).filter((k) => {
+          const el = document.getElementById("widget-" + k);
+          return el && !el.classList.contains("manager-only");
+        });
+      };
+      window.renderWorkerPanelsSettings = function () {
+        const cont = document.getElementById("workerPanelsSettings");
+        if (!cont) return;
+        const hid = window.workerHiddenPanels || {};
+        cont.innerHTML = window._workerEligiblePanels()
+          .map((k) => {
+            const lbl = (window.WIDGET_REGISTRY[k] || {}).label || k;
+            return `<label style="display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:1px solid var(--md-divider); cursor:pointer;">
+              <input type="checkbox" style="width:18px; height:18px;" ${hid[k] ? "" : "checked"} onchange="window.setWorkerPanelVisible('${k}', this.checked)">
+              <span>${window.escapeHtml(lbl)}</span></label>`;
+          })
+          .join("");
+      };
+      window.setWorkerPanelVisible = function (key, visible) {
+        const hid = Object.assign({}, window.workerHiddenPanels || {});
+        if (visible) delete hid[key];
+        else hid[key] = true;
+        window.workerHiddenPanels = hid;
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("workerHiddenPanels", Object.keys(hid).length ? hid : null, { silent: true });
+        window._applyWorkerPanelVis();
+        window.toast(visible ? "👁️ הפאנל יוצג לעובדים." : "🙈 הפאנל הוסתר מהעובדים.");
+      };
+      // מעבר עובד↔מנהל באותו דפדפן — טוענים את הסידור של התפקיד החדש
+      window._lastWorkerView = null;
+      window._onRoleViewChange = function () {
+        const wv = document.body.classList.contains("worker-view");
+        if (wv === window._lastWorkerView) return;
+        window._lastWorkerView = wv;
+        try { window._applyWidgetPrefs(); } catch (e) {}
+        if (typeof window.renderEmployeeSummary === "function") window.renderEmployeeSummary();
+      };
+      (function () {
+        const start = () => {
+          window._lastWorkerView = document.body.classList.contains("worker-view");
+          new MutationObserver(window._onRoleViewChange).observe(document.body, {
+            attributes: true,
+            attributeFilter: ["class"],
+          });
+          window.renderWorkerPanelsSettings();
+        };
+        if (document.body) start();
+        else document.addEventListener("DOMContentLoaded", start);
+      })();
       // מעבר בין נייד לדסקטופ (סיבוב מסך/שינוי גודל) — מיישר את מצב האקורדיון
       window.addEventListener("resize", function () {
         clearTimeout(window._mWidgetResizeT);
@@ -1363,14 +1440,10 @@
       // ימי חג באמצע השבוע (למשל רביעי שהוא חג) — מוגדרים לשבוע הנוכחי בלבד
       // (בתוך currentSchedule.holidayDays, נשמר בענן עם שאר הלוח), לא גלובלית
       // לכל השבועות. כל שבוע קובע בעצמו אילו ימים בו הם חג.
+      // הסימון הידני "ימי חג השבוע" בוטל — חג נקבע רק מלוח השנה של החגים
       window.isHoliday = (d) =>
         !window.isEmergencyMode &&
-        (!!(
-          window.currentSchedule &&
-          window.currentSchedule.holidayDays &&
-          window.currentSchedule.holidayDays.includes(d)
-        ) ||
-          !!(typeof window._calendarHolidayForWeekDay === "function" && window._calendarHolidayForWeekDay(d)));
+        !!(typeof window._calendarHolidayForWeekDay === "function" && window._calendarHolidayForWeekDay(d));
       window.isOffDay = (d) =>
         !window.isEmergencyMode &&
         (d === "שישי" || d === "שבת" || window.isHoliday(d));
@@ -2208,8 +2281,29 @@
           } else {
             html += `<div style="margin-bottom:8px;"><button class="btn btn-contained" style="background:#16a34a; padding:4px 12px; font-size:0.82rem;" onclick="window.approveAllPendingRequests(true).then(()=>window.renderActionCenter())">✅ אשר הכל לשבוע הזה (${pIds.length})</button></div>`;
             html += `<div style="max-height:260px; overflow-y:auto;">`;
+            // בקשת חופש בטווח (אותו rangeId) = שורה אחת, כמו בעמוד אישור בקשות
+            const _seenR = new Set();
             pIds.forEach((id) => {
               const r = pending[id];
+              if (r.rangeId != null) {
+                if (_seenR.has(r.rangeId)) return;
+                _seenR.add(r.rangeId);
+                const grp = allIds
+                  .filter((x) => pending[x].rangeId === r.rangeId)
+                  .sort((a, b) => (pending[a].date || "").localeCompare(pending[b].date || ""));
+                if (grp.length > 1) {
+                  const ff = (x) => String(pending[x].date || "").split("-").reverse().join(".");
+                  const csv = grp.join(",");
+                  html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 4px; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
+                <span><b>${window.escapeHtml(r.empName || "")}</b> — ${ff(grp[0])}–${ff(grp[grp.length - 1])} · ${grp.length} ימים · 🌴 חופשה (טווח)${r.note ? ` <small style="color:var(--md-text-secondary);">(${window.escapeHtml(r.note)})</small>` : ""}</span>
+                <span style="display:flex; gap:5px;">
+                  <button class="btn btn-contained" style="background:#16a34a; padding:3px 10px; font-size:0.78rem;" onclick="window.processRequestGroup('${csv}', true).then(()=>window.renderActionCenter())">✅</button>
+                  <button class="btn btn-error" style="padding:3px 10px; font-size:0.78rem;" onclick="window.processRequestGroup('${csv}', false).then(()=>window.renderActionCenter())">❌</button>
+                </span>
+              </div>`;
+                  return;
+                }
+              }
               const d = r.date ? r.date.split("-").reverse().join(".") : "";
               html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 4px; border-bottom:1px solid var(--md-divider); flex-wrap:wrap;">
                 <span><b>${window.escapeHtml(r.empName || "")}</b> — ${d}${r.day ? " · " + window.escapeHtml(r.day) : ""} · ${window.escapeHtml(window._reqTypeLabel(r.type))}${r.note ? ` <small style="color:var(--md-text-secondary);">(${window.escapeHtml(r.note)})</small>` : ""}</span>
@@ -4885,6 +4979,10 @@ ${assigned.join("\n")}
 
       // ביטול בקשה שכבר אושרה (מנהל): מחזיר את הלוח לקדמותו ומעדכן את העובד
       window.revokeApprovedRequests = async function (empId, idsStr) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לבטל חופשים/אישורים.");
+          return;
+        }
         const ids = String(idsStr).split(",").filter(Boolean);
         const recs = ids
           .map((id) => (window._approvedCache || {})[empId + "|" + id])
@@ -4937,7 +5035,7 @@ ${assigned.join("\n")}
         if (typeof window.renderTable === "function")
           window.renderTable(window.currentSchedule, window.currentNotesLog);
         window.toast("✅ האישור בוטל והלוח עודכן.");
-        window.openApprovedRequestsManager(true);
+        window._afterVacCancel();
       };
 
       // ===== "📋 בקשות שאושרו" — מקום אחד לראות ולבטל אישורים =====
@@ -5025,7 +5123,47 @@ ${assigned.join("\n")}
         </div>`;
       };
 
+      // אחרי ביטול: מרעננים את חלון "בקשות שאושרו" אם פתוח, ואת ניהול החופשים
+      window._afterVacCancel = function () {
+        if (document.getElementById("approvedReqOverlay")) window.openApprovedRequestsManager(true);
+        if (window._vacationFutureApproved && typeof window.refreshVacationFutureRequests === "function")
+          window.refreshVacationFutureRequests();
+        else if (typeof window.renderVacationManagementTable === "function")
+          window.renderVacationManagementTable();
+      };
+
+      // ביטול חופש שנרשם כסטטוס מיוחד (כולל חופש שהוזן ידנית בלוח)
+      window.cancelVacSpecEntry = async function (id) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לבטל חופשים/אישורים.");
+          return;
+        }
+        const sp = (window.specialStatuses || []).find((s) => s.id === id);
+        if (!sp) return;
+        const f = (d) => String(d || "").split("-").reverse().join(".");
+        const range = !sp.endDate || sp.endDate === sp.startDate ? f(sp.startDate) : `${f(sp.startDate)}–${f(sp.endDate)}`;
+        if (!(await window.confirmDialog({
+          title: "ביטול חופש",
+          message: `לבטל את ה${sp.status || "חופש"} של ${sp.empName || ""} (${range})?`,
+          confirmText: "בטל חופש",
+          danger: true,
+        }))) return;
+        window.specialStatuses = (window.specialStatuses || []).filter((s) => s.id !== id);
+        window.saveToCloud("specialStatuses", window.specialStatuses);
+        // חופש ידני חוסם גם באילוצים של השבוע — מסירים גם אותם
+        if (sp._manualVac && sp.startDate && typeof window._applyVacConstraintsToWeek === "function")
+          await window._applyVacConstraintsToWeek(sp.empId, sp.startDate, false);
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast("✅ החופש בוטל.");
+        window._afterVacCancel();
+      };
+
       window.revokeGrantedGroup = async function (idsStr) {
+        if (window.currentUserRole !== "superAdmin") {
+          window.toast("רק המנהל הראשי יכול לבטל חופשים/אישורים.");
+          return;
+        }
         const ids = String(idsStr).split(",").filter((id) => (window.grantedVacations || {})[id]);
         if (!ids.length) return;
         const g = window.grantedVacations[ids[0]];
@@ -5037,7 +5175,7 @@ ${assigned.join("\n")}
         }))) return;
         for (const id of ids) await window._removeGrantedNoConfirm(id);
         window.toast("✅ החופש בוטל.");
-        window.openApprovedRequestsManager(true);
+        window._afterVacCancel();
       };
 
       window._removeGrantedNoConfirm = async function (id) {
@@ -5268,7 +5406,7 @@ ${assigned.join("\n")}
                     const sd = (s.startDate || "").split("-").reverse().join(".");
                     const ed = (s.endDate || "").split("-").reverse().join(".");
                     const range = !s.endDate || s.startDate === s.endDate ? sd : `${sd}–${ed}`;
-                    return `<span style="display:inline-block; background:var(--md-bg); border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">${window.escapeHtml(s.status || "")}: ${range}</span>`;
+                    return `<span style="display:inline-block; background:var(--md-bg); border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">${window.escapeHtml(s.status || "")}: ${range}<button title="בטל חופש" onclick="window.cancelVacSpecEntry(${s.id})" style="background:none; border:none; cursor:pointer; color:#b91c1c; font-weight:bold; padding:0 0 0 2px; margin-inline-start:4px; font-size:0.85rem;">✕</button></span>`;
                   })
                   .join(" ");
           // בקשות חופשה עתידיות שכבר אושרו (ר' refreshVacationFutureRequests) —
@@ -5287,15 +5425,17 @@ ${assigned.join("\n")}
               const lD = last.split("-").reverse().join(".");
               const label = first === last ? fD : `${fD}–${lD}`;
               const countStr = item.dates.length > 1 ? ` (${item.dates.length} ימים)` : "";
-              return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">📥 בקשה מאושרת: ${label}${countStr}</span>`;
+              const _x = item.ids && item.ids.length ? `<button title="בטל חופש" onclick="window.revokeApprovedRequests('${item.empId}','${item.ids.join(",")}')" style="background:none; border:none; cursor:pointer; color:#b91c1c; font-weight:bold; padding:0 0 0 2px; margin-inline-start:4px; font-size:0.85rem;">✕</button>` : "";
+              return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">📥 בקשה מאושרת: ${label}${countStr}${_x}</span>`;
             })
             .join(" ");
           // חופשים שהוענקו ידנית ע"י המנהל (לא סטטוס מיוחד, לא בקשה)
           const grantedDetail = (() => {
             // חופש שהוענק נראה כמו חופש מאושר רגיל: אותו צ'יפ, מקובץ לרצפים.
             // ביטול — דרך "📋 בקשות שאושרו" (כמו כל בקשה מאושרת).
-            const ds = (vac.grantedEntries || [])
-              .map((g) => g.date)
+            const _idsByDate = {};
+            (vac.grantedEntries || []).forEach((g) => (_idsByDate[g.date] = _idsByDate[g.date] || []).push(g.id));
+            const ds = Object.keys(_idsByDate)
               .filter((d) => !monthFilter || String(d).slice(0, 7) === monthFilter)
               .sort();
             const runs = [];
@@ -5309,7 +5449,8 @@ ${assigned.join("\n")}
               .map((r) => {
                 const label = r.length > 1 ? `${f(r[0])}–${f(r[r.length - 1])}` : f(r[0]);
                 const cnt = r.length > 1 ? ` (${r.length} ימים)` : "";
-                return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">🌴 חופש מאושר: ${label}${cnt}</span>`;
+                const _gids = r.flatMap((d) => _idsByDate[d] || []).join(",");
+                return `<span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:6px; padding:2px 8px; margin:2px; font-size:0.8rem;">🌴 חופש מאושר: ${label}${cnt}<button title="בטל חופש" onclick="window.revokeGrantedGroup('${_gids}')" style="background:none; border:none; cursor:pointer; color:#b91c1c; font-weight:bold; padding:0 0 0 2px; margin-inline-start:4px; font-size:0.85rem;">✕</button></span>`;
               })
               .join(" ");
           })();
@@ -5377,8 +5518,20 @@ ${assigned.join("\n")}
           const all = snap.exists() ? snap.val() || {} : {};
           const todayStr = new Date().toISOString().split("T")[0];
           const byEmp = {};
+          window._approvedCache = window._approvedCache || {};
+          const _nameOf = (id) => {
+            const e = (window.globalStaff || []).find((x) => String(x.id) === String(id));
+            return e ? e.name : "";
+          };
           Object.keys(all).forEach((empId) => {
-            const reqs = Object.values(all[empId] || {}).filter(Boolean);
+            const reqs = Object.keys(all[empId] || {})
+              .filter((k) => all[empId][k])
+              .map((k) => {
+                const rec = Object.assign({ id: k, empId, empName: _nameOf(empId) }, all[empId][k]);
+                rec.id = k;
+                if (rec.status === "approved") window._approvedCache[empId + "|" + k] = rec;
+                return rec;
+              });
             const approved = reqs
               .filter(
                 (r) =>
@@ -5401,7 +5554,7 @@ ${assigned.join("\n")}
                 if (seenRange.has(r.rangeId)) return;
                 seenRange.add(r.rangeId);
                 const group = approved.filter((r2) => r2.rangeId === r.rangeId);
-                items.push({ dates: group.map((g) => g.date), _first: group[0].date });
+                items.push({ dates: group.map((g) => g.date), ids: group.map((g) => g.id), empId, _first: group[0].date });
               } else {
                 legacy.push(r);
               }
@@ -5409,7 +5562,7 @@ ${assigned.join("\n")}
             let run = [];
             const flushRun = () => {
               if (run.length) {
-                items.push({ dates: run.map((g) => g.date), _first: run[0].date });
+                items.push({ dates: run.map((g) => g.date), ids: run.map((g) => g.id), empId, _first: run[0].date });
                 run = [];
               }
             };
@@ -8499,6 +8652,12 @@ ${assigned.join("\n")}
         JSON.parse(localStorage.getItem("shift_location_history_v1")) || {};
       window.locationHistoryBaseWeek =
         localStorage.getItem("shift_location_history_base_v1") || "";
+      try {
+        window.locationActiveWeeks =
+          JSON.parse(localStorage.getItem("shift_location_active_v1")) || null;
+      } catch (e) {
+        window.locationActiveWeeks = null;
+      }
 
       window.rebuildLocationHistory = async function () {
         const cont = document.getElementById("locationFairnessTable");
@@ -8511,6 +8670,7 @@ ${assigned.join("\n")}
           cont.innerHTML = "<i style='color:var(--text-muted);'>מחשב מחדש מהענן...</i>";
         const WEEKS_BACK = window.LOC_FAIRNESS_WEEKS_BACK;
         const hist = {};
+        const activeWeeks = {}; // name -> [off...] שבועות שבהם העובד שובץ בכלל
         const allShifts = ["בוקר", "ערב", "לילה", "24 שעות"];
         for (let off = -WEEKS_BACK; off <= 0; off++) {
           const sun = window.getSunday((window.currentWeekOffset || 0) + off);
@@ -8550,6 +8710,7 @@ ${assigned.join("\n")}
             ),
           );
           Object.keys(acc).forEach((name) => {
+            (activeWeeks[name] = activeWeeks[name] || []).push(off);
             if (!hist[name]) hist[name] = {};
             Object.keys(acc[name]).forEach((loc) => {
               if (!hist[name][loc])
@@ -8566,6 +8727,10 @@ ${assigned.join("\n")}
           });
         }
         window.locationHistory = hist;
+        window.locationActiveWeeks = activeWeeks;
+        try {
+          localStorage.setItem("shift_location_active_v1", JSON.stringify(activeWeeks));
+        } catch (e) {}
         window.locationHistoryBaseWeek = window.getWeekDbKey(
           window.getSunday(window.currentWeekOffset || 0),
         );
@@ -8606,16 +8771,28 @@ ${assigned.join("\n")}
         const WARN = window.LOC_ABSENCE_WARN_WEEKS;
         const chip = (icon, n, title) =>
           `<span title="${title}" style="display:inline-block; background:var(--md-bg); border:1px solid var(--md-divider); border-radius:999px; padding:1px 8px; margin:1px; font-size:0.8rem; white-space:nowrap;">${icon} <b>${n}</b></span>`;
-        const cell = (info) => {
-          if (!info || info.lastOff === null)
+        // שבועות שבהם העובד לא שובץ בכלל (חופש/קורס/מחלה) לא נספרים
+        // כ"שבועות בלי המיקום" — כדי שמי שהיה בחופש לא יקבל אזהרה.
+        const _act = window.locationActiveWeeks;
+        const _workedSince = (name, lastOff) => {
+          if (!_act) return null;
+          return (_act[name] || []).filter((o) => lastOff === null || o > lastOff).length;
+        };
+        const cell = (info, name) => {
+          if (!info || info.lastOff === null) {
+            const worked = _workedSince(name, null);
+            const w = worked === null ? true : worked > WARN;
             return {
-              html: `<span style="color:var(--md-error); font-weight:bold;">מעולם לא</span>`,
-              warn: true,
+              html: `<span style="color:${w ? "var(--md-error)" : "var(--md-text-secondary)"}; font-weight:bold;">מעולם לא</span>${!w ? `<small style="display:block; color:var(--md-text-secondary);">🌴 כמעט לא שובץ בתקופה</small>` : ""}`,
+              warn: w,
               total: 0,
               weeksAgo: Infinity,
             };
+          }
           const weeksAgo = -info.lastOff; // 0 = השבוע המוצג
-          const warn = weeksAgo > WARN;
+          const worked = _workedSince(name, info.lastOff);
+          const warn = worked === null ? weeksAgo > WARN : worked > WARN;
+          const awayNote = weeksAgo > WARN && !warn ? " · 🌴 לא שובץ חלק מהזמן" : "";
           const txt =
             weeksAgo === 0 ? "השבוע" : weeksAgo === 1 ? "שבוע שעבר" : `לפני ${weeksAgo} שבועות`;
           const nights = info.nights || 0;
@@ -8624,7 +8801,7 @@ ${assigned.join("\n")}
           return {
             html:
               `<div style="display:flex; flex-wrap:wrap; gap:2px; justify-content:center;">${chip("🌙", nights, "לילות בימי חול")}${chip("☀️", dys, "ימים (בוקר/ערב) בימי חול")}${chip("🏖️", wknds, 'סופ"שים שנסגרו במיקום')}</div>` +
-              `<small style="display:block; text-align:center; margin-top:2px; color:${warn ? "var(--md-error)" : "var(--md-text-secondary)"};">${txt}</small>`,
+              `<small style="display:block; text-align:center; margin-top:2px; color:${warn ? "var(--md-error)" : "var(--md-text-secondary)"};">${txt}${awayNote}</small>`,
             warn,
             total: nights + dys + wknds,
             weeksAgo,
@@ -8651,8 +8828,8 @@ ${assigned.join("\n")}
         let body = "";
         list.forEach((e) => {
           const h = hist[e.name] || {};
-          const z = cell(h[LOC_ZIRA]);
-          const m = cell(h[LOC_MATAL]);
+          const z = cell(h[LOC_ZIRA], e.name);
+          const m = cell(h[LOC_MATAL], e.name);
           // לנחפפים אין סבב זירה/מת"ל — מציגים את הנתונים אבל בלי אזהרות
           if (e.type === "נחפף") {
             z.warn = false;
@@ -9214,10 +9391,14 @@ ${assigned.join("\n")}
 
         // מילוי רשימת העובדים (שמירה על הבחירה הקיימת)
         let current = sel.value;
+        // עובד רואה רק את עצמו
+        const _isW = document.body.classList.contains("worker-view");
+        const _me = _isW ? window.loggedInWorker || window.loggedInUser : null;
+        if (_isW) current = _me && _me.name ? _me.name : "";
         let opts =
-          `<option value="">-- בחר עובד --</option>` +
+          (_isW ? "" : `<option value="">-- בחר עובד --</option>`) +
           window.staff
-            .filter((e) => e.isActive)
+            .filter((e) => (_isW ? _me && String(e.id) === String(_me.id) : e.isActive))
             .sort((a, b) => a.name.localeCompare(b.name))
             .map(
               (e) =>
@@ -9231,6 +9412,7 @@ ${assigned.join("\n")}
         }
 
         let name = sel.value;
+        sel.disabled = _isW;
         if (!name) {
           content.innerHTML =
             "<p style='color:var(--text-muted); font-style:italic; margin:0;'>בחר עובד כדי לראות את המשימות והחגים שלו.</p>";
@@ -10590,11 +10772,40 @@ ${assigned.join("\n")}
       // ===== לוח שנה של חגים (תאריכים אמיתיים, לא סימון ידני לפי שם יום) =====
       window.holidayCalendar = window.holidayCalendar || [];
 
+      // "יום ציון" (כמו חנוכה) — מסומן בלוח, אבל יום עבודה רגיל: משמרות
+      // רגילות, חופש נספר כרגיל, בלי אזהרות "חופף לחג".
+      window._isMarkerEntry = function (h) {
+        if (!h) return false;
+        if (h.kind) return h.kind === "marker";
+        return /חנוכה/.test(h.name || "");
+      };
       window._isCalendarHoliday = function (dateKey) {
         return (
           (window.holidayCalendar || []).find(
-            (h) => h.startDate <= dateKey && dateKey <= h.endDate,
+            (h) => !window._isMarkerEntry(h) && h.startDate <= dateKey && dateKey <= h.endDate,
           ) || null
+        );
+      };
+      // כל רשומות הלוח (חג + יום ציון) שחלות על תאריך — לתצוגה בלוח
+      window._calendarEntriesOn = function (dateObj) {
+        const k = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+        return (window.holidayCalendar || []).filter(
+          (h) => h.startDate <= k && k <= (h.endDate || h.startDate),
+        );
+      };
+      window.toggleHolidayCalendarKind = function (id) {
+        const h = (window.holidayCalendar || []).find((x) => x.id === id);
+        if (!h) return;
+        h.kind = window._isMarkerEntry(h) ? "holiday" : "marker";
+        if (typeof window.saveToCloud === "function")
+          window.saveToCloud("holidayCalendar", window.holidayCalendar);
+        window.renderHolidayCalendarList();
+        if (typeof window.renderTable === "function")
+          window.renderTable(window.currentSchedule, window.currentNotesLog);
+        window.toast(
+          h.kind === "marker"
+            ? `✅ "${h.name}" הוא עכשיו יום ציון — יום עבודה רגיל.`
+            : `✅ "${h.name}" הוא עכשיו חג — כמו סופ"ש.`,
         );
       };
 
@@ -10614,7 +10825,7 @@ ${assigned.join("\n")}
       window._recomputeVacationHolidayDates = function () {
         const out = [];
         (window.holidayCalendar || []).forEach((h) => {
-          if (!h.startDate) return;
+          if (!h.startDate || window._isMarkerEntry(h)) return;
           const s = new Date(h.startDate);
           const e = h.endDate ? new Date(h.endDate) : s;
           if (isNaN(s) || isNaN(e)) return;
@@ -10642,7 +10853,7 @@ ${assigned.join("\n")}
           return;
         }
         cont.innerHTML = `<table style="width:100%; text-align:right; border-collapse:collapse; font-size:0.88rem;">
-          <tr style="background:var(--md-bg);"><th style="padding:6px;">חג</th><th style="padding:6px;">מתאריך</th><th style="padding:6px;">עד תאריך</th><th></th></tr>
+          <tr style="background:var(--md-bg);"><th style="padding:6px;">חג</th><th style="padding:6px;">סוג</th><th style="padding:6px;">מתאריך</th><th style="padding:6px;">עד תאריך</th><th></th></tr>
           ${sorted
             .map((h) => {
               const s = new Date(h.startDate);
@@ -10653,6 +10864,7 @@ ${assigned.join("\n")}
                 : "";
               return `<tr style="border-bottom:1px solid var(--md-divider);">
             <td style="padding:6px;"><b>${window.escapeHtml(h.name)}</b>${satNote}</td>
+            <td style="padding:6px;"><button class="btn btn-outlined" style="padding:2px 8px; font-size:0.75rem; white-space:nowrap;" title="לחץ להחלפה" onclick="window.toggleHolidayCalendarKind(${h.id})">${window._isMarkerEntry(h) ? "🕯️ יום ציון (יום רגיל)" : "✨ חג (כמו סופ\"ש)"}</button></td>
             <td style="padding:6px;">${h.startDate.split("-").reverse().join(".")}</td>
             <td style="padding:6px;">${h.endDate.split("-").reverse().join(".")}</td>
             <td style="padding:6px;"><button class="btn btn-error" style="padding:2px 8px; font-size:0.75rem;" onclick="window.removeHolidayCalendarEntry(${h.id})">מחק</button></td>
@@ -10666,6 +10878,8 @@ ${assigned.join("\n")}
         const name = document.getElementById("holCalName").value.trim();
         const start = document.getElementById("holCalStart").value;
         const end = document.getElementById("holCalEnd").value || start;
+        const _kindEl = document.getElementById("holCalKind");
+        const kind = _kindEl && _kindEl.value === "marker" ? "marker" : "holiday";
         if (!name || !start) {
           window.toast("יש למלא שם חג ותאריך התחלה.");
           return;
@@ -10676,7 +10890,7 @@ ${assigned.join("\n")}
         }
         const id = Date.now() + Math.floor(Math.random() * 10000);
         window.holidayCalendar = window.holidayCalendar || [];
-        window.holidayCalendar.push({ id, name, startDate: start, endDate: end });
+        window.holidayCalendar.push({ id, name, startDate: start, endDate: end, kind });
         if (typeof window.saveToCloud === "function")
           window.saveToCloud("holidayCalendar", window.holidayCalendar);
         document.getElementById("holCalName").value = "";
@@ -13269,7 +13483,8 @@ ${assigned.join("\n")}
           _cellDate.setDate(_cellDate.getDate() + dIdx);
           const _dateStr = `${_cellDate.getDate()}/${_cellDate.getMonth() + 1}`;
           const _bdays = window._birthdaysOn(_cellDate);
-          const dateHtml = `<br><span class="day-date-display" style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>${_bdays.length ? `<br><span title="יום הולדת" style="font-size:0.75rem; font-weight:600; color:#db2777;">🎂 ${_bdays.map((e) => window.escapeHtml(e.name)).join(", ")}</span>` : ""}`;
+          const _calEnt = window._calendarEntriesOn(_cellDate);
+          const dateHtml = `<br><span class="day-date-display" style="font-size:0.75rem; color:var(--md-text-secondary); font-weight:normal;">${_dateStr}</span>${_calEnt.length ? `<br><span style="font-size:0.75rem; font-weight:600; color:#9333ea;">${_calEnt.map((h) => (window._isMarkerEntry(h) ? "🕯️ " : "✨ ") + window.escapeHtml(h.name)).join(", ")}</span>` : ""}${_bdays.length ? `<br><span title="יום הולדת" style="font-size:0.75rem; font-weight:600; color:#db2777;">🎂 ${_bdays.map((e) => window.escapeHtml(e.name)).join(", ")}</span>` : ""}`;
           const isTodayCol = d === _todayDay;
           const _dayHL = data.dayHighlights && data.dayHighlights[d];
           const _hlStyle = _dayHL ? `background:${_dayHL}28; border-bottom:3px solid ${_dayHL};` : '';
@@ -13502,7 +13717,8 @@ ${assigned.join("\n")}
         _mCellDate.setDate(_mCellDate.getDate() + (mobileDayIdx - 1));
         const _mDateStr = `${_mCellDate.getDate()}/${_mCellDate.getMonth() + 1}/${_mCellDate.getFullYear()}`;
         const _mBdays = window._birthdaysOn(_mCellDate);
-        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${_mBdays.length ? `<div style="background:rgba(219,39,119,0.1); color:#db2777; font-weight:700; border-radius:8px; padding:6px 10px; margin-bottom:8px;">🎂 יום הולדת: ${_mBdays.map((e) => window.escapeHtml(e.name)).join(", ")}</div>` : ""}${noteHtml}`;
+        const _mCal = window._calendarEntriesOn(_mCellDate);
+        html += `<h3 style="margin-top:0; margin-bottom:2px; color:var(--md-primary); font-size:1.4rem; padding-right:4px;">📅 יום ${d}</h3><div style="font-size:0.9rem; color:var(--md-text-secondary); margin-bottom:8px; padding-right:4px;">${_mDateStr}</div>${_mCal.length ? `<div style="background:rgba(147,51,234,0.1); color:#9333ea; font-weight:700; border-radius:8px; padding:6px 10px; margin-bottom:8px;">${_mCal.map((h) => (window._isMarkerEntry(h) ? "🕯️ " : "✨ ") + window.escapeHtml(h.name)).join(", ")}</div>` : ""}${_mBdays.length ? `<div style="background:rgba(219,39,119,0.1); color:#db2777; font-weight:700; border-radius:8px; padding:6px 10px; margin-bottom:8px;">🎂 יום הולדת: ${_mBdays.map((e) => window.escapeHtml(e.name)).join(", ")}</div>` : ""}${noteHtml}`;
 
         // באנר החלפה ממתינה — מוצג כשנבחר עובד ראשון להחלפה, עד שנבחר שני
         // (או עד ביטול). מוצג רק למנהלים, זהה בין ימים כל עוד לא הוחלף היום.

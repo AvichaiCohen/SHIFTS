@@ -11,7 +11,7 @@
       // בדיקת גרסה — פותר מקרים שבהם נייד/PWA "תקוע" על גרסה ישנה מהמטמון (אין אפשרות "רענון קשיח" בנייד).
       // עדכון גרסה שאינו תואם ל-version.json (ללא מטמון) => ניווט מחדש עם query חדש, שעוקף את מטמון הדפדפן.
       (function () {
-        var BUILD = "20260828u";
+        var BUILD = "20260828v";
         var KEY = "app_build_seen_v1";
         function checkAppVersion(force) {
           try {
@@ -828,6 +828,14 @@
               window.renderSwapRequestsManager();
           });
 
+          // אילו פאנלים מוסתרים מהעובדים — נקבע ע"י המנהל בהגדרות
+          onValue(ref(db, "workerHiddenPanels"), (snapshot) => {
+            window.workerHiddenPanels = snapshot.exists() ? snapshot.val() || {} : {};
+            if (typeof window._applyWidgetPrefs === "function") window._applyWidgetPrefs();
+            if (typeof window.renderWorkerPanelsSettings === "function")
+              window.renderWorkerPanelsSettings();
+          });
+
           // לוח שנה של חגים — תאריכים אמיתיים, נכתב ע"י המנהל הראשי בלבד.
           // כל שינוי מרענן את הלוח (כי isHoliday תלוי בזה) ואת בדיקת ההתנגשות
           // בין בקשות חופש לחגים.
@@ -872,7 +880,7 @@
         }); // סוף authReady.then
       });
     </script>
-    <link rel="stylesheet" href="style.css?v=20260828u" />
+    <link rel="stylesheet" href="style.css?v=20260828v" />
   </head>
   <body>
     <div
@@ -2722,7 +2730,7 @@
           <div
             class="card-paper emergency-hidden"
             id="holidaysWrapper"
-            style="border-left: 4px solid var(--md-success)"
+            style="border-left: 4px solid var(--md-success); display: none !important"
           >
             <h3 style="color: var(--md-success); margin-top: 0">
               ✨ ימי חג השבוע
@@ -2765,6 +2773,10 @@
                 placeholder="שם החג..."
                 style="flex: 1; min-width: 140px"
               />
+              <select id="holCalKind" title="סוג" style="flex: 1; min-width: 140px">
+                <option value="holiday">✨ חג (כמו סופ"ש)</option>
+                <option value="marker">🕯️ יום ציון — יום עבודה רגיל (חנוכה)</option>
+              </select>
               <input
                 type="date"
                 id="holCalStart"
@@ -2786,6 +2798,19 @@
               </button>
             </div>
             <div id="holidayCalendarList"></div>
+          </div>
+
+          <div
+            class="card-paper manager-only"
+            id="workerPanelsWrapper"
+            style="border-left: 4px solid #0891b2; margin-top: 20px"
+          >
+            <h3 style="color: #0891b2; margin-top: 0">👁️ פאנלים שהעובדים רואים</h3>
+            <p style="font-size: 0.82rem; color: var(--md-text-secondary); margin-top: 0">
+              סמן אילו פאנלים יוצגו לעובדים בעמוד "משימות וימים מיוחדים". פאנלים
+              ניהוליים (חופשים, הוגנות, בקשות) ממילא לא מוצגים לעובדים.
+            </p>
+            <div id="workerPanelsSettings"></div>
           </div>
 
           <div
@@ -5227,6 +5252,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="script.js?v=20260828u"></script>
+    <script src="script.js?v=20260828v"></script>
   </body>
 </html>
